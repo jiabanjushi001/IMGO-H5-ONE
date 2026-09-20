@@ -23,7 +23,7 @@
 		<view class="cu-bar tabbar bg-white shadow foot home-tabbar">
 			<view class="action" @click="NavChange(item)" v-for="(item,index) in navList" :key="index" data-cur="message">
 				<view class='cuIcon-cu-image'>
-					<image :src="'/static/image/tabbar/' + [item.name] + [PageCur==item.name?'-active':''] + '.svg'"></image>
+					<image :src="'./static/image/tabbar/' + [item.name] + [PageCur==item.name?'-active':''] + '.svg'"></image>
 				    <view class="cu-tag badge" v-if="item.notice>0">{{item.notice}}</view>
 				</view>
 				<view :class="PageCur==item.name?'is-active':'text-black'">{{item.title}}</view>

@@ -5,7 +5,7 @@
 		<view class="auth-shell">
 			<view class="auth-brand">
 				<view class="auth-logo-wrap">
-					<image class="login-logo" :src="globalConfig.sysInfo.logo || '/static/image/rocket.png'" mode="aspectFit"></image>
+					<image class="login-logo" :src="globalConfig.sysInfo.logo || './static/image/rocket.png'" mode="aspectFit"></image>
 				</view>
 				<view class="auth-brand-name">{{globalConfig.sysInfo.name ?? packData.name}}</view>
 				<view class="auth-brand-copy">让每一次沟通，都简单而可靠</view>

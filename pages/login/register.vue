@@ -9,7 +9,7 @@
 		<view class="auth-shell auth-register-shell">
 			<view class="auth-brand auth-brand-compact">
 				<view class="auth-logo-wrap">
-					<image class="login-logo" :src="globalConfig.sysInfo.logo || '/static/image/rocket.png'" mode="aspectFit"></image>
+					<image class="login-logo" :src="globalConfig.sysInfo.logo || './static/image/rocket.png'" mode="aspectFit"></image>
 				</view>
 				<view class="auth-brand-name">加入 {{globalConfig.sysInfo.name ?? packData.name}}</view>
 				<view class="auth-brand-copy">创建账号，开启你的即时沟通</view>

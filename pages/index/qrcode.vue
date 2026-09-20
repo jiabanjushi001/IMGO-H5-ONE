@@ -150,7 +150,7 @@
 						},
                         {
                             type: 'image',
-							content: '/static/image/group.png',
+							content: './static/image/group.png',
                             width: 100, 
                             height: 100, 
                             x: 200, 

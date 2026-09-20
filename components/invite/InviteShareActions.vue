@@ -1,12 +1,15 @@
 <script setup>
-defineProps({ disabled: { type: Boolean, default: false } })
+defineProps({
+	disabled: { type: Boolean, default: false },
+	linkAvailable: { type: Boolean, default: true }
+})
 const emit = defineEmits(['copy-link'])
 </script>
 
 <template>
 	<view class="invite-actions">
 		<button class="invite-share-button" :disabled="disabled" @tap="emit('copy-link')"><text class="cuIcon-link"></text>复制邀请链接<text class="cuIcon-right"></text></button>
-		<view class="invite-share-hint">发送给朋友，打开链接即可填写邀请码注册</view>
+		<view class="invite-share-hint">{{ linkAvailable ? '发送给朋友，打开链接即可填写邀请码注册' : '暂无可用的公网注册链接，请先复制上方邀请码' }}</view>
 		<view class="invite-steps">
 			<view class="invite-steps-title">邀请方式</view>
 			<view class="invite-step"><text class="invite-step-number">01</text><text>复制邀请码或邀请链接</text></view>

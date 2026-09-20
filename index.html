@@ -12,9 +12,11 @@
     <title></title>
     <!-- IMGO_RUNTIME_CONFIG_BEGIN -->
     <script>
-      // 同源、同步加载：配置必须早于 H5 主程序；时间戳确保刷新后不读旧缓存。
+      // 同源、同步加载：配置必须早于 H5 主程序。网页加时间戳；APK 内置文件无需缓存穿透。
       var imgoConfigUrl = new URL('config.js', document.baseURI)
-      imgoConfigUrl.searchParams.set('t', String(Date.now()))
+      if (!['file:', 'fs:'].includes(imgoConfigUrl.protocol)) {
+        imgoConfigUrl.searchParams.set('t', String(Date.now()))
+      }
       document.write('<script src="' + imgoConfigUrl.href + '"><\/script>')
     </script>
     <script>

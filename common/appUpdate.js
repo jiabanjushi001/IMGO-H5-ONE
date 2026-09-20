@@ -7,7 +7,7 @@ const platform = uni.getSystemInfoSync().platform;
 // 主颜色
 const $mainColor = updateConfig.bgColor ? updateConfig.bgColor : "FF5B78";
 // 弹窗图标url
-const $iconUrl = updateConfig.iconUrl ? updateConfig.iconUrl : "/static/image/rocket.png";
+const $iconUrl = updateConfig.iconUrl ? updateConfig.iconUrl : "./static/image/rocket.png";
 
 const $checkUpdateUrl=updateConfig.url ? updateConfig.url : "";
 

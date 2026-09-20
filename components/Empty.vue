@@ -17,7 +17,7 @@ export default {
 		props: {
 			src: {
 				type: String,
-				default: '/static/image/empty.png'
+				default: './static/image/empty.png'
 			}, //  图片路径
 			showImage: {
 				type: Boolean,

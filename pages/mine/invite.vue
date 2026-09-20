@@ -6,6 +6,7 @@ import InviteHero from '@/components/invite/InviteHero.vue'
 import InviteMetrics from '@/components/invite/InviteMetrics.vue'
 import InviteCodeCard from '@/components/invite/InviteCodeCard.vue'
 import InviteShareActions from '@/components/invite/InviteShareActions.vue'
+import { inviteShareUrl } from '@/utils/inviteShareUrl.js'
 
 const loading = shallowRef(true)
 const error = shallowRef(false)
@@ -15,13 +16,12 @@ const streakDays = shallowRef(0)
 const serverURL = shallowRef('')
 
 const shareURL = computed(() => {
-	if (!/^[0-9]{6}$/.test(inviteCode.value)) return ''
 	// #ifdef H5
 	if (typeof window !== 'undefined') {
-		return `${window.location.origin}${window.location.pathname}#/pages/login/register?inviteCode=${inviteCode.value}`
+		return inviteShareUrl(inviteCode.value, serverURL.value, window.location, window.imgoPackagedApp === true)
 	}
 	// #endif
-	return serverURL.value
+	return inviteShareUrl(inviteCode.value, serverURL.value, null, true)
 })
 
 async function load() {
@@ -68,7 +68,7 @@ onShow(load)
 			<InviteHero />
 			<InviteMetrics :direct-count="directCount" :streak-days="streakDays" :loading="loading" :error="error" />
 			<view class="invite-code-wrap"><InviteCodeCard :code="inviteCode" :loading="loading" :error="error" @copy-code="copy(inviteCode, '邀请码')" @retry="load" /></view>
-			<InviteShareActions :disabled="loading || error" @copy-link="copy(shareURL, '邀请链接')" />
+			<InviteShareActions :disabled="loading || error || !shareURL" :link-available="!!shareURL" @copy-link="copy(shareURL, '邀请链接')" />
 		</view>
 	</view>
 </template>

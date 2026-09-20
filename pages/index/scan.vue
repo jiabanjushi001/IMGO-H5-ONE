@@ -6,7 +6,8 @@
 			<view class="scan-title">扫描二维码</view>
 			<view class="scan-hint">{{ cameraMessage }}</view>
 		</view>
-		<view class="scan-actions">
+		<view class="scan-actions" :class="{ 'scan-actions-native': canNativeScan }">
+			<button v-if="canNativeScan" class="cu-btn bg-green lg" @tap="scanNative">原生扫一扫</button>
 			<button class="cu-btn bg-green lg" @tap="pickImage(true)">拍照识别</button>
 			<button class="cu-btn bg-white lg" @tap="pickImage(false)">从相册选择</button>
 		</view>
@@ -17,21 +18,26 @@
 	import jsQR from 'jsqr'
 	import scan from '@/common/scan.js'
 	import getQrcode from '@/components/get-qrcode.vue'
+	import { yimenBridge } from '@/common/yimenBridge.js'
 
 	export default {
 		components: { getQrcode },
 		data() {
 			return {
 				canLiveScan: false,
+				canNativeScan: false,
 				cameraMessage: '正在检查摄像头…',
 				fileInput: null
 			}
 		},
 		mounted() {
+			this.canNativeScan = !!yimenBridge()
 			// LAN HTTP is not a secure context; browsers do not expose getUserMedia there.
 			this.canLiveScan = !!(window.isSecureContext && navigator.mediaDevices?.getUserMedia)
 			if (!this.canLiveScan) {
-				this.cameraMessage = '内网 HTTP 无法实时调用摄像头。可以拍照或从相册选择二维码；实时扫码需要 HTTPS。'
+				this.cameraMessage = this.canNativeScan
+					? '点击原生扫一扫，或从相册选择二维码。'
+					: '当前环境无法实时调用摄像头。可以拍照或从相册选择二维码；浏览器实时扫码需要 HTTPS。'
 			}
 			const input = document.createElement('input')
 			input.type = 'file'
@@ -48,6 +54,9 @@
 			this.removeFileInput()
 		},
 		methods: {
+			scanNative() {
+				scan.scanQr()
+			},
 			removeFileInput() {
 				if (!this.fileInput) return
 				this.fileInput.removeEventListener('change', this.onImageSelected)
@@ -126,4 +135,6 @@
 	.scan-hint { font-size: 28rpx; line-height: 1.7; }
 	.scan-actions { position: fixed; z-index: 30; bottom: 80rpx; left: 32rpx; right: 32rpx; display: flex; gap: 20rpx; }
 	.scan-actions button { flex: 1; }
+	.scan-actions-native { flex-wrap: wrap; }
+	.scan-actions-native button:first-child { flex: 0 0 100%; }
 </style>

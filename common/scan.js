@@ -1,6 +1,7 @@
 import {
 	postJsonRequest,
 } from '@/utils/request.js';
+import { startYimenScan } from '@/common/yimenBridge.js';
 
 const scanPath = (value) => {
 	try {
@@ -43,6 +44,7 @@ const scanQr=()=>{
 	});
 	// #endif
 	// #ifdef H5
+	 if (startYimenScan(code => checkQr(code))) return
 	 uni.navigateTo({
 	 	url:'/pages/index/scan'
 	 })

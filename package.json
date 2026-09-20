@@ -6,7 +6,8 @@
 	"author": "Raingad",
 	"main": "main.js",
 	"scripts": {
-		"test": "node --test tests/*.test.cjs"
+		"test": "node --test tests/*.test.cjs",
+		"prepare:yimen": "node scripts/prepare-yimen-h5.mjs"
 	},
 	"repository": {
 		"type": "git",
