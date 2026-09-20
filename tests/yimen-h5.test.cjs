@@ -26,7 +26,7 @@ test('Yimen bundle preparation gives local resources relative paths and a real c
       </head><body><script type="module" src="/assets/index-test.js"></script></body></html>`)
     fs.writeFileSync(path.join(input, 'assets/main.css'),
       'a{background:url(/assets/logo.png)} b{background:url("/static/pic.png")}')
-    fs.writeFileSync(path.join(input, 'assets/index-test.js'), 'console.log("test")')
+    fs.writeFileSync(path.join(input, 'assets/index-test.js'), 'console.log("/static/image/tabbar/demo.png")')
     fs.writeFileSync(path.join(input, 'static/pic.png'), 'image')
     fs.symlinkSync(path.join(root, 'config.yimen.js'), path.join(input, 'config.js'))
     const result = spawnSync(process.execPath,
@@ -43,6 +43,8 @@ test('Yimen bundle preparation gives local resources relative paths and a real c
     const css = fs.readFileSync(path.join(output, 'assets/main.css'), 'utf8')
     assert.match(css, /url\(\.\/logo\.png\)/)
     assert.match(css, /url\("\.\.\/static\/pic\.png"\)/)
+    assert.match(fs.readFileSync(path.join(output, 'assets/index-test.js'), 'utf8'),
+      /"\.\/static\/image\/tabbar\/demo\.png"/)
     assert.equal(fs.existsSync(path.join(output, 'jsbridge-mini.js')), true)
     const second = spawnSync(process.execPath,
       [path.join(root, 'scripts/prepare-yimen-h5.mjs'), input, output], { encoding: 'utf8' })

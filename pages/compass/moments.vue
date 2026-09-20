@@ -6,7 +6,7 @@
 	<view  :style="{paddingBottom: paddingB+'px'}">
 		<view class="im-friend-header">
 			<view class="im-friend-bg">
-				<image class="im-friend-image" src="./static/image/user-card-bg.jpg" mode="widthFix"></image>
+				<image class="im-friend-image" :src="'./static/image/user-card-bg.jpg'" mode="widthFix"></image>
 			</view>
 			<view class="im-user im-flex im-justify-content-start align-center">
 				<text class="text-white mr-5">{{userInfo.realname}}</text>

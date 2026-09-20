@@ -18,7 +18,8 @@ const serverURL = shallowRef('')
 const shareURL = computed(() => {
 	// #ifdef H5
 	if (typeof window !== 'undefined') {
-		return inviteShareUrl(inviteCode.value, serverURL.value, window.location, window.imgoPackagedApp === true)
+		const insidePackagedApp = window.imgoPackagedApp === true && window.jsBridge?.inApp === true
+		return inviteShareUrl(inviteCode.value, serverURL.value, window.location, insidePackagedApp)
 	}
 	// #endif
 	return inviteShareUrl(inviteCode.value, serverURL.value, null, true)

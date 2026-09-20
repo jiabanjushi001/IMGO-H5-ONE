@@ -73,13 +73,19 @@ function prepare() {
 
     const assets = join(staging, 'assets')
     for (const name of readdirSync(assets)) {
-      if (!name.endsWith('.css')) continue
       const file = join(assets, name)
       if (!lstatSync(file).isFile()) continue
-      const css = readFileSync(file, 'utf8')
-        .replace(/url\((['"]?)\/assets\//g, 'url($1./')
-        .replace(/url\((['"]?)\/static\//g, 'url($1../static/')
-      writeFileSync(file, css)
+      if (name.endsWith('.css')) {
+        const css = readFileSync(file, 'utf8')
+          .replace(/url\((['"]?)\/assets\//g, 'url($1./')
+          .replace(/url\((['"]?)\/static\//g, 'url($1../static/')
+        writeFileSync(file, css)
+      } else if (name.endsWith('.js')) {
+        // uni-app generates root-relative tabBar icon paths from pages.json.
+        const js = readFileSync(file, 'utf8')
+          .replace(/(["'])\/static\/image\//g, '$1./static/image/')
+        writeFileSync(file, js)
+      }
     }
     writeFileSync(join(staging, 'index.html'), html)
     writeFileSync(join(staging, 'config.js'), configText)
