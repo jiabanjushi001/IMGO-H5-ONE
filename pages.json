@@ -1,0 +1,229 @@
+{
+	"pages": [
+		{
+			"path": "pages/index/index",
+			"style": {
+				"navigationBarTitleText": "IMGO"
+			}
+		},
+		{
+			"path": "pages/message/chat",
+			"style": {
+				"navigationBarTitleText": "聊天"
+				// "enablePullDownRefresh": true
+			}
+		},
+		{
+			"path": "pages/message/emoji",
+			"style": {
+				"navigationBarTitleText": "表情"
+			}
+		},
+		{
+			"path": "pages/contacts/index",
+			"style": {
+				"navigationBarTitleText": "联系人"
+			}
+		},
+		{
+			"path": "pages/message/detail",
+			"style": {
+				"navigationBarTitleText": "聊天信息"
+			}
+		},
+		{
+			"path": "pages/message/record",
+			"style": {
+				"navigationBarTitleText": "聊天记录"
+			}
+		},
+		{
+			"path": "pages/contacts/detail",
+			"style": {
+				"navigationBarTitleText": "用户信息"
+			}
+		},
+		{
+			"path": "pages/contacts/friend",
+			"style": {
+				"navigationBarTitleText": "新朋友"
+			}
+		},
+		{
+			"path": "pages/contacts/search",
+			"style": {
+				"navigationBarTitleText": "搜索朋友"
+			}
+		},
+		{
+			"path": "pages/login/index",
+			"style": {
+				"navigationBarTitleText": "登录"
+			}
+		},
+		{
+			"path": "pages/login/register",
+			"style": {
+				"navigationBarTitleText": "注册"
+			}
+		},
+		{
+			"path": "pages/message/call",
+			"style": {
+				"navigationBarTitleText": "通话"
+			}
+		},
+		{
+			"path": "pages/message/video",
+			"style": {
+				"navigationBarTitleText": "视频播放"
+			}
+		},
+		{
+			"path": "pages/index/userSelection",
+			"style": {
+				"navigationBarTitleText": "用户选择"
+			}
+		},
+		{
+			"path": "pages/message/group/groupUser",
+			"style": {
+				"navigationBarTitleText": "群聊成员管理"
+			}
+		},
+		{
+			"path": "pages/index/qrcode",
+			"style": {
+				"navigationBarTitleText": "群二维码"
+			}
+		},
+		{
+			"path": "pages/message/group/info",
+			"style": {
+				"navigationBarTitleText": "群信息"
+			}
+		},
+		{
+			"path": "pages/contacts/group",
+			"style": {
+				"navigationBarTitleText": "群聊列表"
+			}
+		},
+		{
+			"path": "pages/index/search",
+			"style": {
+				"navigationBarTitleText": "搜索"
+			}
+		},
+		{
+			"path": "pages/index/scan",
+			"style": {
+				"navigationBarTitleText": "扫描"
+			}
+		},
+		{
+			"path": "pages/mine/webview",
+			"style": {
+				"navigationBarTitleText": "浏览器",
+				"navigationStyle":"default"
+			}
+		},
+		{
+			"path": "pages/compass/moments",
+			"style": {
+				"navigationBarTitleText": "朋友圈"
+			}
+		},
+		{
+			"path": "pages/mine/profile",
+			"style": {
+				"navigationBarTitleText": "个人信息"
+			}
+		},
+		{
+			"path": "pages/mine/bank-card",
+			"style": {
+				"navigationBarTitleText": "绑定银行卡"
+			}
+		},
+		{
+			"path": "pages/mine/check-in",
+			"style": {
+				"navigationBarTitleText": "每日签到"
+			}
+		},
+		{
+			"path": "pages/mine/invite",
+			"style": {
+				"navigationBarTitleText": "邀请好友"
+			}
+		},
+		{
+			"path": "pages/mine/wallet-withdraw",
+			"style": { "navigationBarTitleText": "提现" }
+		},
+		{
+			"path": "pages/mine/wallet-history",
+			"style": { "navigationBarTitleText": "提现记录" }
+		},
+		{
+			"path": "pages/mine/wallet-ledger",
+			"style": { "navigationBarTitleText": "余额明细" }
+		},
+		{
+			"path": "pages/mine/secure",
+			"style": {
+				"navigationBarTitleText": "安全"
+			}
+		},
+		{
+			"path": "pages/mine/about",
+			"style": {
+				"navigationBarTitleText": "关于"
+			}
+		},
+		{
+			"path": "pages/mine/setting",
+			"style": {
+				"navigationBarTitleText": "设置"
+			}
+		},
+		{
+			"path": "pages/mine/doc",
+			"style": {
+				"navigationBarTitleText": "帮助文档"
+			}
+		}
+    ],
+	"globalStyle": {
+		"navigationStyle": "custom",
+		"navigationBarTextStyle": "black",
+		"navigationBarTitleText": "uni-app",
+		"navigationBarBackgroundColor": "#F8F8F8",
+		"backgroundColor": "#F8F8F8",
+		"app-plus": {
+			"background": "#efeff4"
+		}
+	},
+	"tabBar": {
+		"custom": true,
+		"color": "#333",
+		"selectedColor": "#1AAD19",
+		"borderStyle": "black",
+		"backgroundColor": "#FFFFFF",
+		"list": [{
+				"pagePath": "pages/index/index",
+				"iconPath": "static/image/tabbar/demo.png",
+				"selectedIconPath": "static/image/tabbar/demo.png",
+				"text": "首页"
+			},
+			
+			{
+				"pagePath": "pages/contacts/index",
+				"iconPath": "static/image/tabbar/demo.png",
+				"selectedIconPath": "static/image/tabbar/demo.png",
+				"text": "通讯录"
+			}
+		]
+	}
+}

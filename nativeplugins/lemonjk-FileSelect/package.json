@@ -1,0 +1,43 @@
+{
+	"name": "FileSelect",
+	"id": "lemonjk-FileSelect",
+	"version": "3.1.0",
+	"description": "文件选取插件",
+	"_dp_type": "nativeplugin",
+	"_dp_nativeplugin": {
+		"android": {
+			"plugins": [{
+				"type": "module",
+				"name": "lemonjk-FileSelect",
+				"class": "com.lemonjk.fileselect.FileSelectModule"
+			}],
+			"compileOptions": {
+				"sourceCompatibility": "1.8",
+				"targetCompatibility": "1.8"
+			},
+			"dependencies": [
+				"androidx.documentfile:documentfile:1.0.1"
+			],
+			"integrateType": "aar",
+			"permissions": [
+				"<uses-permission android:name=\"android.permission.READ_EXTERNAL_STORAGE\"/>"
+			],
+			"abis": [
+				"armeabi-v7a",
+				"arm64-v8a"
+			],
+			"minSdkVersion": 21
+		},
+		"ios": {
+			"plugins": [
+				{
+					"type": "module",
+					"name": "lemonjk-FileSelect",
+					"class": "TestModule"
+				}
+			],
+			"integrateType": "framework",
+			"deploymentTarget": "11.0"
+		}
+	}
+}
