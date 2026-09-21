@@ -16,6 +16,7 @@
 <script>
 import QR from './wxqrcode.js';
 import config from '@/common/config.js';
+import { downloadAuthedFile, resolveMediaDisplayUrl } from '@/utils/avatar.js';
 export default {
   name: 'mosowe-canvas-image',
   components: {},
@@ -113,13 +114,13 @@ export default {
 		dataDrawCanvas () {
 			let item = this.lists[this.listsIndex];
 			if (item.type === 'image') { // 图片
-				if (item.content.indexOf('https://') > -1) { // https://网络图片
+				const content = String(item.content || '')
+				const isRemote = /^(?:https?:)?\/\//i.test(content) || content.startsWith('/') || /\/(?:storage|avatar)\//i.test(content)
+				if (isRemote && !/^(?:blob:|data:|file:|wxfile:)/i.test(content)) {
 					// #ifndef H5
-					// 非H5
 					this.downloadImageNotH5(item);
 					// #endif
 					// #ifdef H5
-					// H5
 					this.downloadImageH5(item);
 					// #endif
 				} else { // 本地选择图片
@@ -147,62 +148,62 @@ export default {
 		// #ifndef H5
 		// https图片下载本地并绘制，非H5
 		downloadImageNotH5 (item) { 
-			uni.downloadFile({
-				url: item.content,
-				header: {
-					'Access-Control-Allow-Origin': '*',
-				},
-				success: (res) => {
-					item.content = res.tempFilePath;
-					if (item.arc) {
-						this.drawImageArc(item);
-					} else {
-						this.drawImage(item);
-					}
-				},
-				fail: (res) => {
-					console.log(res);
+			downloadAuthedFile(item.content).then(({ tempFilePath }) => {
+				item.content = tempFilePath;
+				if (item.arc) {
+					this.drawImageArc(item);
+				} else {
+					this.drawImage(item);
 				}
+			}).catch((res) => {
+				console.log(res);
 			});
 		},
 		// #endif
 		// #ifdef H5
 		// https图片下载本地并绘制，H5
 		downloadImageH5 (item) {
-			let image = null;
-			image = new Image();
-			image.crossOrigin = new URL(item.content, window.location.href).origin === new URL(config.apiUrl).origin ? 'use-credentials' : 'anonymous';
-			image.src = item.content;
-			image.onload = () => {
-			    let canvas = document.createElement('canvas');
-			    canvas.width = item.width;
-			    canvas.height = item.height;
-			    let ctx = canvas.getContext('2d');
-					ctx.drawImage(
-						image, 
-						0, 
-						0, 
-						item.width, 
-						item.height
-					);
-			    let dataURL = canvas.toDataURL('image/png');
-					if (item.arc) { // 绘制圆形
-						item.content = dataURL;
-						this.drawImageArc(item);
-					} else {
-						this.canvas.globalAlpha = item.hasOwnProperty('globalAlpha') ? item.globalAlpha : 1;
-						this.canvas.drawImage(
-							dataURL, 
-							item.x, 
-							item.y, 
-							item.hasOwnProperty('width') ? item.width : this.width, 
-							item.hasOwnProperty('height') ? item.height : this.height
+			resolveMediaDisplayUrl(item.content).then((src) => {
+				let image = null;
+				image = new Image();
+				image.crossOrigin = 'anonymous';
+				image.src = src || item.content;
+				image.onload = () => {
+				    let canvas = document.createElement('canvas');
+				    canvas.width = item.width;
+				    canvas.height = item.height;
+				    let ctx = canvas.getContext('2d');
+						ctx.drawImage(
+							image, 
+							0, 
+							0, 
+							item.width, 
+							item.height
 						);
+				    let dataURL = canvas.toDataURL('image/png');
+						if (item.arc) { // 绘制圆形
+							item.content = dataURL;
+							this.drawImageArc(item);
+						} else {
+							this.canvas.globalAlpha = item.hasOwnProperty('globalAlpha') ? item.globalAlpha : 1;
+							this.canvas.drawImage(
+								dataURL, 
+								item.x, 
+								item.y, 
+								item.hasOwnProperty('width') ? item.width : this.width, 
+								item.hasOwnProperty('height') ? item.height : this.height
+							);
 
-					this.checkDrawOver();						
-				}
+						this.checkDrawOver();						
+					}
 
-			};
+				};
+				image.onerror = (res) => {
+					console.log(res);
+				};
+			}).catch((res) => {
+				console.log(res);
+			})
 		},
 		// #endif
 		// 图片压缩

@@ -193,7 +193,8 @@
     "h5" : {
         "router" : {
             "mode" : "hash",
-            "base" : "/"
+            /* 相对路径：Nginx 与一门 APP 静态离线包（html/js/css/img 打进 APK）均可加载 */
+            "base" : "./"
         },
         "devServer" : {
             "https" : false,

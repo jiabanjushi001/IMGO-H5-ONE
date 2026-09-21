@@ -1,6 +1,6 @@
 <template>
-	<view>
-		<cu-custom bgColor="bg-gradual-green" :isBack="true">
+	<view class="profile-page">
+		<cu-custom bgColor="text-white" bgStyle="background:linear-gradient(126deg,#4c63e9 0%,#5e70f5 55%,#6b6eeb 100%);color:#fff;" :isBack="true">
 			<template #backText></template>
 			<template #content>个人信息</template>
 		</cu-custom>
@@ -31,7 +31,7 @@
 				<view class="title">性别</view>
 				<view>
 					<radio-group @change="changeSex">
-					<label class="radio mr-10" v-for="x in sexList"><radio name="sex" :value="x.id" :checked="userInfo.sex==x.id" /> {{x.name}}</label>
+					<label class="radio mr-10" v-for="x in sexList"><radio name="sex" :value="x.id" :checked="userInfo.sex==x.id" color="#4c63e9" /> {{x.name}}</label>
 					</radio-group>
 				</view>
 			</view>
@@ -41,7 +41,7 @@
 			</view>
 		</form>
 		<view class="padding flex flex-direction">
-			<button class="cu-btn bg-green lg" :style="saved ? 'border: solid 1px #dbdada;' : ''" :disabled="saved" @tap="saveInfo()" >保存</button>
+			<button class="cu-btn theme-btn lg" :class="{ 'is-disabled': saved }" :disabled="saved" @tap="saveInfo()" >保存</button>
 		</view>
 		<view class="padding flex flex-direction" style="position: fixed;bottom: 0;width:100%;align-items: center;">
 			<text class="text-red" @tap="logout()">注销登录</text>
@@ -180,5 +180,29 @@
 </script>
 
 <style>
-
+.profile-page {
+	min-height: 100vh;
+	background: #f4f6fb;
+}
+.mine-theme-header .cu-bar {
+	background: linear-gradient(126deg, #4c63e9 0%, #5e70f5 55%, #6b6eeb 100%) !important;
+	color: #fff;
+}
+.mine-theme-header .action,
+.mine-theme-header .content,
+.mine-theme-header .cuIcon-back {
+	color: #fff !important;
+}
+.theme-btn {
+	background: linear-gradient(126deg, #4c63e9 0%, #5e70f5 100%) !important;
+	color: #fff !important;
+	border: 0 !important;
+	box-shadow: 0 12rpx 28rpx rgba(76, 99, 233, .28);
+}
+.theme-btn.is-disabled,
+.theme-btn[disabled] {
+	opacity: .55;
+	box-shadow: none;
+	border: solid 1px #dbdada !important;
+}
 </style>

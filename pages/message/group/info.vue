@@ -5,7 +5,7 @@
 			<template #content>群信息</template>
 		</cu-custom>
 		<view align="center" class="groupInfo">
-			<image :src="contact.avatar" mode="widthFix" style="width:120px;height:120px;border-radius: 12rpx;"></image>
+			<AuthImage :src="contact.avatar" :info="contact" avatar mode="widthFix" style="width:120px;height:120px;border-radius: 12rpx;"></AuthImage>
 			<view class="f-14 mt-10">
 				{{contact.name}} ({{contact.groupUserCount}})
 			</view>

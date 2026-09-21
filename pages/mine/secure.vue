@@ -1,6 +1,6 @@
 <template>
-	<view>
-		<cu-custom bgColor="bg-gradual-green" :isBack="true">
+	<view class="secure-page">
+		<cu-custom bgColor="text-white" bgStyle="background:linear-gradient(126deg,#4c63e9 0%,#5e70f5 55%,#6b6eeb 100%);color:#fff;" :isBack="true">
 			<template #backText></template>
 			<template #content>账号安全</template>
 		</cu-custom>
@@ -18,7 +18,7 @@
 			</view>
 			<view class="cu-item"  @tap="modelName='show';editPass=true">
 				<view class="content">
-					<text class="cuIcon-lock text-green"></text>
+					<text class="cuIcon-lock theme-accent"></text>
 					<text>修改密码</text>
 				</view>
 				<view class="action">
@@ -33,14 +33,14 @@
 			<view class="cu-dialog" @tap.stop=''>
 				<view class="cu-bar bg-white">
 					<view class="action text-gray" @tap="modelName=''">取消</view>
-					<view class="action text-green" @tap="save">保存</view>
+					<view class="action theme-accent" @tap="save">保存</view>
 				</view>
 				<view class="manage-content mb-20">
 					<view class="cu-list menu mt-15 bg-white">
 						<view class="cu-form-group text-right" v-if="userInfo.is_auth">
 							<view class="title">验证码</view>
 							<input placeholder="输入验证码" name="input"  v-model="code" />
-							<button class='cu-btn bg-green shadow cu-load'  :class="loading?'loading':''" :disabled="loading" @tap="sendCode(true)">发送验证码</button>
+							<button class='cu-btn theme-btn shadow cu-load'  :class="loading?'loading':''" :disabled="loading" @tap="sendCode(true)">发送验证码</button>
 						</view>
 						<template v-if="!editPass">
 							<view class="text-gray m-15 text-left">
@@ -53,7 +53,7 @@
 							<view class="cu-form-group text-right">
 								<view class="title">新账号验证码</view>
 								<input placeholder="输入验证码" name="input" v-model="newCode" />
-								<button class='cu-btn bg-green shadow cu-load' :class="loading?'loading':''" :disabled="loading" @tap="sendCode(false)">发送验证码</button>
+								<button class='cu-btn theme-btn shadow cu-load' :class="loading?'loading':''" :disabled="loading" @tap="sendCode(false)">发送验证码</button>
 							</view>
 						</template>
 						<template v-else>
@@ -211,6 +211,29 @@
 </script>
 
 <style>
+.secure-page {
+	min-height: 100vh;
+	background: #f4f6fb;
+}
+.mine-theme-header .cu-bar {
+	background: linear-gradient(126deg, #4c63e9 0%, #5e70f5 55%, #6b6eeb 100%) !important;
+	color: #fff;
+}
+.mine-theme-header .action,
+.mine-theme-header .content,
+.mine-theme-header .cuIcon-back,
+.mine-theme-header .cu-custom .action,
+.mine-theme-header .cu-custom .content {
+	color: #fff !important;
+}
+.theme-accent {
+	color: #4c63e9 !important;
+}
+.theme-btn {
+	background: linear-gradient(126deg, #4c63e9 0%, #5e70f5 100%) !important;
+	color: #fff !important;
+	border: 0 !important;
+}
 .cu-load {
     display: block;
     line-height: 68rpx;

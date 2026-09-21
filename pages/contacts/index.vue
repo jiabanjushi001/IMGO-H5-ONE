@@ -81,7 +81,7 @@
 				<navigator class="im-flex im-justify-content-start im-align-items-center mt-10" v-for="(item, index) in userList"
 					:key="item.id" :url="'/pages/contacts/detail?user_id=' + item.id">
 					<view class="im-folder-bar im-image mr-10">
-						<image :src="item.avatar" mode="widthFix"></image>
+						<AuthImage :src="item.avatar" :info="item" avatar mode="widthFix"></AuthImage>
 					</view>
 					<view class="im-list-body im-border-b">
 						<view class="im-list-title word">

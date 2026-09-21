@@ -1,4 +1,6 @@
 <script setup>
+import AuthImage from '@/components/AuthImage.vue'
+
 const props = defineProps({
 	members: { type: Array, default: () => [] },
 	count: { type: Number, default: 0 },
@@ -21,7 +23,14 @@ const emit = defineEmits(['member', 'add', 'manage', 'view-all'])
 		<view class="member-grid">
 			<view v-for="item in props.members" :key="item.user_id || item.userInfo?.id" class="member-item" @tap="emit('member', item.userInfo)">
 				<view class="member-avatar">
-					<image v-if="item.userInfo?.avatar" class="member-avatar-image" :src="item.userInfo.avatar" mode="aspectFill" />
+					<AuthImage
+						v-if="item.userInfo?.avatar"
+						class="member-avatar-image"
+						:src="item.userInfo.avatar"
+						:info="item.userInfo"
+						avatar
+						mode="aspectFill"
+					/>
 					<text v-else class="member-initial">{{ (item.userInfo?.displayName || '?').slice(0, 1) }}</text>
 				</view>
 				<text class="member-name">{{ item.userInfo?.displayName || '群成员' }}</text>
@@ -53,7 +62,7 @@ const emit = defineEmits(['member', 'add', 'manage', 'view-all'])
 .member-item { display:flex; min-width:0; align-items:center; flex-direction:column; gap:10rpx; }
 .member-avatar,.member-action-icon { display:flex; overflow:hidden; align-items:center; justify-content:center; box-sizing:border-box; width:86rpx; height:86rpx; border-radius:24rpx; }
 .member-avatar { background:linear-gradient(135deg,#627cff,#7781da); color:#fff; box-shadow:0 9rpx 20rpx rgba(67,84,167,.13); }
-.member-avatar-image { width:100%; height:100%; }
+.member-avatar :deep(.auth-image), .member-avatar-image { width:100%; height:100%; }
 .member-initial { font-size:34rpx; font-weight:700; }
 .member-name,.member-action-label { display:block; overflow:hidden; width:100%; white-space:nowrap; text-overflow:ellipsis; text-align:center; font-size:21rpx; line-height:1.35; color:#667088; }
 .member-action-icon { border:2rpx dashed #cbd3ef; background:#f6f8ff; color:#526dff; font-size:40rpx; }

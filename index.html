@@ -18,8 +18,17 @@
       document.write('<script src="' + imgoConfigUrl.href + '"><\/script>')
     </script>
     <script>
+      // 一门 APP / file:// / fs:// 离线包与 Nginx 部署共用：静态资源按相对路径解析。
+      window.__IMGO_BASE__ = new URL('./', document.baseURI).href
       // config.js 必须提供有效服务器配置；配置缺失时禁止启动 H5 主程序。
       window.imgoStartApp = function (entry) {
+        function resolveAsset(path) {
+          try {
+            return new URL(String(path || '').replace(/^\//, ''), window.__IMGO_BASE__).href
+          } catch (error) {
+            return path
+          }
+        }
         function endpoint(value, protocols) {
           if (typeof value !== 'string' || !value.trim()) return ''
           try {
@@ -58,6 +67,19 @@
             savedUrl = sessionStorage.getItem('imgo-active-server') || ''
           }
         } catch (error) {}
+        function isLoopbackHost(url) {
+          try {
+            var host = new URL(url).hostname
+            return host === '127.0.0.1' || host === 'localhost' || host === '::1'
+          } catch (error) {
+            return false
+          }
+        }
+        // 曾误切到本机备用站时，不要优先使用，否则 wss 会一直连 127.0.0.1
+        if (savedUrl && isLoopbackHost(savedUrl)) {
+          try { sessionStorage.removeItem('imgo-active-server') } catch (error) {}
+          savedUrl = ''
+        }
         var savedIndex = servers.findIndex(function (server) { return server.httpUrl === savedUrl })
         if (savedIndex > 0) servers = servers.slice(savedIndex).concat(servers.slice(0, savedIndex))
         if (app) app.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f6f8ff;color:#65718a;font-family:-apple-system,BlinkMacSystemFont,Arial,sans-serif">正在连接服务器…</div>'
@@ -119,11 +141,27 @@
           window.wsUrl = server.wsUrl
           remember(server)
           if (app) app.textContent = ''
-          var script = document.createElement('script')
-          script.type = 'module'
-          script.src = entry
-          script.onerror = showOffline
-          document.body.appendChild(script)
+          function bootEntry() {
+            var script = document.createElement('script')
+            // file:// / 一门离线包不能使用 ES Module（会报 CORS），经典脚本由打包流程产出 IIFE。
+            if (!window.__IMGO_CLASSIC_SCRIPT__) script.type = 'module'
+            script.src = resolveAsset(entry)
+            script.onerror = showOffline
+            document.body.appendChild(script)
+          }
+          // 经典包需先加载完整 Quill UMD，否则聊天 editor 无法生成可输入的 ql-editor。
+          if (window.__IMGO_CLASSIC_SCRIPT__) {
+            var quillScript = document.createElement('script')
+            quillScript.src = resolveAsset('./assets/quill.min.js')
+            quillScript.onload = function () {
+              window.__IMGO_QUILL_UMD__ = window.Quill
+              bootEntry()
+            }
+            quillScript.onerror = bootEntry
+            document.body.appendChild(quillScript)
+          } else {
+            bootEntry()
+          }
           // 旧发布包也可自动切换：运行中定期探测，故障时只切换到已验证可用的备用站。
           if (servers.length > 1) {
             var checking = false

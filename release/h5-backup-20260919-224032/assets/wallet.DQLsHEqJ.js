@@ -1,0 +1,1 @@
+import{aM as e}from"./index-BvunBA6y.js";const t={status:()=>e("/enterprise/wallet/status",{}),withdraw:({amount:t,request_id:i})=>e("/enterprise/wallet/withdraw",{amount:t,request_id:i}),history:({page:t=1,limit:i=20}={})=>e("/enterprise/wallet/history",{page:t,limit:i}),entries:({page:t=1,limit:i=20}={})=>e("/enterprise/wallet/entries",{page:t,limit:i})};export{t as w};

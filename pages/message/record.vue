@@ -45,11 +45,11 @@
 							<!-- 图片消息 -->
 							<template v-else-if="item.type=='image'">
 								<template v-if='item.extends && item.extends.fixMode'>
-									<image v-if="item.extends.fixMode<=2" :src="item.content" class="radius" :mode="item.extends.fixMode==1 ? 'widthFix' : 'heightFix' "  :style="item.extends.fixMode==1 ? 'width:200px' : ''" @tap="showImgs"  :data-img="item.content" ></image>
-									<image v-if="item.extends.fixMode==3" :src="item.content" class="radius" mode="scaleToFill"  :style="[{width:item.extends.width+'px',height:item.extends.height+'px'}]" @tap="showImgs"  :data-img="item.content" ></image>
+									<image v-if="item.extends.fixMode<=2"  :src="mediaSrc(item.content)" class="radius" :mode="item.extends.fixMode==1 ? 'widthFix' : 'heightFix' "  :style="item.extends.fixMode==1 ? 'width:200px' : ''" @tap="showImgs"  :data-img="item.content" ></image>
+									<image v-if="item.extends.fixMode==3"  :src="mediaSrc(item.content)" class="radius" mode="scaleToFill"  :style="[{width:item.extends.width+'px',height:item.extends.height+'px'}]" @tap="showImgs"  :data-img="item.content" ></image>
 								</template>
 								<template v-else>
-									<image :src="item.content" class="radius" mode="heightFix" @tap="showImgs"  :data-img="item.content" ></image>
+									<image  :src="mediaSrc(item.content)" class="radius" mode="heightFix" @tap="showImgs"  :data-img="item.content" ></image>
 								</template>
 							</template>
 							
@@ -67,13 +67,13 @@
 									<view class="relative-shadow">
 										<view class="cuIcon-video icon-center f-28 c-white"></view>
 									</view>
-									<image v-if="item.extends" :src="item.extends.poster" class="" mode="heightFix"></image>
+									<image v-if="item.extends"  :src="mediaSrc(item.extends.poster)" class="" mode="heightFix"></image>
 								</view>
 							</view>
 							<!-- 文件消息 -->
 							<view v-else-if="item.type=='file'">
 								<view class="file-card bg-white radius-10 im-flex im-justify-content-start pd-10 im-align-items-center"  @tap.stop="previewFile(item)">
-									<image :src="item.extUrl" style="width:64rpx;height:80rpx"></image>
+									<AuthImage :src="item.extUrl" mode="aspectFit" style="width:64rpx;height:80rpx"></AuthImage>
 									<view class="im-flex im-columns ml-10">
 										<view class="text-overflow file-name">{{item.fileName}}</view>
 										<view class="text-gray file-size f-12">{{fileSize(item.fileSize)}}</view>
@@ -97,8 +97,9 @@
 							<!-- 名片消息 -->
 							<view v-else-if="item.type=='contact'" @tap="openContact(item.extends)" class="im-contact-msg radius-8 pt-10 pr-10 pl-10 pb-5">
 								<view class="im-flex im-rows im-nowrap im-align-items-center">
-									<view class='cu-avatar mr-10 radius'  :style="[{backgroundImage:'url('+item.extends.avatar+')'}]">
-									</view>
+								<view class='cu-avatar mr-10 radius'>
+									<AuthImage v-if="item.extends && item.extends.avatar" :src="item.extends.avatar" :info="item.extends" avatar mode="aspectFill" style="width:100%;height:100%;" />
+								</view>
 									<view class="c-333">{{item.extends.displayName}}</view>
 								</view>
 								<hr class="mt-10 c-999">

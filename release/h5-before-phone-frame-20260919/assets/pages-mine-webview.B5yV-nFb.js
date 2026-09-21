@@ -1,0 +1,1 @@
+import{_ as t,c as s,w as a,ag as e,i as n,o,b as l,am as c}from"./index-BGppDdwD.js";const r=t({data:()=>({html:""}),onLoad:function(t){this.html=decodeURIComponent(t.src),t.title&&e({title:t.title})}},[["render",function(t,e,r,i,d,m){const u=c,f=n;return o(),s(f,{class:""},{default:a(()=>[l(u,{src:d.html},null,8,["src"])]),_:1})}]]);export{r as default};

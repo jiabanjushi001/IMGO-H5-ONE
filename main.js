@@ -37,6 +37,8 @@ import api from '@/api/index.js';
 import socketIO from '@/common/socket.js';
 import Empty from "@/components/Empty.vue" //通用空状态
 import Tags from "@/components/Tags.vue" //通用标签
+import AuthImage from '@/components/AuthImage.vue'
+import { assetUrl } from '@/utils/asset-url.js'
 
 export function createApp() {
   const app = createSSRApp(App)
@@ -44,10 +46,12 @@ export function createApp() {
   app.config.globalProperties.$util = util;
   app.config.globalProperties.$api = api;
    app.config.globalProperties.$store = store;
+   app.config.globalProperties.$asset = assetUrl;
    app.config.globalProperties.socketIo = new socketIO()
     app.component('cu-custom',cuCustom)
 	app.component('Empty',Empty)
 	app.component('Tags',Tags)
+	app.component('AuthImage', AuthImage)
 	app.use(store)
   return {
     app

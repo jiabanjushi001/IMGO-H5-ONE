@@ -28,6 +28,7 @@
 
 <script>
 	"use strict";
+	import { resolveAvatarDisplayUrl } from '@/utils/avatar.js'
 	const tH = 50;
 	export default {
 		name: "yq-avatar",
@@ -49,8 +50,11 @@
 			};
 		},
 		watch: {
-			avatarSrc() {
-				this.imgSrc.imgSrc = this.avatarSrc;
+			avatarSrc: {
+				immediate: false,
+				handler(val) {
+					this.applyAvatarSrc(val)
+				}
 			}
 		},
 		computed:{
@@ -90,7 +94,7 @@
 			this.cco = uni.createCanvasContext('oper-canvas', this);
 			this.ccp = uni.createCanvasContext('prv-canvas', this);
 			this.qlty = parseFloat(this.quality) || 1;
-			this.imgSrc.imgSrc = this.avatarSrc;
+			this.applyAvatarSrc(this.avatarSrc);
 			this.letRotate = (this.canRotate === false || this.inner === true || this.inner === 'true' || this.canRotate === 'false') ? 0 : 1;
 			this.letScale = (this.canScale === false || this.canScale === 'false') ? 0 : 1;
 			this.isin = (this.inner === true || this.inner === 'true') ? 1 : 0;
@@ -126,6 +130,16 @@
 			}
 		},
 		methods: {
+			applyAvatarSrc(src) {
+				const value = src || ''
+				this.imgSrc.imgSrc = value
+				if (!value) return
+				resolveAvatarDisplayUrl(value).then((url) => {
+					if ((this.avatarSrc || '') === value) {
+						this.imgSrc.imgSrc = url || value
+					}
+				}).catch(() => {})
+			},
 			fWindowResize() {
 				let sysInfo = uni.getSystemInfoSync();
 				this.platform = sysInfo.platform;

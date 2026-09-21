@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <link rel="stylesheet" href="./assets/uni.f49cbc4e.css">
+
+    <meta charset="UTF-8" />
+    <script>
+      var coverSupport = 'CSS' in window && typeof CSS.supports === 'function' && (CSS.supports('top: env(a)') ||
+        CSS.supports('top: constant(a)'))
+      document.write(
+        '<meta name="viewport" content="width=device-width, user-scalable=no, initial-scale=1.0, maximum-scale=1.0, minimum-scale=1.0' +
+        (coverSupport ? ', viewport-fit=cover' : '') + '" />')
+    </script>
+    <title>IMGO</title>
+    <!-- IMGO_RUNTIME_CONFIG_BEGIN -->
+    <script>
+      // 同源、同步加载：配置必须早于 H5 主程序；时间戳确保刷新后不读旧缓存。
+      var imgoConfigUrl = new URL('config.js', document.baseURI)
+      imgoConfigUrl.searchParams.set('t', String(Date.now()))
+      document.write('<script src="' + imgoConfigUrl.href + '"><\/script>')
+    </script>
+    <script>
+      // 一门 APP / file:// / fs:// 离线包与 Nginx 部署共用：静态资源按相对路径解析。
+      window.__IMGO_CLASSIC_SCRIPT__=true;
+      window.__IMGO_BASE__ = new URL('./', document.baseURI).href
+      // config.js 必须提供有效服务器配置；配置缺失时禁止启动 H5 主程序。
+      window.imgoStartApp = function (entry) {
+        function resolveAsset(path) {
+          try {
+            return new URL(String(path || '').replace(/^\//, ''), window.__IMGO_BASE__).href
+          } catch (error) {
+            return path
+          }
+        }
+        function endpoint(value, protocols) {
+          if (typeof value !== 'string' || !value.trim()) return ''
+          try {
+            var parsed = new URL(value.trim())
+            if (protocols.indexOf(parsed.protocol) === -1 || !parsed.hostname || parsed.username || parsed.password || parsed.search || parsed.hash) return ''
+            return value.trim().replace(/\/+$/, '')
+          } catch (error) {
+            return ''
+          }
+        }
+        var configured = Array.isArray(window.apiServers)
+          ? window.apiServers : [{ httpUrl: window.httpUrl, wsUrl: window.wsUrl }]
+        var servers = []
+        configured.forEach(function (item) {
+          var httpUrl = endpoint(item && item.httpUrl, ['http:', 'https:'])
+          var wsUrl = item && item.wsUrl
+            ? endpoint(item.wsUrl, ['ws:', 'wss:'])
+            : httpUrl.replace(/^http/, 'ws') + '/wss'
+          if (!httpUrl || !wsUrl) {
+            console.warn('[IMGO] 忽略无效的服务器配置')
+            return
+          }
+          if (!servers.some(function (server) { return server.httpUrl === httpUrl })) {
+            servers.push({ httpUrl: httpUrl, wsUrl: wsUrl })
+          }
+        })
+        var app = document.getElementById('app')
+        if (!servers.length) {
+          showOffline(true)
+          return
+        }
+        var serverListSignature = servers.map(function (server) { return server.httpUrl + ' ' + server.wsUrl }).join('\n')
+        var savedUrl = ''
+        try {
+          if (sessionStorage.getItem('imgo-server-list') === serverListSignature) {
+            savedUrl = sessionStorage.getItem('imgo-active-server') || ''
+          }
+        } catch (error) {}
+        function isLoopbackHost(url) {
+          try {
+            var host = new URL(url).hostname
+            return host === '127.0.0.1' || host === 'localhost' || host === '::1'
+          } catch (error) {
+            return false
+          }
+        }
+        // 曾误切到本机备用站时，不要优先使用，否则 wss 会一直连 127.0.0.1
+        if (savedUrl && isLoopbackHost(savedUrl)) {
+          try { sessionStorage.removeItem('imgo-active-server') } catch (error) {}
+          savedUrl = ''
+        }
+        var savedIndex = servers.findIndex(function (server) { return server.httpUrl === savedUrl })
+        if (savedIndex > 0) servers = servers.slice(savedIndex).concat(servers.slice(0, savedIndex))
+        if (app) app.innerHTML = '<div style="min-height:100vh;display:flex;align-items:center;justify-content:center;background:#f6f8ff;color:#65718a;font-family:-apple-system,BlinkMacSystemFont,Arial,sans-serif">正在连接服务器…</div>'
+        var activeServer = null
+        var switching = false
+        function probe(server) {
+          var controller = new AbortController()
+          var timer = setTimeout(function () { controller.abort() }, 4000)
+          return fetch(server.httpUrl + '/common/pub/getSystemInfo', {
+            cache: 'no-store', credentials: 'omit', signal: controller.signal
+          }).then(function (response) {
+            if (!response.ok) throw new Error('HTTP ' + response.status)
+            return response.json()
+          }).then(function (result) {
+            if (!result || result.code !== 0) throw new Error('API 响应无效')
+            return server
+          }).finally(function () { clearTimeout(timer) })
+        }
+        function remember(server) {
+          try {
+            sessionStorage.setItem('imgo-server-list', serverListSignature)
+            sessionStorage.setItem('imgo-active-server', server.httpUrl)
+          } catch (error) {}
+        }
+        function showOffline(configError) {
+          if (!app) return
+          var title = configError === true ? '配置文件缺失或无效' : '暂时无法连接服务器'
+          var description = configError === true
+            ? '请在网站目录放置有效的 config.js，配置后点击下方按钮重试。'
+            : '请检查服务状态或网络连接。服务恢复后可点击下方按钮重试。'
+          app.innerHTML = '<div style="box-sizing:border-box;min-height:100vh;display:flex;align-items:center;justify-content:center;padding:24px;background:#f6f8ff;font-family:-apple-system,BlinkMacSystemFont,Arial,sans-serif;color:#24304b"><div style="width:min(100%,420px);padding:32px 24px;border-radius:20px;background:#fff;box-shadow:0 12px 36px rgba(36,48,75,.08);text-align:center"><div style="font-size:24px;font-weight:700">' + title + '</div><p style="color:#65718a;line-height:1.7">' + description + '</p><button id="imgo-retry" type="button" style="margin-top:14px;border:0;border-radius:10px;background:#526bf5;color:#fff;padding:12px 32px;font-size:16px;cursor:pointer">重新连接</button></div></div>'
+          document.getElementById('imgo-retry').onclick = function () { location.reload() }
+        }
+        function findHealthy(start, remaining) {
+          if (!remaining) return Promise.resolve(null)
+          var server = servers[start % servers.length]
+          return probe(server).catch(function () {
+            return findHealthy(start + 1, remaining - 1)
+          })
+        }
+        window.imgoSwitchServer = function () {
+          if (switching || !activeServer || servers.length < 2) return Promise.resolve(false)
+          switching = true
+          var currentIndex = servers.indexOf(activeServer)
+          return findHealthy(currentIndex + 1, servers.length - 1).then(function (next) {
+            if (!next) return false
+            remember(next)
+            location.reload()
+            return true
+          }).finally(function () { switching = false })
+        }
+        findHealthy(0, servers.length).then(function (server) {
+          if (!server) {
+            showOffline()
+            return
+          }
+          activeServer = server
+          window.httpUrl = server.httpUrl
+          window.wsUrl = server.wsUrl
+          remember(server)
+          if (app) app.textContent = ''
+          function bootEntry() {
+            var script = document.createElement('script')
+            // file:// / 一门离线包不能使用 ES Module（会报 CORS），经典脚本由打包流程产出 IIFE。
+            if (!window.__IMGO_CLASSIC_SCRIPT__) script.type = 'module'
+            script.src = resolveAsset(entry)
+            script.onerror = showOffline
+            document.body.appendChild(script)
+          }
+          // 经典包需先加载完整 Quill UMD，否则聊天 editor 无法生成可输入的 ql-editor。
+          if (window.__IMGO_CLASSIC_SCRIPT__) {
+            var quillScript = document.createElement('script')
+            quillScript.src = resolveAsset('./assets/quill.min.js')
+            quillScript.onload = function () {
+              window.__IMGO_QUILL_UMD__ = window.Quill
+              bootEntry()
+            }
+            quillScript.onerror = bootEntry
+            document.body.appendChild(quillScript)
+          } else {
+            bootEntry()
+          }
+          // 旧发布包也可自动切换：运行中定期探测，故障时只切换到已验证可用的备用站。
+          if (servers.length > 1) {
+            var checking = false
+            setInterval(function () {
+              if (checking || switching) return
+              checking = true
+              probe(activeServer).catch(function () {
+                return window.imgoSwitchServer()
+              }).finally(function () { checking = false })
+            }, 15000)
+          }
+        }).catch(function (error) {
+          console.warn('[IMGO] API 启动检查失败：', error)
+          showOffline()
+        })
+      }
+    </script>
+    <!-- IMGO_RUNTIME_CONFIG_END -->
+    <!--preload-links-->
+    <!--app-context-->
+    
+    <link rel="stylesheet" href="./assets/index-Ck5AUIMz.css">
+      <link rel="stylesheet" href="./assets/quill.snow.css">
+  </head>
+  <body>
+    <div id="app"><!--app-html--></div>
+      <script>window.imgoStartApp("./assets/index-classic-24d2ce54dd36.js")</script>
+  </body>
+</html>

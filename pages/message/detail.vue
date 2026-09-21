@@ -8,7 +8,7 @@
 		<view v-if="contact" class="detail-content">
 			<view class="group-hero">
 				<view class="group-hero-avatar">
-					<image v-if="contact.avatar" class="group-hero-image" :src="contact.avatar" mode="aspectFill" />
+					<AuthImage v-if="contact.avatar" class="group-hero-image" :src="contact.avatar" :info="contact" avatar mode="aspectFill" />
 					<text v-else class="cuIcon-group"></text>
 				</view>
 				<view class="group-hero-info">
@@ -37,7 +37,7 @@
 					<text class="row-label">群头像</text>
 					<view class="row-value">{{ isAuth ? '点击更换' : '' }}</view>
 					<avatar v-if="isAuth" :key="avatarEditorKey" :avatarSrc="contact.avatar" selWidth="240px" selHeight="480upx" expWidth="240px" expHeight="240px" avatarStyle="width: 76rpx; height: 76rpx; border-radius: 20rpx;" :quality="1" @upload="uploadGroupAvatar" />
-					<image v-else class="avatar-row-image" :src="contact.avatar" mode="aspectFill" />
+					<AuthImage v-else class="avatar-row-image" :src="contact.avatar" :info="contact" avatar mode="aspectFill" />
 				</view>
 				<view class="detail-row" @tap="open">
 					<view class="row-icon name-icon" :class="isAuth ? 'cuIcon-edit' : 'cuIcon-info'"></view>

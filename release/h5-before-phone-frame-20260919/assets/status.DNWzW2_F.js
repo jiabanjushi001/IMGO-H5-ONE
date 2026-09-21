@@ -1,0 +1,1 @@
+import{_ as s,c as t,n as e,i as a,o as p}from"./index-BGppDdwD.js";const r=s({props:{type:{type:String,default:"primary"},pulse:{type:[Boolean,Number],default:!0}}},[["render",function(s,r,n,o,c,l){const u=a;return p(),t(u,{class:e(["sc-state",[{"sc-status-processing":n.pulse},"sc-state-bg--"+n.type]])},null,8,["class"])}],["__scopeId","data-v-2fdb61b6"]]);export{r as s};

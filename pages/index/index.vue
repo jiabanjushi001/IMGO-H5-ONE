@@ -23,7 +23,7 @@
 		<view class="cu-bar tabbar bg-white shadow foot home-tabbar">
 			<view class="action" @click="NavChange(item)" v-for="(item,index) in navList" :key="index" data-cur="message">
 				<view class='cuIcon-cu-image'>
-					<image :src="'/static/image/tabbar/' + [item.name] + [PageCur==item.name?'-active':''] + '.svg'"></image>
+					<image :src="$asset('static/image/tabbar/' + item.name + (PageCur==item.name?'-active':'') + '.svg')"></image>
 				    <view class="cu-tag badge" v-if="item.notice>0">{{item.notice}}</view>
 				</view>
 				<view :class="PageCur==item.name?'is-active':'text-black'">{{item.title}}</view>
@@ -122,6 +122,10 @@
 				initContactsHandler:null,
 				mineRefreshKey: 0,
 				navList:navList,
+				/** 离开页面前保存的滚动位置，返回后恢复 */
+				savedScrollTop: 0,
+				pendingRestoreScroll: false,
+				pageScrollTop: 0,
 			}
 		},
 		computed: {
@@ -153,7 +157,15 @@
 		beforeUnmount() {
 			this.cleanupSocketListeners()
 		},
+		onPageScroll(e) {
+			this.pageScrollTop = e.scrollTop || 0
+		},
+		onHide() {
+			this.savePageScroll()
+		},
 		onShow() {
+			try { uni.hideLoading(); } catch (e) {}
+			this.pendingRestoreScroll = this.savedScrollTop > 0
 			this.mineRefreshKey++
 			this.initContacts()
 			uni.$emit('systemNoticeRefresh')
@@ -168,6 +180,53 @@
 					uni.$off('initContacts', this.initContactsHandler)
 					this.initContactsHandler = null
 				}
+			},
+			/** 读取当前页面滚动容器位置（H5 桌面端可能是 uni-page-wrapper） */
+			getPageScrollTop() {
+				// #ifdef H5
+				try {
+					const wrapper = document.querySelector('#app uni-page-wrapper') || document.querySelector('uni-page-wrapper');
+					if (wrapper && wrapper.scrollHeight > wrapper.clientHeight + 1) {
+						return wrapper.scrollTop || 0;
+					}
+					return window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0;
+				} catch (e) {
+					return this.pageScrollTop || 0;
+				}
+				// #endif
+				// #ifndef H5
+				return this.pageScrollTop || 0;
+				// #endif
+			},
+			setPageScrollTop(top) {
+				const y = Math.max(0, Number(top) || 0);
+				// #ifdef H5
+				try {
+					const wrapper = document.querySelector('#app uni-page-wrapper') || document.querySelector('uni-page-wrapper');
+					if (wrapper) wrapper.scrollTop = y;
+					window.scrollTo(0, y);
+					if (document.documentElement) document.documentElement.scrollTop = y;
+					if (document.body) document.body.scrollTop = y;
+				} catch (e) {}
+				// #endif
+				// #ifndef H5
+				uni.pageScrollTo({ scrollTop: y, duration: 0 });
+				// #endif
+			},
+			savePageScroll() {
+				this.savedScrollTop = this.getPageScrollTop();
+			},
+			restorePageScroll() {
+				if (!this.pendingRestoreScroll) return;
+				const top = this.savedScrollTop;
+				this.pendingRestoreScroll = false;
+				if (!(top > 0)) return;
+				const apply = () => this.setPageScrollTop(top);
+				this.$nextTick(() => {
+					apply();
+					setTimeout(apply, 50);
+					setTimeout(apply, 180);
+				});
 			},
 			closeModel(){
 				this.modelName=false;
@@ -185,7 +244,10 @@
 			initContacts(){
 				this.modelName='';
 				this.$api.msgApi.initContacts().then(res => {
-					if (res.code !== 0 || !Array.isArray(res.data)) return;
+					if (res.code !== 0 || !Array.isArray(res.data)) {
+						this.restorePageScroll();
+						return;
+					}
 					// 设置消息未读数和系统消息未读数
 					msgStore.sysUnread=res.count;
 					const avatarVersion = Date.now();
@@ -194,6 +256,9 @@
 						return { ...item, avatar: `${item.avatar.split('?')[0]}?v=${avatarVersion}` };
 					});
 					msgStore.initContacts(contacts);
+					this.restorePageScroll();
+				}).catch(() => {
+					this.restorePageScroll();
 				})
 			},
 			addGroup(){
@@ -217,4 +282,38 @@
 </script>
 
 <style>
+/* 首页顶栏高度；占位与固定栏同步；标题/图标垂直居中 */
+.home-header :deep(.cu-custom),
+.home-page .home-header .cu-custom {
+	height: 44px !important;
+}
+.home-header :deep(.cu-bar),
+.home-page .home-header .cu-bar {
+	height: 44px !important;
+	min-height: 44px !important;
+	padding-top: 0 !important;
+	display: flex;
+	align-items: center;
+}
+.home-header :deep(.content),
+.home-page .home-header .content {
+	top: 0 !important;
+	bottom: 0 !important;
+	height: auto !important;
+	margin: auto;
+	display: flex !important;
+	align-items: center;
+	justify-content: center;
+	font-size: 34rpx;
+	font-weight: 600;
+	line-height: 1.2;
+}
+.home-header :deep(.action),
+.home-header :deep(.right),
+.home-page .home-header .action,
+.home-page .home-header .right {
+	height: 100%;
+	display: flex;
+	align-items: center;
+}
 </style>

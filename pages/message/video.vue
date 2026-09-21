@@ -4,7 +4,7 @@
 		</cu-custom>
 		<view class="video-model im-flex im-align-items-center" >
 			
-			<video class="video-box" id="myVideo"  :src="url"  controls autoplay="autoplay" style="width:100%;height:100vh"></video>
+			<video class="video-box" id="myVideo"  :src="playUrl"  controls autoplay="autoplay" style="width:100%;height:100vh"></video>
 			<view class="opt-model im-flex  im-align-items-center">
 				<button class="cu-btn round mr-10" @tap="download">保存到本地</button>
 				<button class="cu-btn round" @tap="closeModel">关闭</button>
@@ -13,16 +13,24 @@
 </template>
 
 <script>
+	import { resolveMediaDisplayUrl, triggerAuthedDownload, downloadAuthedFile } from '@/utils/avatar.js'
 	export default {
 		data() {
 			return {
 				url:'',
+				playUrl:'',
 				name:''
 			}
 		},
 		onLoad(option){
-			this.url=decodeURI(option.src);
-			this.name=option.name;
+			this.url=decodeURIComponent(option.src || '');
+			this.name=option.name || 'video';
+			this.playUrl = ''
+			resolveMediaDisplayUrl(this.url).then((displayUrl) => {
+				this.playUrl = displayUrl || this.url
+			}).catch(() => {
+				this.playUrl = this.url
+			})
 		},
 		mounted(){
 		},
@@ -31,34 +39,35 @@
 				uni.navigateBack();
 			},
 			download(){
+				uni.showLoading({ title: '保存中' })
 				// #ifndef H5
-				uni.downloadFile({
-					url: this.url, 
-					success: (res) => {
-						if (res.statusCode === 200) {
-							uni.saveVideoToPhotosAlbum({
-								filePath: res.tempFilePath,
-								success: function () {
-									uni.showToast({
-										title:"已保存到相册",
-										icon:'none'
-									})
-								}
-							});
-							
+				downloadAuthedFile(this.url).then(({ tempFilePath }) => {
+					uni.hideLoading()
+					uni.saveVideoToPhotosAlbum({
+						filePath: tempFilePath,
+						success: function () {
+							uni.showToast({
+								title:"已保存到相册",
+								icon:'none'
+							})
+						},
+						fail: () => {
+							uni.showToast({ title: '保存失败', icon: 'none' })
 						}
-					}
-				});
+					});
+				}).catch(() => {
+					uni.hideLoading()
+					uni.showToast({ title: '下载失败', icon: 'none' })
+				})
 				// #endif
 				// #ifdef H5
-				const tempLink = document.createElement("a");
-				tempLink.style.display = "none";
-				tempLink.href = this.url;
-				tempLink.setAttribute("download", this.name);
-				tempLink.setAttribute("target", "_blank");
-				document.body.appendChild(tempLink);
-				tempLink.click();
-				document.body.removeChild(tempLink);
+				triggerAuthedDownload(this.url, this.name).then(() => {
+					uni.hideLoading()
+					uni.showToast({ title: '已开始下载', icon: 'none' })
+				}).catch(() => {
+					uni.hideLoading()
+					uni.showToast({ title: '下载失败', icon: 'none' })
+				})
 				// #endif
 			}
 		}

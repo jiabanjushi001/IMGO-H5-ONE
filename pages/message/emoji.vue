@@ -17,7 +17,7 @@
 					</uni-grid-item>
 					<uni-grid-item v-for="(item, index) in emojiList" :index="index+1" :key="index">
 						<view class="grid-item-box">
-							<image :src="item.src" style="width:100rpx" :fade-show="false" mode="widthFix" lazy-load></image>
+							<AuthImage :src="item.displaySrc || item.src" style="width:100rpx" mode="widthFix"></AuthImage>
 							<view class="emoji-check-box" v-if="isManage" :class="item.isCheck ? 'text-green cuIcon-roundcheckfill' : 'cuIcon-round'"></view>
 						</view>
 					</uni-grid-item>
@@ -49,8 +49,10 @@
 		},
 		methods: {
 			getEmojiList(){
-				this.$api.emojiApi.emojiList({}).then((res)=>{
+				this.$api.emojiApi.emojiList({}).then(async (res)=>{
 					if(res.code==0){
+						const { mapAuthDisplayField } = await import('@/utils/avatar.js')
+						await mapAuthDisplayField(res.data, 'src', 'displaySrc')
 						this.emojiList=res.data;
 					}
 				})

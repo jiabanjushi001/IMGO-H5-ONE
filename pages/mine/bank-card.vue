@@ -1,6 +1,6 @@
 <template>
 	<view class="bank-page">
-		<cu-custom bgColor="bg-gradual-green" :isBack="true" :fallbackToHome="true">
+		<cu-custom bgColor="text-white" bgStyle="background:linear-gradient(126deg,#4c63e9 0%,#5e70f5 55%,#6b6eeb 100%);color:#fff;" :isBack="true" :fallbackToHome="true">
 			<template #backText></template>
 			<template #content>绑定银行卡</template>
 		</cu-custom>
@@ -148,10 +148,21 @@ onShow(load)
 </script>
 
 <style scoped>
-.bank-page { min-height: 100vh; background: #f5f7fa; color: #253245; }
+.bank-page { min-height: 100vh; background: #f4f6fb; color: #253245; }
 .bank-body { width: 100%; max-width: 900rpx; margin: 0 auto; padding: 28rpx; box-sizing: border-box; }
 .bank-heading { display: flex; align-items: center; gap: 22rpx; padding: 24rpx 8rpx 38rpx; }
-.bank-icon { width: 86rpx; height: 86rpx; display: flex; align-items: center; justify-content: center; border-radius: 25rpx; color: #fff; background: linear-gradient(135deg,#42b35b,#19896d); font-size: 44rpx; }
+.bank-icon {
+	width: 86rpx;
+	height: 86rpx;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	border-radius: 25rpx;
+	color: #fff;
+	background: linear-gradient(135deg, #526dff, #6a74e8);
+	box-shadow: 0 10rpx 24rpx rgba(67, 84, 167, .18);
+	font-size: 44rpx;
+}
 .bank-title { font-weight: 700; font-size: 34rpx; }
 .bank-subtitle { margin-top: 10rpx; color: #788397; font-size: 23rpx; }
 .bank-loading { padding: 60rpx; color: #788397; text-align: center; }
@@ -173,8 +184,22 @@ onShow(load)
 .bank-locked { background: #fff; border-radius: 24rpx; padding: 34rpx; box-shadow: 0 10rpx 32rpx rgba(31,51,78,.05); }
 .bank-locked-title { color: #253245; font-size: 29rpx; font-weight: 600; }
 .bank-locked-detail { margin: 18rpx 0 26rpx; color: #718097; font-size: 24rpx; line-height: 1.6; }
-.bank-refresh { background: #f0f8f4; color: #218259; border: 1px solid #d4eadd; font-size: 25rpx; border-radius: 14rpx; }
-.bank-submit { margin-top: 36rpx; border: 0; border-radius: 16rpx; color: white; font-size: 29rpx; background: #2ba673; }
+.bank-refresh {
+	background: #eef1ff;
+	color: #4c63e9;
+	border: 1px solid #d8defe;
+	font-size: 25rpx;
+	border-radius: 14rpx;
+}
+.bank-submit {
+	margin-top: 36rpx;
+	border: 0;
+	border-radius: 16rpx;
+	color: white;
+	font-size: 29rpx;
+	background: linear-gradient(126deg, #4c63e9 0%, #5e70f5 100%);
+	box-shadow: 0 12rpx 28rpx rgba(76, 99, 233, .28);
+}
 .bank-submit[disabled] { opacity: .6; }
 .bank-tips { padding: 0 12rpx; }
 </style>

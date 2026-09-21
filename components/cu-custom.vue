@@ -1,7 +1,7 @@
 <template>
 	<view>
 		<view class="cu-custom" :style="[{height:CustomBar + 'px'}]">
-			<view class="cu-bar fixed" :style="style" :class="[bgImage!=''?'none-bg text-white bg-img':'',bgColor]">
+			<view class="cu-bar fixed" :style="style" :class="[bgImage!=''?'none-bg text-white bg-img':'',bgColor, barClass]">
 				<view class="action" @tap="BackPage" v-if="isBack">
 					<text class="cuIcon-back"></text>
 					<slot name="backText"></slot>
@@ -39,11 +39,23 @@
 				if (this.bgImage) {
 					style = `${style}background-image:url(${bgImage});`;
 				}
+				if (this.bgStyle) {
+					style = `${style}${this.bgStyle}`;
+				}
 				return style
 			}
 		},
 		props: {
 			bgColor: {
+				type: String,
+				default: ''
+			},
+			barClass: {
+				type: String,
+				default: ''
+			},
+			/** 直接写到顶栏的内联样式，如 background:linear-gradient(...) */
+			bgStyle: {
 				type: String,
 				default: ''
 			},
@@ -61,14 +73,20 @@
 			},
 		},
 		methods: {
+			/** 聊天页返回首页。H5 下 navigateBack 常无响应；刷新后能返回是因为栈只剩一页走了 switchTab */
+			backFromChat() {
+				uni.switchTab({
+					url: '/pages/index/index',
+					fail: () => {
+						uni.reLaunch({ url: '/pages/index/index' });
+					}
+				});
+			},
 			BackPage() {
 				const allroutes = getCurrentPages();
 				const currentRoute = allroutes[allroutes.length - 1]?.route;
-				// 如果当前在聊天页面，自动返回到首页，避免层级过深
 				if (currentRoute == 'pages/message/chat') {
-					uni.switchTab({
-						url: '/pages/index/index'
-					});
+					this.backFromChat();
 					return;
 				}
 				if (allroutes.length < 2 && this.fallbackToHome) {
@@ -80,9 +98,28 @@
 					return uni.redirectTo({url})
 				}
 				uni.navigateBack({
-					delta: 1
+					delta: 1,
+					fail: () => {
+						uni.switchTab({ url: '/pages/index/index' });
+					}
 				});
 			}
 		}
 	}
 </script>
+
+<style>
+/* 标题层绝对定位会盖住左右按钮；禁止标题及其子节点抢点击，保证返回可点 */
+.cu-bar > .action,
+.cu-bar > .right {
+	position: relative;
+	z-index: 10;
+	pointer-events: auto;
+}
+.cu-bar > .content {
+	pointer-events: none !important;
+}
+.cu-bar > .content * {
+	pointer-events: none !important;
+}
+</style>

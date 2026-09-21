@@ -10,6 +10,7 @@
 	import { useloginStore } from '@/store/login';
 	import pinia from '@/store/index'
 	import config from "@/common/config";
+	import { assetUrl } from '@/utils/asset-url.js'
 	const userStore = useloginStore(pinia)
 	const {userInfo} = storeToRefs(userStore);
 
@@ -62,7 +63,7 @@
 				stunUser:this.globalConfig.chatInfo.stunUser ?? '',
 				stunPass:this.globalConfig.chatInfo.stunPass ?? '',
 			}));
-			this.html='/hybrid/html/index.html?id='+userInfo.value.user_id+'&status='+option.status+'&calling='+calling+'&name='+option.name+'&target_id='+option.id+'&type='+option.type+'&platform='+platform+'&avatar='+option.avatar+'&stun='+stun;
+			this.html=assetUrl('hybrid/html/index.html')+'?id='+userInfo.value.user_id+'&status='+option.status+'&calling='+calling+'&name='+option.name+'&target_id='+option.id+'&type='+option.type+'&platform='+platform+'&avatar='+encodeURIComponent(option.avatar || '')+'&token='+encodeURIComponent(uni.getStorageSync('authToken') || '')+'&stun='+stun;
 			this.main_id=option.msg_id;
 			this.type= option.type;
 			this.status = option.status

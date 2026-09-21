@@ -19,7 +19,7 @@
 		
 		<view class="im-message-list conversation-list" :style="{ marginTop: noticeBarVisible ? 'calc(100rpx + 38px)' : '100rpx' }">
 			<view class="cu-list menu-avatar" :style="{paddingBottom: paddingB+'px'}" v-if="msgsIn.length>0">
-				<view class="cu-item second" :class="[modalName=='move-box-'+ index?'move-cur':'',item.is_top==1 ? 'top-contacts' : '']" v-for="(item, index) in msgsIn"  :key="index"
+				<view class="cu-item second" :class="[modalName=='move-box-'+ index?'move-cur':'',item.is_top==1 ? 'top-contacts' : '']" v-for="(item, index) in msgsIn"  :key="item.id"
 				 @touchstart="ListTouchStart" @touchmove="ListTouchMove" @touchend="ListTouchEnd" @tap="openChat(item.id)" :data-target="'move-box-' + index">
 					<view class="cu-avatar lg" :class="appSetting.circleAvatar?'round':'radius'" :style="[{backgroundImage:'url('+ item.avatar +')'}]">
 						<view class="online-status"  v-if="item.is_online && item.is_group==0 && globalConfig.chatInfo.online==1"></view>
@@ -140,6 +140,15 @@
 				uni.$off('socketStatus', this.socketStatusHandler)
 				this.socketStatusHandler = null
 			}
+			if (this._reconnectStatusHandler) {
+				uni.$off('socketStatus', this._reconnectStatusHandler)
+				this._reconnectStatusHandler = null
+			}
+			if (this._reconnectLoadingTimer) {
+				clearTimeout(this._reconnectLoadingTimer)
+				this._reconnectLoadingTimer = null
+			}
+			try { uni.hideLoading(); } catch (e) {}
 		},
 		created:function(){
 			let emojiMap=[];
@@ -222,13 +231,32 @@
 				}
 			},
 			reconnect(){
+				if (this._reconnectLoadingTimer) {
+					clearTimeout(this._reconnectLoadingTimer);
+					this._reconnectLoadingTimer = null;
+				}
+				const finishLoading = () => {
+					try { uni.hideLoading(); } catch (e) {}
+					if (this._reconnectStatusHandler) {
+						uni.$off('socketStatus', this._reconnectStatusHandler);
+						this._reconnectStatusHandler = null;
+					}
+					if (this._reconnectLoadingTimer) {
+						clearTimeout(this._reconnectLoadingTimer);
+						this._reconnectLoadingTimer = null;
+					}
+				};
 				uni.showLoading({
-					title:'重连中...'
-				})
+					title: '重连中...',
+					mask: true
+				});
+				// 连上即关遮罩；超时兜底，避免遮罩残留挡住后续聊天输入
+				this._reconnectStatusHandler = (ok) => {
+					if (ok) finishLoading();
+				};
+				uni.$on('socketStatus', this._reconnectStatusHandler);
 				this.socketIo.connectSocketInit({type:'ping'});
-				setTimeout(()=>{
-					uni.hideLoading()
-				},1500)
+				this._reconnectLoadingTimer = setTimeout(finishLoading, 2500);
 			},
 			// 自动解析消息中的表情
 			emojiToHtml(str){
@@ -269,6 +297,13 @@
 			openChat(id){
 				// 如果左滑工具栏在开启的情况下不能够点击进入聊天
 				if(this.chatStatus){
+					// 进入聊天前先记下列表滚动，返回时可恢复
+					const parent = this.$parent;
+					if (parent && typeof parent.savePageScroll === 'function') {
+						parent.savePageScroll();
+					}
+					// 避免重连 loading 遮罩残留挡住聊天输入
+					try { uni.hideLoading(); } catch (e) {}
 					uni.navigateTo({
 						url:"/pages/message/chat?id=" + id,
 						animationType:"slide-in-right"

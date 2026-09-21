@@ -60,6 +60,9 @@ class socketIO {
 	// 进入这个页面的时候创建websocket连接【整个页面随时使用】
 	connectSocketInit(data) {
 		if (data !== undefined) this.data = data
+		// 每次连接前刷新地址，避免误用已失效的本地备用站
+		const latestUrl = (api.getWssUrl && api.getWssUrl()) || api.wssUrl
+		if (latestUrl) this.url = latestUrl
 		if (this.socketTask && [2, 3].includes(this.socketTask.readyState)) {
 			this.handleSocketDisconnect(this.socketTask)
 		}
@@ -67,6 +70,14 @@ class socketIO {
 		this.clearReconnectTimer()
 		this.manualClose = false
 		this.isConnecting = true
+		console.info('[IMGO] WebSocket 连接中:', this.url)
+		// #ifdef H5
+		try {
+			if (String(location.protocol || '').startsWith('file') || location.origin === 'null') {
+				console.warn('[IMGO] 当前为 file:// / Origin:null。若服务端校验 Origin，wss 握手可能返回 403；一门离线包需服务端放行该 Origin，或用 http(s) 打开页面。')
+			}
+		} catch (e) {}
+		// #endif
 		let task
 		try {
 			task = uni.connectSocket({
@@ -95,7 +106,7 @@ class socketIO {
 				uni.offNetworkStatusChange(this.CALLBACK);
 			}
 			this.networkStatus=true;
-			console.info("WebSocket连接正常！");
+			console.info("WebSocket连接正常！", this.url);
 			uni.$emit('socketStatus',true);
 			this.send(this.data)
 			this.start();
@@ -112,14 +123,14 @@ class socketIO {
 		if(!this.init){
 			// 全局错误监听只注册一次；断线统一由 handleSocketDisconnect 去重。
 			uni.onSocketError((res) => {
-				console.info(res,'WebSocket连接打开失败，请检查！');
+				console.info(res,'WebSocket连接打开失败，请检查！', this.url);
 				if (this.socketTask) this.handleSocketDisconnect(this.socketTask)
 			});
 			this.init=true;
 		}
 		// 这里仅是事件监听【如果socket关闭了会执行】
-		task.onClose(() => {
-			console.info("已经被关闭了-------")
+		task.onClose((res) => {
+			console.info("已经被关闭了-------", this.url, res || '')
 			this.handleSocketDisconnect(task)
 		})
 		return task

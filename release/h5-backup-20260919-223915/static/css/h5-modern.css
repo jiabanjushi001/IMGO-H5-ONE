@@ -1,0 +1,1067 @@
+:root {
+	--im-primary: #526dff;
+	--im-primary-deep: #4055db;
+	--im-accent: #7c5cff;
+	--im-success: #20b486;
+	--im-danger: #ff5d73;
+	--im-text: #182033;
+	--im-text-soft: #687086;
+	--im-muted: #9aa3b7;
+	--im-line: #e9edf5;
+	--im-surface: rgba(255, 255, 255, 0.92);
+	--im-page: #f4f7fc;
+	--im-shadow: 0 18rpx 48rpx rgba(42, 58, 104, 0.1);
+}
+
+page,
+uni-page-body {
+	background: var(--im-page);
+	color: var(--im-text);
+}
+
+button::after {
+	border: 0;
+}
+
+.vc-switch {
+	display: none !important;
+}
+
+.text-green,
+.c-green,
+.text-blue,
+.c-blue,
+.c-primary {
+	color: var(--im-primary) !important;
+}
+
+.bg-blue,
+.bg-green {
+	background: var(--im-primary) !important;
+	color: #fff !important;
+}
+
+.cu-avatar {
+	background-color: #e8edff;
+	background-size: cover;
+	box-shadow: 0 8rpx 20rpx rgba(44, 58, 105, 0.11);
+}
+
+/* 登录与注册 */
+.auth-page {
+	position: relative;
+	box-sizing: border-box;
+	min-height: 100vh;
+	overflow: hidden;
+	padding: 72rpx 34rpx 40rpx;
+	background:
+		radial-gradient(circle at 12% 8%, rgba(117, 151, 255, 0.24), transparent 33%),
+		radial-gradient(circle at 95% 23%, rgba(152, 108, 255, 0.18), transparent 32%),
+		linear-gradient(160deg, #f8faff 0%, #f1f5ff 48%, #f7f4ff 100%);
+}
+
+.auth-page::before {
+	position: absolute;
+	top: -120rpx;
+	right: -150rpx;
+	width: 420rpx;
+	height: 420rpx;
+	border: 1rpx solid rgba(82, 109, 255, 0.12);
+	border-radius: 50%;
+	content: "";
+}
+
+.auth-orb {
+	position: absolute;
+	border-radius: 50%;
+	filter: blur(2rpx);
+	pointer-events: none;
+}
+
+.auth-orb-one {
+	top: 120rpx;
+	left: -90rpx;
+	width: 180rpx;
+	height: 180rpx;
+	background: rgba(82, 109, 255, 0.12);
+}
+
+.auth-orb-two {
+	right: -50rpx;
+	bottom: 220rpx;
+	width: 130rpx;
+	height: 130rpx;
+	background: rgba(124, 92, 255, 0.12);
+}
+
+.auth-shell {
+	position: relative;
+	z-index: 1;
+	width: 100%;
+	max-width: 680rpx;
+	margin: 0 auto;
+}
+
+.auth-brand {
+	display: flex;
+	align-items: center;
+	flex-direction: column;
+	margin: 16rpx 0 44rpx;
+	text-align: center;
+}
+
+.auth-logo-wrap {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	box-sizing: border-box;
+	width: 148rpx;
+	height: 148rpx;
+	margin-bottom: 24rpx;
+	border: 1rpx solid rgba(255, 255, 255, 0.86);
+	border-radius: 42rpx;
+	background: rgba(255, 255, 255, 0.82);
+	box-shadow: 0 24rpx 60rpx rgba(62, 82, 155, 0.16);
+	backdrop-filter: blur(20rpx);
+}
+
+.auth-brand-name {
+	font-size: 44rpx;
+	font-weight: 700;
+	line-height: 1.3;
+	letter-spacing: 1rpx;
+	color: var(--im-text);
+}
+
+.auth-brand-copy {
+	margin-top: 12rpx;
+	font-size: 25rpx;
+	color: var(--im-text-soft);
+}
+
+.auth-card {
+	box-sizing: border-box;
+	padding: 42rpx 34rpx 36rpx;
+	border: 1rpx solid rgba(255, 255, 255, 0.9);
+	border-radius: 36rpx;
+	background: rgba(255, 255, 255, 0.88);
+	box-shadow: var(--im-shadow);
+	backdrop-filter: blur(30rpx);
+}
+
+.auth-heading {
+	font-size: 38rpx;
+	font-weight: 700;
+	color: var(--im-text);
+}
+
+.auth-caption {
+	margin: 10rpx 0 34rpx;
+	font-size: 25rpx;
+	color: var(--im-muted);
+}
+
+.auth-form {
+	display: block;
+}
+
+.auth-card .auth-field {
+	box-sizing: border-box;
+	min-height: 112rpx;
+	margin-bottom: 20rpx;
+	padding: 14rpx 22rpx;
+	border: 1rpx solid #e5eaf5;
+	border-radius: 24rpx;
+	background: #f8faff;
+	transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.auth-card .auth-field + .auth-field {
+	border-top: 1rpx solid #e5eaf5;
+}
+
+.auth-card .auth-field::after {
+	display: none;
+}
+
+.auth-field:focus-within {
+	border-color: rgba(82, 109, 255, 0.58);
+	background: #fff;
+	box-shadow: 0 0 0 6rpx rgba(82, 109, 255, 0.08);
+}
+
+.auth-field-icon {
+	width: 58rpx;
+	flex: 0 0 58rpx;
+	font-size: 34rpx;
+	color: var(--im-primary);
+}
+
+.auth-field-body {
+	display: flex;
+	min-width: 0;
+	flex: 1;
+	flex-direction: column;
+}
+
+.auth-card .auth-field-body .title {
+	height: auto;
+	padding: 0;
+	font-size: 22rpx;
+	font-weight: 600;
+	line-height: 1.4;
+	color: var(--im-text-soft);
+}
+
+.auth-card .auth-field-body input {
+	box-sizing: border-box;
+	width: 100%;
+	height: 52rpx;
+	padding: 0;
+	font-size: 29rpx;
+	line-height: 52rpx;
+	color: var(--im-text);
+}
+
+.auth-code-btn {
+	min-width: 160rpx;
+	margin: 0;
+	padding: 0 18rpx;
+	border-radius: 18rpx;
+	background: #e9edff;
+	font-size: 23rpx;
+	line-height: 68rpx;
+	color: var(--im-primary);
+}
+
+.auth-options {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 4rpx 2rpx 26rpx;
+	font-size: 25rpx;
+	color: var(--im-text-soft);
+}
+
+.auth-remember {
+	display: flex;
+	align-items: center;
+}
+
+.auth-remember switch {
+	margin-right: 4rpx;
+	transform: scale(0.68);
+}
+
+.auth-link,
+.auth-login-tip text {
+	font-weight: 600;
+	color: var(--im-primary);
+}
+
+.auth-primary-btn,
+.auth-secondary-btn {
+	box-sizing: border-box;
+	width: 100%;
+	height: 94rpx;
+	margin: 0;
+	border-radius: 24rpx;
+	font-size: 30rpx;
+	font-weight: 600;
+	line-height: 94rpx;
+}
+
+.auth-primary-btn {
+	background: linear-gradient(135deg, var(--im-primary) 0%, var(--im-accent) 100%);
+	box-shadow: 0 18rpx 34rpx rgba(82, 109, 255, 0.25);
+	color: #fff;
+}
+
+.auth-secondary-btn {
+	margin-top: 20rpx;
+	border: 1rpx solid #e5eaf5;
+	background: #fff;
+	color: var(--im-text);
+}
+
+.auth-demo {
+	box-sizing: border-box;
+	margin-top: 24rpx;
+	padding: 24rpx 28rpx;
+	border: 1rpx solid rgba(82, 109, 255, 0.12);
+	border-radius: 24rpx;
+	background: rgba(255, 255, 255, 0.72);
+	font-size: 23rpx;
+	line-height: 1.8;
+	color: var(--im-text-soft);
+}
+
+.auth-demo-title {
+	font-weight: 700;
+	color: var(--im-text);
+}
+
+.footer-version {
+	width: 100%;
+	margin-top: 34rpx;
+	text-align: center;
+	font-size: 22rpx;
+	letter-spacing: 0.5rpx;
+	color: var(--im-muted);
+}
+
+.auth-register-page {
+	padding-top: 0;
+	overflow: auto;
+}
+
+.auth-register-page .auth-nav {
+	background: transparent !important;
+	color: var(--im-text) !important;
+}
+
+.auth-register-page .auth-register-nav .cu-bar {
+	background: rgba(248, 250, 255, 0.76) !important;
+	box-shadow: none;
+	backdrop-filter: blur(24rpx);
+}
+
+.auth-register-shell {
+	padding: 18rpx 0 36rpx;
+}
+
+.auth-brand-compact {
+	margin: 0 0 28rpx;
+}
+
+.auth-brand-compact .auth-logo-wrap {
+	width: 126rpx;
+	height: 126rpx;
+	margin-bottom: 18rpx;
+	border-radius: 34rpx;
+}
+
+.auth-register-card {
+	padding-top: 34rpx;
+}
+
+.auth-login-tip {
+	margin-top: 28rpx;
+	text-align: center;
+	font-size: 25rpx;
+	color: var(--im-text-soft);
+}
+
+/* H5 主框架 */
+.home-page {
+	min-height: 100vh;
+	background: var(--im-page);
+}
+
+.home-page .home-header .cu-bar {
+	border-bottom: 1rpx solid rgba(224, 229, 241, 0.76);
+	background: rgba(255, 255, 255, 0.9) !important;
+	box-shadow: 0 8rpx 28rpx rgba(50, 63, 102, 0.05);
+	backdrop-filter: blur(24rpx);
+}
+
+.home-page .home-header .cu-bar .content {
+	font-size: 34rpx;
+	font-weight: 700;
+	letter-spacing: 1rpx;
+	color: var(--im-text);
+}
+
+.home-page .home-header .cuIcon-search,
+.home-page .home-header .cuIcon-add {
+	color: var(--im-text);
+}
+
+.home-content {
+	min-height: calc(100vh - 100rpx);
+}
+
+.home-tabbar {
+	left: 20rpx;
+	right: 20rpx;
+	bottom: calc(16rpx + env(safe-area-inset-bottom));
+	box-sizing: border-box;
+	width: auto !important;
+	height: 112rpx !important;
+	padding: 10rpx 12rpx !important;
+	border: 1rpx solid rgba(255, 255, 255, 0.85);
+	border-radius: 30rpx;
+	background: rgba(255, 255, 255, 0.92) !important;
+	box-shadow: 0 22rpx 54rpx rgba(31, 43, 78, 0.16) !important;
+	backdrop-filter: blur(28rpx);
+}
+
+.home-tabbar .action {
+	display: flex !important;
+	height: 92rpx !important;
+	align-items: center;
+	justify-content: center;
+	flex-direction: column;
+	border-radius: 24rpx;
+	font-size: 21rpx !important;
+	color: var(--im-muted);
+}
+
+.home-tabbar .action:has(.is-active) {
+	background: #eef1ff !important;
+}
+
+.home-tabbar .action .cuIcon-cu-image {
+	height: 46rpx;
+	margin: 0 auto 5rpx !important;
+}
+
+.home-tabbar .action .cuIcon-cu-image image {
+	width: 44rpx;
+	height: 44rpx;
+}
+
+.home-tabbar .is-active {
+	font-weight: 700;
+	color: var(--im-primary);
+}
+
+.home-tabbar .cu-tag.badge {
+	top: -10rpx;
+	right: 28rpx;
+	border: 3rpx solid #fff;
+	background: var(--im-danger);
+}
+
+/* PC 浏览器仍显示手机画布；根容器的 transform 让页面内 fixed 元素相对画布定位。 */
+@media (min-width: 768px) and (pointer: fine) {
+	html,
+	body {
+		background: #e9edf7;
+	}
+
+	#app {
+		position: fixed;
+		top: 50%;
+		left: 50%;
+		box-sizing: border-box;
+		width: 430px;
+		height: min(932px, calc(100dvh - 32px));
+		transform: translate(-50%, -50%);
+		overflow: hidden;
+		border: 1px solid #dfe4f0;
+		border-radius: 20px;
+		background: var(--im-page);
+		box-shadow: 0 24px 80px rgba(35, 48, 83, 0.16);
+	}
+
+	#app uni-app,
+	#app uni-page,
+	#app uni-page-wrapper {
+		width: 100%;
+		height: 100%;
+		min-height: 0;
+	}
+
+	#app uni-page-wrapper {
+		overflow-x: hidden;
+		overflow-y: auto;
+		overscroll-behavior: contain;
+	}
+
+	#app uni-page-body {
+		min-height: 100%;
+	}
+
+	#app .home-page {
+		min-height: 100%;
+	}
+
+	/* 聊天页不能再用桌面窗口宽度换算 rpx 高度。 */
+	#app .chat-page .chat-scroll {
+		top: 45px;
+		height: auto !important;
+	}
+
+	#app .chat-page .system-notice-bar + .chat-scroll {
+		top: 90px;
+	}
+}
+
+/* 消息列表 */
+.message-page {
+	min-height: 100%;
+	background: var(--im-page);
+}
+
+.message-page .message-filter-bar {
+	left: 20rpx;
+	right: 20rpx;
+	box-sizing: border-box;
+	width: auto;
+	height: 92rpx;
+	min-height: 92rpx;
+	margin-top: 14rpx;
+	padding: 10rpx 14rpx !important;
+	border: 1rpx solid rgba(255, 255, 255, 0.9);
+	border-radius: 26rpx;
+	background: rgba(255, 255, 255, 0.94) !important;
+	box-shadow: 0 12rpx 32rpx rgba(34, 49, 94, 0.08);
+}
+
+.message-page .tab-main {
+	background: #f0f3f9 !important;
+}
+
+.message-page .tab-main .tab-item.active {
+	font-weight: 700;
+	color: var(--im-primary) !important;
+}
+
+.lz-empty-box {
+	margin: 100rpx auto 40rpx !important;
+	color: var(--im-muted);
+}
+
+.lz-empty-box .empty-img {
+	width: 280rpx;
+	height: 230rpx;
+	margin-top: 0 !important;
+	opacity: 0.72;
+	filter: drop-shadow(0 18rpx 30rpx rgba(48, 61, 102, 0.08));
+}
+
+.lz-empty-box .text-center {
+	font-size: 25rpx;
+	color: var(--im-muted);
+}
+
+.conversation-list {
+	box-sizing: border-box;
+	padding: 24rpx 20rpx 180rpx;
+}
+
+.conversation-list .cu-list.menu-avatar {
+	border: 1rpx solid rgba(231, 235, 244, 0.9);
+	border-radius: 30rpx;
+	background: #fff;
+	box-shadow: 0 12rpx 36rpx rgba(44, 57, 98, 0.07);
+}
+
+.conversation-list .cu-list.menu-avatar > .cu-item {
+	height: 148rpx;
+	padding-right: 28rpx;
+	background: #fff;
+}
+
+.conversation-list .cu-list.menu-avatar > .cu-item:first-child {
+	border-radius: 30rpx 30rpx 0 0;
+}
+
+.conversation-list .cu-list.menu-avatar > .cu-item:last-child {
+	border-radius: 0 0 30rpx 30rpx;
+}
+
+.conversation-list .cu-list.menu-avatar > .cu-item:only-child {
+	border-radius: 30rpx;
+}
+
+.conversation-list .cu-list.menu-avatar > .cu-item::after {
+	left: 142rpx;
+	width: calc(200% - 284rpx);
+	border-bottom-color: var(--im-line);
+}
+
+.conversation-list .cu-list.menu-avatar > .cu-item.top-contacts {
+	background: #f5f7ff !important;
+}
+
+.conversation-list .cu-avatar {
+	left: 24rpx !important;
+	width: 92rpx;
+	height: 92rpx;
+	border: 4rpx solid #fff;
+	border-radius: 26rpx;
+}
+
+.conversation-list .content {
+	left: 140rpx !important;
+	width: calc(100% - 140rpx - 150rpx) !important;
+}
+
+.conversation-list .content .f-16 {
+	font-size: 30rpx;
+	font-weight: 650;
+	color: var(--im-text) !important;
+}
+
+.conversation-list .content .f-12,
+.conversation-list .content .text-gray {
+	color: var(--im-muted) !important;
+}
+
+.conversation-list .action .text-grey {
+	font-size: 21rpx;
+	color: var(--im-muted);
+}
+
+.conversation-list .cu-tag.round {
+	min-width: 34rpx;
+	height: 34rpx;
+	border: 0;
+	line-height: 34rpx;
+}
+
+.message-page .socket-status {
+	border: 1rpx solid #ffd8dc;
+	background: #fff2f3;
+}
+
+/* 通讯录 */
+.contacts-page {
+	min-height: 100%;
+	background: var(--im-page);
+}
+
+.contacts-page .indexes {
+	box-sizing: border-box;
+	padding: 2rpx 20rpx 170rpx;
+}
+
+.contacts-page .contacts-shortcuts,
+.contacts-page .contacts-group {
+	margin: 20rpx 0 0;
+	border: 1rpx solid rgba(231, 235, 244, 0.9);
+	border-radius: 28rpx;
+	background: #fff;
+	box-shadow: 0 10rpx 30rpx rgba(44, 57, 98, 0.06);
+}
+
+.contacts-page .cu-list.menu > .cu-item {
+	min-height: 112rpx;
+	padding: 0 28rpx;
+}
+
+.contacts-page .cu-list.menu > .cu-item::after {
+	left: 112rpx;
+	width: calc(200% - 224rpx);
+	border-bottom-color: var(--im-line);
+}
+
+.contacts-page .cu-list.menu > .cu-item.arrow::before {
+	right: 24rpx;
+	font-size: 28rpx;
+	color: #b7bfd0;
+}
+
+.contacts-page .padding {
+	padding: 32rpx 18rpx 10rpx;
+	font-size: 23rpx;
+	font-weight: 700;
+	color: var(--im-muted);
+}
+
+.contacts-page .cu-avatar {
+	width: 82rpx;
+	height: 82rpx;
+	border-radius: 22rpx;
+}
+
+.contacts-page .indexBar {
+	right: 4rpx;
+}
+
+.contacts-page .indexBar .indexBar-box {
+	padding: 8rpx 2rpx;
+	border: 1rpx solid rgba(229, 234, 245, 0.9);
+	border-radius: 22rpx;
+	background: rgba(255, 255, 255, 0.9);
+	box-shadow: 0 10rpx 28rpx rgba(44, 57, 98, 0.1);
+	backdrop-filter: blur(20rpx);
+}
+
+.contacts-page .indexBar-item {
+	font-weight: 600;
+	color: var(--im-primary);
+}
+
+/* 我的 */
+.mine-page {
+	box-sizing: border-box;
+	min-height: calc(100vh - 100rpx);
+	padding: 24rpx 20rpx 180rpx;
+	background:
+		radial-gradient(circle at 92% 2%, rgba(124, 92, 255, 0.13), transparent 28%),
+		var(--im-page);
+}
+
+.mine-page .profile-card {
+	position: relative;
+	overflow: hidden;
+	box-sizing: border-box;
+	min-height: 190rpx;
+	margin-bottom: 24rpx;
+	padding: 32rpx;
+	border: 1rpx solid rgba(255, 255, 255, 0.84);
+	border-radius: 34rpx;
+	background: linear-gradient(135deg, #566fff 0%, #785bea 100%) !important;
+	box-shadow: 0 22rpx 52rpx rgba(75, 84, 185, 0.22);
+}
+
+.mine-page .profile-card::after {
+	position: absolute;
+	top: -80rpx;
+	right: -70rpx;
+	width: 250rpx;
+	height: 250rpx;
+	border: 34rpx solid rgba(255, 255, 255, 0.08);
+	border-radius: 50%;
+	content: "";
+}
+
+.mine-page .profile-card .bg-white {
+	background: transparent !important;
+}
+
+.mine-page .profile-card .cu-avatar {
+	width: 116rpx;
+	height: 116rpx;
+	border: 6rpx solid rgba(255, 255, 255, 0.72);
+	border-radius: 32rpx;
+	box-shadow: 0 16rpx 34rpx rgba(30, 37, 102, 0.24);
+}
+
+.mine-page .profile-card .c-333,
+.mine-page .profile-card .text-gray,
+.mine-page .profile-card > .cuIcon-qrcode {
+	color: #fff !important;
+}
+
+.mine-page .profile-card .text-gray {
+	opacity: 0.72;
+}
+
+.mine-page .profile-card .cu-tag {
+	border: 1rpx solid rgba(255, 255, 255, 0.24);
+	background: rgba(255, 255, 255, 0.16) !important;
+	color: #fff !important;
+}
+
+.mine-page .settings-card {
+	border: 1rpx solid rgba(231, 235, 244, 0.9);
+	border-radius: 30rpx;
+	background: #fff;
+	box-shadow: 0 12rpx 36rpx rgba(44, 57, 98, 0.07);
+}
+
+.mine-page .settings-card > .cu-item {
+	min-height: 112rpx;
+	padding: 0 30rpx;
+}
+
+.mine-page .settings-card > .cu-item::after {
+	left: 86rpx;
+	width: calc(200% - 172rpx);
+	border-bottom-color: var(--im-line);
+}
+
+.mine-page .settings-card .content > text[class*="cuIcon"] {
+	width: 62rpx;
+	font-size: 36rpx;
+	color: var(--im-primary) !important;
+}
+
+.mine-page .settings-card .cuIcon-right {
+	color: #bec5d3 !important;
+}
+
+/* 聊天页 */
+.chat-page,
+.chat-page .chat-scroll {
+	background: #eef2f8;
+}
+
+.chat-page .chat-header .cu-bar {
+	border-bottom: 1rpx solid rgba(222, 228, 240, 0.86);
+	background: rgba(255, 255, 255, 0.9) !important;
+	box-shadow: 0 8rpx 26rpx rgba(35, 49, 88, 0.06);
+	backdrop-filter: blur(24rpx);
+}
+
+.chat-page .chat-header .content {
+	font-weight: 700;
+	color: var(--im-text);
+}
+
+.chat-page .cu-chat {
+	box-sizing: border-box;
+	padding: 20rpx 4rpx 24rpx;
+}
+
+.chat-page .cu-chat .cu-item {
+	padding-top: 16rpx;
+	padding-bottom: 26rpx;
+}
+
+.chat-page .cu-chat .cu-item > .cu-avatar {
+	width: 76rpx;
+	height: 76rpx;
+	border: 3rpx solid rgba(255, 255, 255, 0.9);
+	border-radius: 22rpx;
+}
+
+.chat-page .cu-chat .cu-item > .main {
+	margin: 0 24rpx;
+}
+
+.chat-page .cu-chat .cu-item > .main .content {
+	min-height: 70rpx;
+	padding: 18rpx 22rpx;
+	border-radius: 22rpx;
+	box-shadow: 0 8rpx 22rpx rgba(38, 52, 90, 0.08) !important;
+}
+
+.chat-page .cu-chat .cu-item > .main .content::before,
+.chat-page .cu-chat .cu-item > .main .content::after {
+	display: none;
+}
+
+.chat-page .cu-chat .cu-item > .main .content:not([class*="bg-"]) {
+	background: #fff;
+	color: var(--im-text);
+}
+
+.chat-page .cu-chat .cu-item > .main .content.bg-light-green {
+	background: linear-gradient(135deg, #6079ff 0%, #5268ec 100%);
+	color: #fff;
+}
+
+.chat-page .cu-chat .cu-info {
+	padding: 8rpx 16rpx;
+	border-radius: 16rpx;
+	background: rgba(115, 126, 150, 0.12);
+	color: var(--im-text-soft);
+}
+
+.chat-page .message-quote {
+	border-left: 5rpx solid rgba(82, 109, 255, 0.5);
+	background: rgba(122, 134, 166, 0.12) !important;
+	color: var(--im-text-soft);
+}
+
+.chat-page .im-footer {
+	box-sizing: border-box;
+	overflow: visible;
+	padding: 10rpx 8rpx 8rpx !important;
+	border-top: 1rpx solid rgba(222, 228, 240, 0.88);
+	background: rgba(250, 252, 255, 0.98) !important;
+	box-shadow: 0 -12rpx 34rpx rgba(38, 51, 88, 0.08) !important;
+	-webkit-backdrop-filter: none;
+	backdrop-filter: none;
+}
+
+.chat-page .im-footer .im-input,
+.chat-page .im-footer .toolBox .recorder {
+	border: 1rpx solid #e1e6f1;
+	border-radius: 20rpx !important;
+	background: #fff !important;
+	box-shadow: none !important;
+}
+
+.chat-page .im-footer .im-menus {
+	color: #59647a;
+}
+
+.chat-page .im-footer .cu-btn.bg-green {
+	border-radius: 18rpx;
+	background: var(--im-primary) !important;
+	box-shadow: 0 8rpx 20rpx rgba(82, 109, 255, 0.2) !important;
+}
+
+.chat-page .im-app-box,
+.chat-page .im-emoji-box {
+	border-radius: 30rpx 30rpx 0 0;
+	background: #f4f7fc !important;
+}
+
+.chat-page .im-app-item-icon {
+	border: 1rpx solid #e6eaf3;
+	box-shadow: 0 8rpx 20rpx rgba(44, 57, 98, 0.07);
+	color: var(--im-primary);
+}
+
+.cu-modal.bottom-modal .cu-dialog {
+	overflow: hidden;
+	border-radius: 34rpx 34rpx 0 0;
+}
+
+@media (min-width: 720px) {
+	.auth-shell {
+		max-width: 560px;
+	}
+}
+
+/* 已发布 H5 包的兼容外观；重新编译后由上面的语义类接管。 */
+uni-page[data-page="pages/login/index"] uni-page-body,
+uni-page[data-page="pages/login/register"] uni-page-body {
+	min-height: 100vh;
+	background:
+		radial-gradient(circle at 12% 8%, rgba(117, 151, 255, 0.24), transparent 33%),
+		radial-gradient(circle at 95% 23%, rgba(152, 108, 255, 0.18), transparent 32%),
+		linear-gradient(160deg, #f8faff 0%, #f1f5ff 48%, #f7f4ff 100%);
+}
+
+uni-page[data-page="pages/login/index"] uni-page-body > uni-view,
+uni-page[data-page="pages/login/register"] uni-page-body > uni-view {
+	box-sizing: border-box;
+	min-height: 100vh;
+	padding: 42rpx 34rpx 36rpx;
+}
+
+uni-page[data-page="pages/login/index"] uni-page-body > uni-view > uni-view:first-child {
+	height: 30rpx !important;
+}
+
+uni-page[data-page="pages/login/register"] .cu-custom + uni-view {
+	height: 12rpx !important;
+}
+
+uni-page[data-page="pages/login/index"] .padding.im-flex,
+uni-page[data-page="pages/login/register"] .padding.im-flex {
+	padding: 0;
+	margin: 0 0 22rpx;
+}
+
+uni-page[data-page="pages/login/index"] .login-logo,
+uni-page[data-page="pages/login/register"] .login-logo {
+	box-sizing: border-box;
+	width: 132rpx;
+	height: 132rpx;
+	padding: 10rpx;
+	border: 1rpx solid rgba(255, 255, 255, 0.88);
+	border-radius: 38rpx;
+	background: rgba(255, 255, 255, 0.86) url("../image/rocket.png") center / 76% auto no-repeat;
+	box-shadow: 0 24rpx 60rpx rgba(62, 82, 155, 0.16);
+}
+
+uni-page[data-page="pages/login/index"] .padding.im-flex + uni-view,
+uni-page[data-page="pages/login/register"] .padding.im-flex + uni-view {
+	margin-bottom: 34rpx;
+	font-size: 38rpx;
+	font-weight: 700;
+	color: var(--im-text);
+}
+
+uni-page[data-page="pages/login/index"] uni-form,
+uni-page[data-page="pages/login/register"] uni-form {
+	display: block;
+	box-sizing: border-box;
+	padding: 28rpx 28rpx 8rpx;
+	border: 1rpx solid rgba(255, 255, 255, 0.92);
+	border-radius: 32rpx 32rpx 0 0;
+	background: rgba(255, 255, 255, 0.9);
+	box-shadow: 0 18rpx 48rpx rgba(42, 58, 104, 0.1);
+	backdrop-filter: blur(28rpx);
+}
+
+uni-page[data-page="pages/login/index"] uni-form .cu-form-group,
+uni-page[data-page="pages/login/register"] uni-form .cu-form-group {
+	box-sizing: border-box;
+	min-height: 104rpx;
+	margin: 0 0 18rpx !important;
+	padding: 12rpx 22rpx;
+	border: 1rpx solid #e5eaf5 !important;
+	border-radius: 22rpx;
+	background: #f8faff;
+}
+
+uni-page[data-page="pages/login/index"] uni-form .cu-form-group:focus-within,
+uni-page[data-page="pages/login/register"] uni-form .cu-form-group:focus-within {
+	border-color: rgba(82, 109, 255, 0.58) !important;
+	background: #fff;
+	box-shadow: 0 0 0 6rpx rgba(82, 109, 255, 0.08);
+}
+
+uni-page[data-page="pages/login/index"] uni-form .cu-form-group .title,
+uni-page[data-page="pages/login/register"] uni-form .cu-form-group .title {
+	min-width: 116rpx;
+	padding-right: 18rpx;
+	font-size: 25rpx;
+	font-weight: 600;
+	color: var(--im-text-soft);
+}
+
+uni-page[data-page="pages/login/index"] uni-form .cu-form-group input,
+uni-page[data-page="pages/login/register"] uni-form .cu-form-group input {
+	font-size: 28rpx;
+	color: var(--im-text);
+}
+
+uni-page[data-page="pages/login/index"] .forget {
+	box-sizing: border-box;
+	margin: 0;
+	padding: 18rpx 30rpx 28rpx;
+	border-radius: 0 0 32rpx 32rpx;
+	background: rgba(255, 255, 255, 0.9);
+	box-shadow: 0 18rpx 48rpx rgba(42, 58, 104, 0.1);
+	font-size: 25rpx;
+	color: var(--im-text-soft);
+}
+
+uni-page[data-page="pages/login/index"] .im-login-btn,
+uni-page[data-page="pages/login/index"] .im-reg-btn,
+uni-page[data-page="pages/login/register"] .im-login-btn {
+	padding: 0;
+}
+
+uni-page[data-page="pages/login/index"] .im-login-btn {
+	margin-top: 28rpx;
+}
+
+uni-page[data-page="pages/login/index"] .im-reg-btn {
+	margin-top: 18rpx;
+}
+
+uni-page[data-page="pages/login/register"] .im-login-btn {
+	margin-top: 24rpx;
+}
+
+uni-page[data-page="pages/login/index"] .im-login-btn .cu-btn,
+uni-page[data-page="pages/login/register"] .im-login-btn .cu-btn,
+uni-page[data-page="pages/login/index"] .im-reg-btn .cu-btn {
+	height: 92rpx;
+	border-radius: 23rpx;
+	font-size: 29rpx;
+	font-weight: 650;
+	line-height: 92rpx;
+}
+
+uni-page[data-page="pages/login/index"] .im-login-btn .cu-btn,
+uni-page[data-page="pages/login/register"] .im-login-btn .cu-btn {
+	background: linear-gradient(135deg, var(--im-primary) 0%, var(--im-accent) 100%) !important;
+	box-shadow: 0 18rpx 34rpx rgba(82, 109, 255, 0.25);
+}
+
+uni-page[data-page="pages/login/index"] .im-reg-btn .cu-btn {
+	border: 1rpx solid #e3e8f2;
+	background: rgba(255, 255, 255, 0.88) !important;
+	color: var(--im-text);
+}
+
+uni-page[data-page="pages/login/index"] .footer-version,
+uni-page[data-page="pages/login/register"] .footer-version {
+	position: static;
+	margin-top: 38rpx;
+	font-size: 21rpx;
+	color: var(--im-muted) !important;
+}
+
+uni-page[data-page="pages/login/register"] .cu-custom {
+	margin: -42rpx -34rpx 10rpx;
+}
+
+uni-page[data-page="pages/login/register"] .cu-custom .cu-bar {
+	background: rgba(248, 250, 255, 0.82) !important;
+	color: var(--im-text) !important;
+	backdrop-filter: blur(24rpx);
+}

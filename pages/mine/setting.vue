@@ -1,6 +1,6 @@
 <template>
-	<view>
-		<cu-custom bgColor="bg-gradual-green" :isBack="true">
+	<view class="setting-page">
+		<cu-custom bgColor="text-white" bgStyle="background:linear-gradient(126deg,#4c63e9 0%,#5e70f5 55%,#6b6eeb 100%);color:#fff;" :isBack="true">
 			<template #backText></template>
 			<template #content>通用设置</template>
 		</cu-custom>
@@ -15,7 +15,7 @@
 					<text>声音</text>
 				</view>
 				<view class="action">
-					<switch class="switch" @change="setVoice" :class="setting.voiceStatus?'checked':''" :checked="setting.voiceStatus"></switch>
+					<switch class="switch theme-switch" @change="setVoice" :class="setting.voiceStatus?'checked':''" :checked="setting.voiceStatus" color="#4c63e9"></switch>
 				</view>
 			</view>
 			<view class="cu-item">
@@ -23,7 +23,7 @@
 					<text>震动</text>
 				</view>
 				<view class="action">
-					<switch class="switch" @change="setVibrate" :class="setting.vibrateStatus?'checked':''" :checked="setting.vibrateStatus"></switch>
+					<switch class="switch theme-switch" @change="setVibrate" :class="setting.vibrateStatus?'checked':''" :checked="setting.vibrateStatus" color="#4c63e9"></switch>
 				</view>
 			</view>
 		</view>
@@ -38,7 +38,7 @@
 					<text>圆形头像</text>
 				</view>
 				<view class="action">
-					<switch class="switch" @change="setAvatar" :class="setting.circleAvatar?'checked':''" :checked="setting.circleAvatar"></switch>
+					<switch class="switch theme-switch" @change="setAvatar" :class="setting.circleAvatar?'checked':''" :checked="setting.circleAvatar" color="#4c63e9"></switch>
 				</view>
 			</view>
 		</view>
@@ -88,5 +88,29 @@
 </script>
 
 <style>
-
+.setting-page {
+	min-height: 100vh;
+	background: #f4f6fb;
+}
+.mine-theme-header .cu-bar {
+	background: linear-gradient(126deg, #4c63e9 0%, #5e70f5 55%, #6b6eeb 100%) !important;
+	color: #fff;
+}
+.mine-theme-header .action,
+.mine-theme-header .content,
+.mine-theme-header .cuIcon-back,
+.mine-theme-header .cu-custom .action,
+.mine-theme-header .cu-custom .content {
+	color: #fff !important;
+}
+switch.theme-switch.checked .uni-switch-input,
+switch.theme-switch[checked] .uni-switch-input,
+switch.theme-switch.checked .wx-switch-input,
+switch.theme-switch[checked] .wx-switch-input,
+.theme-switch.checked .uni-switch-input,
+.theme-switch[checked] .uni-switch-input {
+	background-color: #4c63e9 !important;
+	border-color: #4c63e9 !important;
+	color: #ffffff !important;
+}
 </style>

@@ -44,11 +44,11 @@
 								<!-- 图片消息 -->
 								<template v-else-if="item.type=='image'">
 									<template v-if='item.extends && item.extends.fixMode'>
-										<image v-if="item.extends.fixMode<=2" :src="item.content" class="radius" :mode="item.extends.fixMode==1 ? 'widthFix' : 'heightFix' "  :style="item.extends.fixMode==1 ? 'width:200px' : ''" @tap="showImgs"  :data-img="item.content" ></image>
-										<image v-if="item.extends.fixMode==3" :src="item.content" class="radius" mode="scaleToFill"  :style="[{width:item.extends.width+'px',height:item.extends.height+'px'}]" @tap="showImgs"  :data-img="item.content" ></image>
+										<image v-if="item.extends.fixMode<=2" :src="mediaSrc(item.content)" class="radius" :mode="item.extends.fixMode==1 ? 'widthFix' : 'heightFix' "  :style="item.extends.fixMode==1 ? 'width:200px' : ''" @tap="showImgs"  :data-img="item.content" ></image>
+										<image v-if="item.extends.fixMode==3"  :src="mediaSrc(item.content)" class="radius" mode="scaleToFill"  :style="[{width:item.extends.width+'px',height:item.extends.height+'px'}]" @tap="showImgs"  :data-img="item.content" ></image>
 									</template>
 									<template v-else>
-										<image :src="item.content" class="radius" mode="heightFix" @tap="showImgs"  :data-img="item.content" ></image>
+										<image :src="mediaSrc(item.content)" class="radius" mode="heightFix" @tap="showImgs"  :data-img="item.content" ></image>
 									</template>
 								</template>
 								
@@ -66,13 +66,13 @@
 										<view class="relative-shadow">
 											<view class="cuIcon-video icon-center f-28 c-white"></view>
 										</view>
-										<image v-if="item.extends" :src="item.extends.poster" class="" mode="heightFix"></image>
+										<image v-if="item.extends" :src="mediaSrc(item.extends.poster)" class="" mode="heightFix"></image>
 									</view>
 								</view>
 								<!-- 文件消息 -->
 								<view v-else-if="item.type=='file'">
 									<view class="file-card bg-white radius-10 im-flex im-justify-content-start pd-10 im-align-items-center"  @tap.stop="previewFile(item)">
-										<image :src="item.extUrl" style="width:64rpx;height:80rpx"></image>
+										<AuthImage :src="item.extUrl" mode="aspectFit" style="width:64rpx;height:80rpx"></AuthImage>
 										<view class="im-flex im-columns ml-10">
 											<view class="text-overflow file-name">{{item.fileName}}</view>
 											<view class="text-gray file-size f-12">{{fileSize(item.fileSize)}}</view>
@@ -96,7 +96,8 @@
 								<!-- 名片消息 -->
 								<view v-else-if="item.type=='contact'" @tap="openContact(item.extends)" class="im-contact-msg radius-8 pt-10 pr-10 pl-10 pb-5">
 									<view class="im-flex im-rows im-nowrap im-align-items-center">
-										<view class='cu-avatar mr-10 radius'  :style="[{backgroundImage:'url('+item.extends.avatar+')'}]">
+										<view class='cu-avatar mr-10 radius'>
+											<AuthImage v-if="item.extends && item.extends.avatar" :src="item.extends.avatar" :info="item.extends" avatar mode="aspectFill" style="width:100%;height:100%;" />
 										</view>
 										<view class="c-333">{{item.extends.displayName}}</view>
 									</view>
@@ -107,7 +108,7 @@
 								</view>
 								<!-- 动态表情消息 -->
 								<template v-else-if="item.type=='emoji'">
-									<image :src="item.content" class="radius" mode="aspectFit" @tap="showImgs"  :data-img="item.content" style="width:300rpx;height:300rpx"></image>
+									<image :src="mediaSrc(item.content)" class="radius" mode="aspectFit" @tap="showImgs"  :data-img="item.content" style="width:300rpx;height:300rpx"></image>
 								</template>
 								<!-- 其他消息 -->
 								<imItem v-else :item="item" :index="index" :isSelf="true"></imItem>
@@ -252,6 +253,7 @@
 	import SystemNoticeBar from '@/components/message/SystemNoticeBar.vue';
 	import GroupNoticeBar from '@/components/message/GroupNoticeBar.vue';
 	import emoji from '@/utils/emoji.js'
+	import { normalizeMediaUrl, ensureAuthedDisplayUrl, resolveMediaDisplayUrl, needsAuthMediaUrl } from '@/utils/avatar.js'
 	import { chat } from '@/mixins/chat.js'
 	import { useloginStore } from '@/store/login';
 	import { useMsgStore } from '@/store/message';
@@ -322,6 +324,7 @@
 				isProfile:false,
 				islongPress:false,
 				listTouchStart:0,
+				mediaUrlMap:{},
 				groupInfo:{
 					groupUserCount:0
 				},
@@ -365,6 +368,12 @@
 		watch:{
 			noticeBarVisible(){
 				this.$nextTick(() => this.measureChatLayout());
+			},
+			messageList: {
+				deep: true,
+				handler(list){
+					this.prefetchListMedia(list)
+				}
 			},
 			newMessage(val){
 				if(val.toContactId==this.contact.id && val.fromUser.id!=this.user.user_id){
@@ -595,20 +604,28 @@
 		beforeUnmount(){
 			this.cleanupChatListeners()
 		},
-		// 所有聊天页面都返回首页，避免层级过深
+		// 聊天返回统一 switchTab（H5 的 navigateBack 常点了无反应）；列表滚动由首页 onShow 恢复
 		onBackPress(options) {
 			this.InputBottom=0;
 			uni.switchTab({
-				url: '/pages/index/index'
+				url: '/pages/index/index',
+				fail: () => {
+					uni.reLaunch({ url: '/pages/index/index' });
+				}
 			})
 			return true;
 		},
 		onShow(){
+			// 兜底关掉可能残留的重连 loading，避免挡住输入框
+			try { uni.hideLoading(); } catch (e) {}
 			// 检测ws是否还在线
 			this.socketIo.send({type:'ping'});
 			if (this.is_group == 1 && this.contact_id) this.getGroupInfo();
 			// #ifdef H5
-			this.$nextTick(() => this.syncChatViewport());
+			this.$nextTick(() => {
+				this.syncChatViewport();
+				this.measureChatLayout();
+			});
 			// #endif
 		},
 		created: function(){
@@ -785,10 +802,72 @@
 				msgList.forEach((item, index) => {
 					let msg = msgList[index];
 					if (item.id == message.id) {
+						const prevContent = item.content
+						const nextContent = message.content
+						// 上传成功后 content 会从本地 blob 换成需鉴权的 /storage URL，先保留本地预览再异步换成鉴权 blob
+						if (
+							prevContent &&
+							/^(?:blob:|data:)/i.test(String(prevContent)) &&
+							nextContent &&
+							/\/storage\//i.test(String(nextContent))
+						) {
+							const abs = normalizeMediaUrl(nextContent)
+							if (abs && !this.mediaUrlMap[abs]) {
+								this.mediaUrlMap = { ...this.mediaUrlMap, [abs]: prevContent }
+							}
+							this.ensureMediaUrl(abs)
+						} else {
+							this.prefetchMessageMedia(message)
+						}
 						msgList[index] = Object.assign(msg, message);
 					}
 				})
 				this.messageList=msgList;
+			},
+			mediaSrc(url){
+				if (!url) return ''
+				if (/^(?:blob:|data:)/i.test(String(url))) return url
+				const abs = normalizeMediaUrl(url)
+				if (!abs) return url
+				if (this.mediaUrlMap[abs]) return this.mediaUrlMap[abs]
+				if (needsAuthMediaUrl(abs)) {
+					this.ensureMediaUrl(abs)
+					return this.mediaUrlMap[abs] || ''
+				}
+				return abs
+			},
+			ensureMediaUrl(abs){
+				if (!abs || !needsAuthMediaUrl(abs)) return
+				ensureAuthedDisplayUrl(abs).then((blobUrl) => {
+					if (this.mediaUrlMap[abs] === blobUrl) return
+					this.mediaUrlMap = { ...this.mediaUrlMap, [abs]: blobUrl }
+				}).catch(() => {})
+			},
+			prefetchMessageMedia(message){
+				if (!message) return
+				if (message.type === 'image' || message.type === 'emoji') {
+					const abs = normalizeMediaUrl(message.content)
+					if (abs && needsAuthMediaUrl(abs)) this.ensureMediaUrl(abs)
+				}
+				if (message.type === 'video' && message.extends && message.extends.poster) {
+					const abs = normalizeMediaUrl(message.extends.poster)
+					if (abs && needsAuthMediaUrl(abs)) this.ensureMediaUrl(abs)
+				}
+			},
+			prefetchListMedia(list){
+				;(list || []).forEach((item) => this.prefetchMessageMedia(item))
+			},
+			async showImgs(e){
+				const rawCurrent = e.currentTarget.dataset.img
+				const items = (this.messageList || []).filter((m) => m.type === 'image' || m.type === 'emoji')
+				const urls = await Promise.all(items.map((m) => resolveMediaDisplayUrl(m.content)))
+				const current = await resolveMediaDisplayUrl(rawCurrent)
+				const validUrls = urls.filter(Boolean)
+				if (!validUrls.length) return
+				uni.previewImage({
+					urls: validUrls,
+					current: current || validUrls[0]
+				})
 			},
 			getScrollHeight(){
 				const query=this.$util.getQuery();
@@ -861,6 +940,7 @@
 						this.loading='noMore'
 					}
 					this.$nextTick(()=>{
+						this.prefetchListMedia(this.messageList)
 						if(this.page==1){
 							this.scrollToBottom();
 						}else{
@@ -1098,17 +1178,25 @@
 			playVoice: function (e) {
 				var voicelUrl = e.currentTarget.dataset.voice;
 				var index     = e.currentTarget.dataset.index;
-				if (this.playIndex == -1){
-					return this.playNow(voicelUrl, index);
-				}
-				if (this.playIndex == index) {
-					innerAudioContext.stop();
-					this.playIndex = -1;
-				} else {
-					innerAudioContext.stop();
-					this.playIndex = -1;
-					this.playNow(voicelUrl, index);
-				}
+				resolveMediaDisplayUrl(voicelUrl).then((url) => {
+					if (!url) {
+						uni.showToast({ title: '语音加载失败', icon: 'none' })
+						return
+					}
+					if (this.playIndex == -1){
+						return this.playNow(url, index);
+					}
+					if (this.playIndex == index) {
+						innerAudioContext.stop();
+						this.playIndex = -1;
+					} else {
+						innerAudioContext.stop();
+						this.playIndex = -1;
+						this.playNow(url, index);
+					}
+				}).catch(() => {
+					uni.showToast({ title: '语音加载失败', icon: 'none' })
+				})
 			},
 			// 如果点击了聊天记录列表页,需要收起表情面板或者其他的面板
 			closeInput(e){

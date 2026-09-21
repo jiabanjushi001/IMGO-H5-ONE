@@ -72,6 +72,7 @@
 <script>
 	import { useMsgStore } from '@/store/message';
 	import { useloginStore } from '@/store/login';
+	import { resolveMediaDisplayUrl } from '@/utils/avatar.js'
 	import pinia from '@/store/index'
 	const msgStore = useMsgStore(pinia)
 	const userStore = useloginStore(pinia)
@@ -99,9 +100,15 @@
 		}, 
 		methods: {
 			showAvatar(detail){
-				let imgs=[];
-				imgs.push(detail.avatar);
-				uni.previewImage({urls : imgs})
+				resolveMediaDisplayUrl(detail.avatar).then((url) => {
+					if (!url) {
+						uni.showToast({ title: '头像加载失败', icon: 'none' })
+						return
+					}
+					uni.previewImage({ urls: [url] })
+				}).catch(() => {
+					uni.showToast({ title: '头像加载失败', icon: 'none' })
+				})
 			},
 			sendMsg(info){
 				uni.reLaunch({
@@ -123,7 +130,7 @@
 				this.modelName='';
 				let msg_id=this.$util.getUuid();
 				uni.navigateTo({
-				  url: '/pages/message/call?msg_id='+msg_id+'&type='+is_video+'&status=1&id='+this.detail.user_id+'&name='+this.detail.realname+'&avatar='+encodeURI(this.detail.avatar)
+				  url: '/pages/message/call?msg_id='+msg_id+'&type='+is_video+'&status=1&id='+this.detail.user_id+'&name='+this.detail.realname+'&avatar='+encodeURIComponent(this.detail.avatar || '')+'&token='+encodeURIComponent(uni.getStorageSync('authToken') || '')
 				})
 			},
 			delFriend(){

@@ -1,10 +1,11 @@
 <template>
-	<view class="cu-avatar lg" :class="appSetting.circleAvatar?'round':'radius'" @tap="openUserInfo(info)" :style="[{backgroundImage:'url('+ info.avatar +')'}]"></view>
+	<view class="cu-avatar lg" :class="appSetting.circleAvatar?'round':'radius'" @tap="openUserInfo(info)" :style="[{backgroundImage:'url('+ displayAvatar +')'}]"></view>
 </template>
 <script>
 	const userInfo=uni.getStorageSync('userInfo');
 	const appSetting=uni.getStorageSync('appSetting');
 	import { useMsgStore } from '@/store/message';
+	import { normalizeAvatarUrl, resolveAvatarDisplayUrl } from '@/utils/avatar.js'
 	import pinia from '@/store/index'
 	const msgStore = useMsgStore(pinia)
 export default{
@@ -20,11 +21,30 @@ export default{
 			fingerRes    : [],
 			distance     : 0,
 			taptimer     : 100,
-			appSetting:appSetting
+			appSetting:appSetting,
+			displayAvatar: ''
+		}
+	},
+	watch: {
+		info: {
+			immediate: true,
+			deep: true,
+			handler(value) {
+				this.refreshDisplayAvatar(value)
+			}
 		}
 	},
 	
 	methods:{
+		refreshDisplayAvatar(info) {
+			const normalized = normalizeAvatarUrl(info && info.avatar, info || {})
+			this.displayAvatar = normalized
+			resolveAvatarDisplayUrl(normalized).then((url) => {
+				if (normalizeAvatarUrl(this.info && this.info.avatar, this.info || {}) === normalized) {
+					this.displayAvatar = url
+				}
+			}).catch(() => {})
+		},
 		// 打开用户详情
 		openUserInfo(item){
 			let friend=msgStore.getContact(item.user_id);

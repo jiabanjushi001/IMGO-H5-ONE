@@ -6,6 +6,7 @@
 	import { useloginStore } from '@/store/login';
 	import permision from "@/utils/permission.js"
 	import config from "@/common/config";
+	import { downloadAuthedFile, getAuthHeaders } from '@/utils/avatar.js'
 
 	// #ifdef H5
 		import VConsole from 'vconsole';
@@ -52,6 +53,10 @@
 		                appContext.config.globalProperties.CustomBar = e.statusBarHeight + 45;
 		            };
 		            // #endif
+					// #ifdef H5
+					// H5 / 一门 WebView 通常无系统状态栏；顶栏内容区高度
+					appContext.config.globalProperties.CustomBar = (e.statusBarHeight || 0) + 44;
+					// #endif
 		            // #ifdef MP-WEIXIN
 		            
 		            let custom = wx.getMenuButtonBoundingClientRect();
@@ -528,15 +533,24 @@
 				let systemInfo = uni.getSystemInfoSync();
 				// 判断平台,如果是安卓就去下载头像并展示头像
 				if (systemInfo.platform === 'android') {
-					uni.downloadFile({
-						url: contact.avatar, 
-						success: (res) => {
-							if (res.statusCode === 200) {
-								message.icon=res.tempFilePath
-								uni.createPushMessage(message)
-							}
-						}
-					});
+					downloadAuthedFile(contact.avatar).then(({ tempFilePath }) => {
+						message.icon = tempFilePath
+						uni.createPushMessage(message)
+					}).catch(() => {
+						uni.downloadFile({
+							url: contact.avatar,
+							header: getAuthHeaders(),
+							success: (res) => {
+								if (res.statusCode === 200) {
+									message.icon = res.tempFilePath
+									uni.createPushMessage(message)
+								} else {
+									uni.createPushMessage(message)
+								}
+							},
+							fail: () => uni.createPushMessage(message)
+						});
+					})
 				} else if (systemInfo.platform === 'ios') {
 					 uni.createPushMessage(message)
 				}

@@ -28,7 +28,7 @@
 		    <scroll-view class="scroll-view_H" scroll-x="true"  :scroll-anchoring="true" :scroll-left="scrollLeft">
 		    	<view class="user-list-avatar">
 					<template v-for="(item,index) in selectUser" :key="index">
-						<image class="user-avatar" :src="item.avatar" @tap="removeUser(item.id,item.user_id)"></image>
+						<AuthImage class="user-avatar" :src="item.avatar" :info="item" avatar mode="aspectFill" @tap="removeUser(item.id,item.user_id)"></AuthImage>
 					</template>
 				</view>
 				<view class="select-num pd-10">已选{{selectUser.length}}人</view>

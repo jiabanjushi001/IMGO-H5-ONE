@@ -1,0 +1,1 @@
+import{_ as t,c as s,w as a,an as n,i as e,o,y as l,au as c}from"./index-DLdxf5mV.js";const r=t({data:()=>({html:""}),onLoad:function(t){this.html=decodeURIComponent(t.src),t.title&&n({title:t.title})}},[["render",function(t,n,r,i,d,u){const m=c,f=e;return o(),s(f,{class:""},{default:a(()=>[l(m,{src:d.html},null,8,["src"])]),_:1})}]]);export{r as default};

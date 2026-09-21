@@ -25,6 +25,7 @@
 	import mosoweCanvasImage from '@/components/mosowe-canvas-image/mosowe-canvas-image.vue';
 	import pinia from '@/store/index'
 	import { useloginStore } from '@/store/login';
+	import { assetUrl } from '@/utils/asset-url.js'
 	const userStore = useloginStore(pinia);
 	
 	export default {
@@ -150,7 +151,7 @@
 						},
                         {
                             type: 'image',
-							content: '/static/image/group.png',
+							content: assetUrl('static/image/group.png'),
                             width: 100, 
                             height: 100, 
                             x: 200, 

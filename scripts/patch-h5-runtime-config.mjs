@@ -1,6 +1,6 @@
-// 兼容旧 H5 产物；config.js 始终由部署环境单独提供，不复制进发布包。
+// 兼容旧 H5 产物；网站包不内置 config.js，一门 APK 包由 release-yimen-apk 单独复制。
 import { createHash } from 'node:crypto'
-import { lstatSync, readFileSync, readlinkSync, symlinkSync, writeFileSync } from 'node:fs'
+import { lstatSync, readdirSync, readFileSync, readlinkSync, symlinkSync, writeFileSync } from 'node:fs'
 import { relative, resolve } from 'node:path'
 
 const projectRoot = resolve(import.meta.dirname, '..')
@@ -13,13 +13,36 @@ if (from < 0 || to < 0) throw Error('Runtime config loader is missing from sourc
 const loader = sourceHTML.slice(from, to + end.length).trim()
 const hash = value => createHash('sha256').update(value).digest('hex').slice(0, 12)
 
-function patchBuild(directory) {
+function findEntry(html) {
+  return html.match(/src="\.?\/?assets\/(index-[^"/]+\.js)"/) ||
+    html.match(/imgoStartApp\("\.?\/?assets\/(index-[^"/]+\.js)"\)/)
+}
+
+function toRelativeAssetPaths(html, entryName) {
+  return html
+    .replace(/(href|src)="\/assets\//g, '$1="./assets/')
+    .replace(/imgoStartApp\("\/assets\//g, 'imgoStartApp("./assets/')
+    .replace(new RegExp(`imgoStartApp\\("assets/${entryName}"\\)`), `imgoStartApp("./assets/${entryName}")`)
+}
+
+function rewriteAbsolutePublicPaths(content) {
+  // 仅改写本地包资源路径。不要改 apiUrl+"/static/..."，
+  // 否则会变成 apiUrl+". /static/..." → https://host./static/...
+  return content
+    .replace(/(?<!\+)(["'`])\/hybrid\//g, '$1./hybrid/')
+    .replace(/(?<!\+)(["'`])\/assets\//g, '$1./assets/')
+    .replace(/(?<!\+)(["'`])\/static\//g, '$1./static/')
+    .replace(/(url\(\s*['"]?)\/hybrid\//g, '$1./hybrid/')
+    .replace(/(url\(\s*['"]?)\/assets\//g, '$1./assets/')
+    .replace(/(url\(\s*['"]?)\/static\//g, '$1./static/')
+}
+
+function patchBuild(directory, { relativeAssets = true } = {}) {
   const root = resolve(projectRoot, directory)
   const read = file => readFileSync(resolve(root, file), 'utf8')
   const write = (file, content) => writeFileSync(resolve(root, file), content)
   let html = read('index.html')
-  const entry = html.match(/src="\/assets\/(index-[^"/]+\.js)"/) ||
-    html.match(/imgoStartApp\("\/assets\/(index-[^"/]+\.js)"\)/)
+  const entry = findEntry(html)
   if (!entry) throw Error(`${directory}: H5 entry not found`)
   let main = read(`assets/${entry[1]}`)
 
@@ -42,6 +65,8 @@ function patchBuild(directory) {
   const guardedConnect = 'connectSocketInit(e){if(this.socketTask&&[0,1].includes(this.socketTask.readyState))return this.socketTask;this.data=e,this.socketTask=J_('
   if (main.includes(legacyConnect)) main = main.replace(legacyConnect, guardedConnect)
 
+  if (relativeAssets) main = rewriteAbsolutePublicPaths(main)
+
   const entryName = `index-imgo${hash(main)}.js`
   write(`assets/${entryName}`, main)
   html = html.replace(entry[1], entryName)
@@ -55,15 +80,34 @@ function patchBuild(directory) {
     html = html.replace(moduleScript, `${loader}\n    $&`)
   }
   // 用探测通过后才注入的模块脚本代替静态入口，避免不可达 API 触发旧包的启动死循环。
-  const staticEntry = /<script type="module"[^>]*src="\/assets\/index-[^"/]+\.js"[^>]*><\/script>/
+  const staticEntry = /<script type="module"[^>]*src="\.?\/?assets\/index-[^"/]+\.js"[^>]*><\/script>/
   if (staticEntry.test(html)) {
     html = html.replace(staticEntry, '')
-    html = html.replace('</body>', `    <script>window.imgoStartApp("/assets/${entryName}")</script>\n  </body>`)
-  } else if (!html.includes(`window.imgoStartApp("/assets/${entryName}")`)) {
+    const bootPath = relativeAssets ? `./assets/${entryName}` : `/assets/${entryName}`
+    html = html.replace('</body>', `    <script>window.imgoStartApp("${bootPath}")</script>\n  </body>`)
+  } else if (!html.includes(`imgoStartApp("./assets/${entryName}")`) && !html.includes(`imgoStartApp("/assets/${entryName}")`)) {
     throw Error(`${directory}: H5 bootstrap not found`)
   }
+  if (relativeAssets) html = toRelativeAssetPaths(html, entryName)
   write('index.html', html)
-  if (root === resolve(projectRoot, 'unpackage/dist/build/h5')) {
+
+  // CSS / 其它 JS 里也可能有 /static/ 绝对路径
+  if (relativeAssets) {
+    for (const name of readdirSync(resolve(root, 'assets'))) {
+      if (!name.endsWith('.css') && !name.endsWith('.js')) continue
+      if (name === entryName) continue
+      const file = `assets/${name}`
+      const raw = read(file)
+      const next = rewriteAbsolutePublicPaths(raw)
+      if (next !== raw) write(file, next)
+    }
+  }
+
+  // 本地预览目录：把 config.js 链到项目根，方便改一处即可生效。
+  if (
+    root === resolve(projectRoot, 'dist/build/h5') ||
+    root === resolve(projectRoot, 'unpackage/dist/build/h5')
+  ) {
     const configPath = resolve(root, 'config.js')
     const sourcePath = resolve(projectRoot, 'config.js')
     const linkTarget = relative(root, sourcePath)
@@ -78,11 +122,13 @@ function patchBuild(directory) {
       throw Error(`${directory}: config.js must link to the project root config.js`)
     }
   }
-  console.log(`${directory}: ${entryName}; external config.js is not bundled`)
+  console.log(`${directory}: ${entryName}; relativeAssets=${relativeAssets}`)
 }
 
-for (const directory of process.argv.slice(2).length
-  ? process.argv.slice(2)
-  : ['unpackage/dist/build/h5', 'release/h5']) {
-  patchBuild(directory)
+const args = process.argv.slice(2).filter(a => a !== '--absolute')
+const relativeAssets = !process.argv.includes('--absolute')
+for (const directory of args.length
+  ? args
+  : ['dist/build/h5', 'unpackage/dist/build/h5', 'release/h5']) {
+  patchBuild(directory, { relativeAssets })
 }

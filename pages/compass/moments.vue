@@ -6,11 +6,11 @@
 	<view  :style="{paddingBottom: paddingB+'px'}">
 		<view class="im-friend-header">
 			<view class="im-friend-bg">
-				<image class="im-friend-image" src="/static/image/user-card-bg.jpg" mode="widthFix"></image>
+				<image class="im-friend-image" :src="$asset('static/image/user-card-bg.jpg')" mode="widthFix"></image>
 			</view>
 			<view class="im-user im-flex im-justify-content-start align-center">
 				<text class="text-white mr-5">{{userInfo.realname}}</text>
-				<image class="radius-10" style="width:120rpx;height:120rpx" :src="userInfo.avatar" mode="widthFix"></image>
+				<AuthImage class="radius-10" style="width:120rpx;height:120rpx" :src="userInfo.avatar" :info="userInfo" avatar mode="widthFix"></AuthImage>
 			</view>
 			
 		</view>

@@ -23,7 +23,7 @@
 				 <view class="im-menus cuIcon-emoji f-28 ml-5" hover-class="tap" @tap="showAppBox(1)"></view>
 				 <view class="im-menus cuIcon-roundadd f-28 mr-10" hover-class="tap" v-if="!inputMsg" @tap="showAppBox(2)"></view>
 				 <view v-if="inputMsg">
-					 <button class="cu-btn bg-green shadow  mr-10" @touchend.prevent="sendTextMsg">发送</button>
+					 <button class="cu-btn bg-green shadow  mr-10" @tap.stop="sendTextMsg">发送</button>
 				 </view>
 			 </view>
 			 <!-- 表情窗口 -->
@@ -39,7 +39,7 @@
 							<view  class="upload-emoji" @tap="uploadEmoji"><text class="cuIcon-add c-999" style="vertical-align: sub;"></text></view>
 						</view>
 					 	<view v-for="(item,index) in currentEmojiList" class="im-emoji-item" :key="index">
-							<image :src="item.src" style="width:100rpx" mode="widthFix"  :fade-show="false" lazy-load @tap="chooseDiyEmoji(item)" v-if="emojiName=='favors'"></image>
+							<AuthImage :src="item.displaySrc || item.src" style="width:100rpx" mode="widthFix" @tap="chooseDiyEmoji(item)" v-if="emojiName=='favors'"></AuthImage>
 							<image :src="item.src" style="width:44rpx" mode="widthFix" lazy-load @tap="chooseEmoji(item)" v-else></image>
 						</view>
 					 </view>
@@ -368,12 +368,15 @@ const userStore = useloginStore(pinia);
 			if(this.appBox!=1){
 				this.isFocus=true;
 			}
+			if(!this.editorCtx || typeof this.editorCtx.getContents !== 'function'){
+				console.warn('editorCtx 未就绪，无法发送');
+				return;
+			}
 			this.editorCtx.getContents({
 				success:(e)=>{
 					let msg=e.html;
-					if (msg == '<p><br></p>') {return false;}
-					// 获取@的所有人
-					this.edit.getLink().then((e)=>{
+					if (msg == '<p><br></p>' || !msg) {return false;}
+					const finishSend = (userList)=>{
 						let message={
 							type:'text',
 							content:msg,
@@ -384,8 +387,7 @@ const userStore = useloginStore(pinia);
 							message.pid=this.quote.msg_id;
 							message.extends=this.quote;
 						}
-						const userList = Array.from(new Set(e)); 
-						message.at=userList;
+						message.at=Array.from(new Set(userList || []));
 						this.inputMsg = '';
 						this.closeQuote();
 						this.editorCtx.clear();
@@ -395,16 +397,20 @@ const userStore = useloginStore(pinia);
 								this.isFocus=true;
 							},10)
 						}
-						
 						this.$emit('send',Object.assign(this.msgItem(), message),'');
-					});
-					
+					}
+					// getLink 失败时仍发送正文，避免“点发送没反应”
+					if(this.edit && typeof this.edit.getLink === 'function'){
+						Promise.resolve(this.edit.getLink()).then(finishSend).catch(()=>finishSend([]));
+					}else{
+						finishSend([]);
+					}
 				},
 				fail:(e)=>{
 					this.inputMsg = '';
 					this.editorCtx.clear();
 					this.editorCtx.format('fontFamily', 'inherit');
-					console.info('错误');
+					console.info('错误', e);
 				}
 			})
 			
@@ -589,7 +595,7 @@ const userStore = useloginStore(pinia);
 			}
 			let msg_id=this.$util.getUuid();
 			uni.navigateTo({
-			  url: '/pages/message/call?msg_id='+msg_id+'&type='+is_video+'&status=1&id='+this.contact.id+'&name='+this.contact.displayName+'&avatar='+encodeURI(this.contact.avatar)
+			  url: '/pages/message/call?msg_id='+msg_id+'&type='+is_video+'&status=1&id='+this.contact.id+'&name='+this.contact.displayName+'&avatar='+encodeURIComponent(this.contact.avatar || '')+'&token='+encodeURIComponent(uni.getStorageSync('authToken') || '')
 			})
 			
 		},
@@ -758,8 +764,10 @@ const userStore = useloginStore(pinia);
 			}
 		},
 		getEmojiList(){
-			this.$api.emojiApi.emojiList({}).then((res)=>{
+			this.$api.emojiApi.emojiList({}).then(async (res)=>{
 				if(res.code==0){
+					const { mapAuthDisplayField } = await import('@/utils/avatar.js')
+					await mapAuthDisplayField(res.data, 'src', 'displaySrc')
 					emoji[1]['children']=res.data;
 					if(this.TabCur==1){
 						this.currentEmojiList=res.data;
@@ -773,7 +781,7 @@ const userStore = useloginStore(pinia);
 }
 </script>
 <style lang="scss" scoped>
-.im-footer{padding:0; width:100%; position:fixed; left:0; bottom:0;min-height:100rpx;display:flex; flex-wrap:nowrap; overflow:hidden; box-shadow:1px 1px 6px #999999; align-items:flex-end;z-index:101}
+.im-footer{padding:0; width:100%; position:fixed; left:0; bottom:0;min-height:100rpx;display:flex; flex-wrap:nowrap; overflow:hidden; box-shadow:1px 1px 6px #999999; align-items:flex-end;z-index:1100}
 .im-footer .items{width:auto; line-height:88rpx; flex-shrink:0; font-size:28rpx; color:#2B2E3D;}
 .im-menus{width:80rpx; height:80rpx; flex-shrink:0; line-height:80rpx; text-align:center;}
 .im-input{padding:14rpx 14rpx; border-radius:10rpx;margin:0 8rpx !important;height:auto;min-height:44rpx;max-height: 300rpx;font-size: 28rpx;}

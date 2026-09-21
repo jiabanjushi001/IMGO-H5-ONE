@@ -1,5 +1,6 @@
 <script setup>
-import { computed } from 'vue'
+import { computed, ref, watch } from 'vue'
+import { resolveAvatarDisplayUrl, normalizeAvatarUrl } from '@/utils/avatar.js'
 
 const props = defineProps({
 	user: { type: Object, default: () => ({}) },
@@ -8,15 +9,28 @@ const props = defineProps({
 const emit = defineEmits(['edit'])
 const displayName = computed(() => props.user.realname || props.user.account || '我的账号')
 const account = computed(() => props.user.account || '—')
-const avatar = computed(() => props.user.avatar || '')
+const displayAvatar = ref('')
 const initial = computed(() => displayName.value.slice(0, 1))
+
+const refreshAvatar = (user) => {
+	const normalized = normalizeAvatarUrl(user && user.avatar, user || {})
+	displayAvatar.value = normalized
+	resolveAvatarDisplayUrl(user && user.avatar, user || {}).then((url) => {
+		const current = normalizeAvatarUrl(props.user && props.user.avatar, props.user || {})
+		if (current === normalized) {
+			displayAvatar.value = url
+		}
+	}).catch(() => {})
+}
+
+watch(() => props.user, (value) => refreshAvatar(value), { immediate: true, deep: true })
 </script>
 
 <template>
 	<view class="mine-hero" @tap="emit('edit')">
 		<view class="mine-hero-main">
 			<view class="mine-hero-avatar" :class="{ 'is-round': circleAvatar }">
-				<image v-if="avatar" :src="avatar" mode="aspectFill" class="mine-hero-avatar-image" />
+				<image v-if="displayAvatar" :src="displayAvatar" mode="aspectFill" class="mine-hero-avatar-image" />
 				<text v-else class="mine-hero-avatar-initial">{{ initial }}</text>
 			</view>
 			<view class="mine-hero-identity">
