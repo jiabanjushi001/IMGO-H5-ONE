@@ -159,19 +159,34 @@
 					},
 					success: (e) => {
 						uni.hideLoading();
-						let res=JSON.parse(e.data);
-						if(res.code==0){
-							uni.showToast({
-								title:res.msg,
-								icon:'none'
-							})
-							this.userInfo.avatar=res.data
-							let data=JSON.parse(JSON.stringify(this.userInfo));
-							loginStore.login(data);
+						if (e.statusCode && (e.statusCode < 200 || e.statusCode >= 300)) {
+							uni.showToast({ title: '头像上传失败，请稍后重试', icon: 'none' });
+							return;
 						}
+						let result;
+						try {
+							result = typeof e.data === 'string' ? JSON.parse(e.data) : e.data;
+						} catch (error) {
+							uni.showToast({ title: '上传返回异常，请稍后重试', icon: 'none' });
+							return;
+						}
+						const message = typeof result?.msg === 'string' ? result.msg.trim() : '';
+						if (!result || ![0, '0'].includes(result.code)) {
+							uni.showToast({ title: message || '头像上传失败，请稍后重试', icon: 'none' });
+							return;
+						}
+						if (typeof result.data !== 'string' || !result.data.trim()) {
+							uni.showToast({ title: '上传返回异常，未获取到头像地址', icon: 'none' });
+							return;
+						}
+						this.userInfo.avatar = result.data;
+						let data = JSON.parse(JSON.stringify(this.userInfo));
+						loginStore.login(data);
+						uni.showToast({ title: message || '头像更换成功', icon: 'none' });
 					},
-					fail: (res) => {
+					fail: () => {
 						uni.hideLoading();
+						uni.showToast({ title: '头像上传失败，请检查网络后重试', icon: 'none' });
 					}
 				})
 			}
