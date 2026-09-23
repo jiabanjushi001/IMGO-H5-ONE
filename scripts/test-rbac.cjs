@@ -10,8 +10,12 @@ const rolePanel = read('frontend/role-panel.js')
 const menu = read('frontend/rbac-menu.js')
 const memberRole = read('frontend/member-role-select.js')
 const memberFilter = read('frontend/member-referral-filter.js')
+const memberActions = read('frontend/member-actions.js')
+assert.ok(fs.existsSync(path.join(root, 'frontend/member-agent-setting.js')), 'mentor settings dialog component missing')
+const agentDialog = read('frontend/member-agent-setting.js')
 const build = read('scripts/build-maintenance.cjs')
 const builtMembers = read('public/assets/js/687.70d7eca3.js')
+const builtApp = read('public/assets/js/app.85372e4e.js')
 
 for (const key of [
   'manage.overview', 'manage.settings', 'manage.users', 'manage.messages',
@@ -32,6 +36,10 @@ assert.ok(build.includes('ordinaryManageGuard'), 'ordinary management routes mus
 assert.ok(build.includes('legacyRoleForm'), 'legacy member role editor must be removed')
 assert.ok(builtMembers.includes("this.$set(this.row, 'admin_role_agent_mode'"), 'built member selector must update agent mode')
 assert.equal(builtMembers.split('/* IMGO_MEMBER_ROLE_BEGIN */').length - 1, 1, 'member selector must be injected once')
+assert.equal(builtMembers.split('/* IMGO_MEMBER_AGENT_SETTING_BEGIN */').length - 1, 1, 'mentor dialog must be injected once')
+assert.ok(builtMembers.includes('t("imgo-member-agent-setting-dialog",{ref:"memberAgentSetting",on:{saved:e.handleChange}})'), 'mentor dialog save must refresh current member list')
+assert.equal(builtApp.split('agentSettingApi:ImgoAgentSettingApi').length - 1, 1, 'mentor API registry must be injected once')
+assert.ok(builtApp.includes('/manage/agentSetting/detail') && builtApp.includes('/manage/agentSetting/save'), 'mentor API endpoints must be wired')
 
 const roleContext = { window: {} }
 vm.runInNewContext(rolePanel + '\nthis.component = ImgoRolePanel', roleContext)
@@ -93,6 +101,83 @@ async function checkMemberRoleMode() {
   assert.equal(memberRow.admin_role_agent_mode, 1, 'member role change must update agent mode')
 }
 
+function actionNodes(operatorID, agentMode) {
+  const e = {
+    $store: { state: { userInfo: { user_id: operatorID } } }, $refs: {},
+    _u: value => value, _v: value => value, _e: () => null,
+    openDialogue() {}, handleClick() {}, editUser() {}, editPass() {}
+  }
+  const s = { row: { user_id: 7, admin_role_agent_mode: agentMode } }
+  const t = (tag, data, children) => ({ tag, data: Array.isArray(data) ? undefined : data, children: Array.isArray(data) ? data : children })
+  const table = vm.runInNewContext(memberActions, { t, e, s })
+  return flatten(table.data.scopedSlots[0].fn(s))
+}
+assert.ok(actionNodes(1, 1).some(node => node.tag === 'el-dropdown-item' && node.children?.includes('导师设置')), 'super administrator must see mentor settings for mentor rows')
+assert.ok(!actionNodes(1, 0).some(node => node.tag === 'el-dropdown-item' && node.children?.includes('导师设置')), 'ordinary rows must hide mentor settings')
+assert.ok(!actionNodes(7, 1).some(node => node.tag === 'el-dropdown-item' && node.children?.includes('导师设置')), 'non super administrators must hide mentor settings')
+
+const agentContext = {}
+vm.runInNewContext(agentDialog + '\nthis.component = ImgoMemberAgentSettingDialog', agentContext)
+const agentComponent = agentContext.component
+const agentState = Object.assign(agentComponent.data(), {
+  $store: { state: { userInfo: { user_id: 1 } } },
+  $message: { success() {}, error(message) { throw Error(message) } },
+  $set(row, key, value) { row[key] = value },
+  $emit() {},
+  $api: {
+    agentSettingApi: {
+      detail: async () => ({ code: 0, data: { inherit_auto_user: true, inherit_auto_group: true, auto_add_user: {}, auto_add_group: {}, global_auto_add_user: { status: 1, user_ids: [999], welcome: '欢迎' }, global_auto_add_group: { status: 1, owner_uid: 999, userMax: 10, name: '全局群' } } }),
+      save: async payload => { agentState.savedPayload = payload; return { code: 0 } }
+    },
+    userApi: { getUserList: async () => ({ code: 0, data: [{ user_id: 8, account: 'child' }], count: 1 }) }
+  }
+})
+Object.assign(agentState, agentComponent.methods)
+for (const [name, method] of Object.entries(agentComponent.methods)) agentState[name] = method.bind(agentState)
+Object.defineProperty(agentState, 'isSuperOperator', { get: () => agentComponent.computed.isSuperOperator.call(agentState) })
+async function checkAgentDialog() {
+  const row = { user_id: 7, account: 'mentor', admin_role_agent_mode: 1 }
+  await agentState.open(row)
+  assert.equal(agentState.visible, true, 'mentor dialog must open')
+  const dialogNodes = flatten(agentComponent.render.call(agentState, h))
+  assert.equal(dialogNodes.filter(node => node.tag === 'el-switch' && node.data?.attrs?.['aria-label'] === '继承全局设置').length, 2, 'dialog must show two independent inheritance switches')
+  assert.ok(dialogNodes.some(node => node.children === '全局群'), 'inherited group summary must be visible')
+  agentState.inheritAutoUser = false
+  agentState.inheritAutoGroup = false
+  agentState.autoAddUser.status = 0
+  agentState.autoAddGroup.status = 0
+  await agentState.submit()
+  assert.equal(agentState.savedPayload.agent_user_id, 7, 'save must target current mentor')
+  assert.equal(agentState.savedPayload.inherit_auto_user, false)
+  assert.equal(agentState.savedPayload.auto_add_user.status, 0, 'explicit user disable must be saved')
+  assert.equal(agentState.savedPayload.auto_add_group.status, 0, 'explicit group disable must be saved')
+  assert.equal(agentState.savedPayload.auto_add_user.user_ids.length, 0, 'global customer outside mentor team must not be submitted as override')
+  assert.equal(agentState.savedPayload.auto_add_group.owner_uid, 0, 'global group owner outside mentor team must not be submitted as override')
+  assert.equal(row.agent_setting_inherit_auto_user, true, 'saved row must refresh from detail response')
+  agentState.close()
+  let firstResolve
+  const first = new Promise(resolve => { firstResolve = resolve })
+  let detailCalls = 0
+  agentState.$api.agentSettingApi.detail = () => { detailCalls++; return detailCalls === 1 ? first : Promise.resolve({ code: 0, data: { inherit_auto_user: false, inherit_auto_group: false, auto_add_user: { status: 0 }, auto_add_group: { status: 0 } } }) }
+  const oldOpen = agentState.open({ user_id: 7, account: 'mentor', admin_role_agent_mode: 1 })
+  agentState.open({ user_id: 7, account: 'mentor', admin_role_agent_mode: 1 })
+  assert.equal(detailCalls, 1, 'duplicate open must not duplicate detail request')
+  const newOpen = agentState.open({ user_id: 9, account: 'mentor2', admin_role_agent_mode: 1 })
+  await newOpen
+  firstResolve({ code: 0, data: { inherit_auto_user: true, inherit_auto_group: true } })
+  await oldOpen
+  assert.equal(agentState.row.user_id, 9, 'old detail response must not overwrite newly opened mentor')
+  assert.equal(agentState.inheritAutoUser, false, 'new mentor settings must remain current')
+  agentState.close()
+  agentState.$api.agentSettingApi.detail = async () => ({ code: 500, msg: '读取失败' })
+  await agentState.open(row)
+  assert.equal(agentState.error, '读取失败', 'detail failure must keep an actionable error in the dialog')
+  assert.equal(flatten(agentComponent.render.call(agentState, h)).find(node => node.tag === 'el-button' && node.children === '保存').data.props.disabled, true, 'failed load must disable save')
+  agentState.$api.agentSettingApi.detail = async () => ({ code: 0, data: { inherit_auto_user: true, inherit_auto_group: true, global_auto_add_user: { status: 0 }, global_auto_add_group: { status: 0 } } })
+  await agentState.open(row)
+  assert.equal(agentState.error, '', 'retry must clear load error')
+}
+
 const context = {}
 vm.runInNewContext(menu, context)
 const routes = [
@@ -105,4 +190,4 @@ assert.equal(superMenu.at(-1).path, '/manage/role', 'role menu must be last for 
 const ordinaryMenu = context.imgoBuildAdminMenu({ user_id: 7, menu_permissions: [] }, routes)
 assert.equal(ordinaryMenu.some(item => item.path === '/manage/role'), false, 'ordinary user must not see role menu')
 
-checkMemberRoleMode().then(() => console.log('RBAC frontend source assertions passed')).catch(error => { console.error(error); process.exitCode = 1 })
+Promise.all([checkMemberRoleMode(), checkAgentDialog()]).then(() => console.log('RBAC frontend source assertions passed')).catch(error => { console.error(error); process.exitCode = 1 })

@@ -164,6 +164,12 @@ if (!app.includes('const ImgoRoleApi=')) {
 } else {
  app = app.replace(/const ImgoRoleApi=\{[^;]+\};/, roleApi);
 }
+const agentSettingApi = 'const ImgoAgentSettingApi={detail:t=>Ti({url:"/manage/agentSetting/detail",method:"post",data:t}),save:t=>Ti({url:"/manage/agentSetting/save",method:"post",data:t})};';
+app = app.replace(/const ImgoAgentSettingApi=\{[^;]+\};/, '');
+if (!app.includes('var Vs=Hs,Gs={')) throw Error('Mentor setting API registry anchor changed');
+app = app.replace('var Vs=Hs,Gs={', agentSettingApi + 'var Vs=Hs,Gs={agentSettingApi:ImgoAgentSettingApi,');
+// Rebuilds start from the previously patched app bundle: remove the old registry entry first.
+app = app.replace('agentSettingApi:ImgoAgentSettingApi,agentSettingApi:ImgoAgentSettingApi,', 'agentSettingApi:ImgoAgentSettingApi,');
 if (!app.includes('checkInHistory:t=>Ti(')) {
  const userApiAnchor = 'const Os={getUserList:';
  if (!app.includes(userApiAnchor)) throw Error('Member API registry changed');
@@ -194,6 +200,9 @@ if (legacyRoleStart >= 0) {
  members = members.slice(0, legacyRoleStart) + members.slice(legacyRoleEnd);
 }
 members = members.replace(/\/\* IMGO_MEMBER_ROLE_BEGIN \*\/[\s\S]*?\/\* IMGO_MEMBER_ROLE_END \*\//, '').replaceAll(',ImgoMemberRoleSelect}', '}');
+members = members.replace(/\/\* IMGO_MEMBER_AGENT_SETTING_BEGIN \*\/[\s\S]*?\/\* IMGO_MEMBER_AGENT_SETTING_END \*\//, '').replaceAll(',ImgoMemberAgentSettingDialog}', '}');
+members = members.replaceAll(',ImgoMemberRoleSelect}', '}');
+members = members.replaceAll('t("imgo-member-agent-setting-dialog",{ref:"memberAgentSetting",on:{saved:e.handleChange}}),', '');
 members = members.replace(/\/\* IMGO_MEMBER_REMARK_BEGIN \*\/[\s\S]*?\/\* IMGO_MEMBER_REMARK_END \*\//, '').replaceAll(',ImgoMemberRemark}', '}');
 members = members.replace(/\/\* IMGO_MEMBER_INVITE_CODE_BEGIN \*\/[\s\S]*?\/\* IMGO_MEMBER_INVITE_CODE_END \*\//, '').replaceAll(',ImgoMemberInviteCodeDialog', '').replaceAll('t("imgo-member-invite-code-dialog",{ref:"memberInviteCode"}),', '');
 members = members.replace(/\/\* IMGO_INVITE_COPY_BEGIN \*\/[\s\S]*?\/\* IMGO_INVITE_COPY_END \*\//, '').replaceAll(',ImgoInviteCodeCopy', '');
@@ -342,6 +351,11 @@ if (!members.includes('/* IMGO_MEMBER_ROLE_BEGIN */')) {
 if (!members.includes('ImgoMemberRoleSelect}')) {
  members = members.replace('ImgoMemberInviteCodeDialog,ImgoInviteCodeCopy}', 'ImgoMemberInviteCodeDialog,ImgoInviteCodeCopy,ImgoMemberRoleSelect}');
 }
+members = members.replace('4368:function(e,t,s){', '4368:function(e,t,s){/* IMGO_MEMBER_AGENT_SETTING_BEGIN */'+read('frontend/member-agent-setting.js')+'/* IMGO_MEMBER_AGENT_SETTING_END */');
+members = members.replace('ImgoMemberRoleSelect}', 'ImgoMemberRoleSelect,ImgoMemberAgentSettingDialog}');
+const agentDialogAnchor = 't("imgo-member-invite-code-dialog",{ref:"memberInviteCode"}),';
+if (!members.includes(agentDialogAnchor)) throw Error('Mentor setting dialog insertion point changed');
+members = members.replace(agentDialogAnchor, agentDialogAnchor + 't("imgo-member-agent-setting-dialog",{ref:"memberAgentSetting",on:{saved:e.handleChange}}),');
 const memberRoleColumn = 't("el-table-column",{attrs:{label:"角色",width:"132"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("imgo-member-role-select",{attrs:{row:s.row}})]}}])}),';
 if (!members.includes(memberRoleColumn)) {
  const roleStart = members.indexOf('t("el-table-column",{attrs:{prop:"role",label:"角色"');
@@ -411,9 +425,9 @@ if (!hashPattern.test(app)) throw Error('Management chunk hash map changed');
 app = app.replace(hashPattern, `585:"imgo${chunkHash}"`);
 write(`public/assets/js/585.imgo${chunkHash}.js`, text);
 write('public/assets/js/app.85372e4e.js', app);
-write('public/assets/css/imgo-maintenance.css', read('frontend/maintenance.css') + '\n' + read('frontend/admin-theme.css') + '\n' + read('frontend/message-panel.css') + '\n' + read('frontend/bank-panel.css') + '\n' + read('frontend/finance-orders.css') + '\n' + read('frontend/member-finance.css') + '\n' + read('frontend/chat-design.css') + '\n' + read('frontend/role-panel.css'));
+write('public/assets/css/imgo-maintenance.css', read('frontend/maintenance.css') + '\n' + read('frontend/admin-theme.css') + '\n' + read('frontend/message-panel.css') + '\n' + read('frontend/bank-panel.css') + '\n' + read('frontend/finance-orders.css') + '\n' + read('frontend/member-finance.css') + '\n' + read('frontend/member-agent-setting.css') + '\n' + read('frontend/chat-design.css') + '\n' + read('frontend/role-panel.css'));
 let index = read('public/index.html');
-const version = crypto.createHash('sha256').update(app+text+members+read('frontend/maintenance.css')+read('frontend/admin-theme.css') + '\n' + read('frontend/message-panel.css') + '\n' + read('frontend/bank-panel.css') + '\n' + read('frontend/finance-orders.css') + '\n' + read('frontend/member-finance.css') + '\n' + read('frontend/chat-design.css') + '\n' + read('frontend/role-panel.css')).digest('hex').slice(0,12);
+const version = crypto.createHash('sha256').update(app+text+members+read('frontend/maintenance.css')+read('frontend/admin-theme.css') + '\n' + read('frontend/message-panel.css') + '\n' + read('frontend/bank-panel.css') + '\n' + read('frontend/finance-orders.css') + '\n' + read('frontend/member-finance.css') + '\n' + read('frontend/member-agent-setting.css') + '\n' + read('frontend/chat-design.css') + '\n' + read('frontend/role-panel.css')).digest('hex').slice(0,12);
 index = index.replace(/assets\/js\/app\.85372e4e\.js(?:\?v=[a-z0-9]+)?/g, `assets/js/app.85372e4e.js?v=${version}`);
 index = index.replace(/<link[^>]*href="assets\/css\/imgo-maintenance.css[^>]*>/g, '');
 index = index.replace('</head>', `<link href="assets/css/imgo-maintenance.css?v=${version}" rel="stylesheet"></head>`);

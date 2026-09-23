@@ -1,0 +1,6 @@
+.imgo-agent-setting-body { max-height: 62vh; overflow-y: auto; padding-right: 8px; }
+.imgo-agent-setting-section + .imgo-agent-setting-section { border-top: 1px solid #ebeef5; margin-top: 16px; padding-top: 16px; }
+.imgo-agent-setting-section h3 { font-size: 15px; margin: 0 0 12px; }
+.imgo-agent-setting-section .el-select { width: 100%; }
+.imgo-agent-global-summary { margin: 0 0 16px 115px; padding: 10px 12px; border-radius: 4px; background: #f5f7fa; color: #606266; line-height: 1.7; }
+.imgo-agent-global-summary span + span { margin-left: 10px; }
