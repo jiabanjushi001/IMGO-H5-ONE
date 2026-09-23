@@ -21,7 +21,22 @@ func (a *App) group(r *request) (any, error) {
 		return a.createGroup(r)
 	}
 	if act == "getalluser" {
-		list, e := r.list("SELECT user_id,realname,avatar,name_py FROM "+a.t("user")+" WHERE status=1 AND delete_time=0 AND user_id<>? AND user_id NOT IN (SELECT user_id FROM "+a.t("group_user")+" WHERE group_id=? AND status=1) ORDER BY user_id LIMIT 2000", r.uid(), gid)
+		scopeWhere, args := "", []any{r.uid(), gid}
+		if number(r.user["admin_role_id"]) > 0 {
+			scope, err := a.adminScope(r.ctx(), r.user)
+			if err != nil {
+				return nil, err
+			}
+			if !scope.Global {
+				if err := a.requireScopedGroup(r.ctx(), a.db, scope, gid); err != nil {
+					return nil, err
+				}
+				predicate, params := scope.userPredicate("u")
+				scopeWhere = " AND " + predicate
+				args = append(args, params...)
+			}
+		}
+		list, e := r.list("SELECT user_id,realname,avatar,name_py FROM "+a.t("user")+" u WHERE status=1 AND delete_time=0 AND user_id<>? AND user_id NOT IN (SELECT user_id FROM "+a.t("group_user")+" WHERE group_id=? AND status=1)"+scopeWhere+" ORDER BY user_id LIMIT 2000", args...)
 		if e != nil {
 			return nil, e
 		}
@@ -51,10 +66,26 @@ func (a *App) group(r *request) (any, error) {
 		}
 		return nil, a.addMembers(r, g, []int64{r.uid()})
 	}
+	resourceScope := adminScope{Global: true}
+	if number(r.user["admin_role_id"]) > 0 && (act == "groupinfo" || act == "groupuserlist" || act == "editgroupavatar") {
+		scope, err := a.adminScope(r.ctx(), r.user)
+		if err != nil {
+			return nil, err
+		}
+		if !scope.Global {
+			if err := a.requireScopedUser(r.ctx(), a.db, scope, number(g["owner_id"])); err != nil {
+				return nil, err
+			}
+		}
+		if err := a.authorizeManage(r.ctx(), r.user, "manage.groups"); err != nil {
+			return nil, err
+		}
+		resourceScope = scope
+	}
 	member, e := a.member(r.ctx(), a.db, gid, r.uid())
 	// The admin console shares these read endpoints with the chat client.
 	// Admin avatar editing is an explicit exception; other mutations still require membership.
-	systemAdmin := r.uid() == 1 || number(r.user["role"]) > 0
+	systemAdmin := r.uid() == 1 || number(r.user["role"]) > 0 || number(r.user["admin_role_id"]) > 0
 	adminAvatar := systemAdmin && act == "editgroupavatar"
 	adminRead := systemAdmin && (act == "groupinfo" || act == "groupuserlist")
 	inviteRead := act == "groupinfo" && a.validGroupToken(r.s("token")) && number(strings.Split(r.s("token"), ".")[0]) == gid
@@ -145,7 +176,13 @@ func (a *App) group(r *request) (any, error) {
 		if !strings.HasPrefix(src, "/storage/image/") || !safeAsset(strings.TrimPrefix(src, "/")) {
 			return nil, r.fail("群头像文件无效")
 		}
-		e = update(r.ctx(), a.db, a.t("group"), M{"avatar": src}, "group_id=?", gid)
+		where, args := "group_id=?", []any{gid}
+		if !resourceScope.Global {
+			predicate, params := a.groupScopePredicate(resourceScope, a.t("group"))
+			where += " AND " + predicate
+			args = append(args, params...)
+		}
+		e = update(r.ctx(), a.db, a.t("group"), M{"avatar": src}, where, args...)
 		if e != nil {
 			return nil, e
 		}
@@ -329,7 +366,7 @@ func (a *App) createGroup(r *request) (any, error) {
 	a.hub.send(users, "addGroup", event)
 	return contact, nil
 }
-func (a *App) addMembers(r *request, g M, users []int64) error {
+func (a *App) addMembers(r *request, g M, users []int64, scopes ...adminScope) error {
 	if len(users) < 1 || len(users) > 100 {
 		return r.fail("邀请人数须为 1–100")
 	}
@@ -339,8 +376,19 @@ func (a *App) addMembers(r *request, g M, users []int64) error {
 		return e
 	}
 	defer tx.Rollback()
-	if _, e = one(r.ctx(), tx, "SELECT group_id FROM "+a.t("group")+" WHERE group_id=? AND status=1 FOR UPDATE", gid); e != nil {
+	locked, e := one(r.ctx(), tx, "SELECT group_id,owner_id FROM "+a.t("group")+" WHERE group_id=? AND status=1 FOR UPDATE", gid)
+	if e != nil {
 		return e
+	}
+	if len(scopes) > 0 && !scopes[0].Global {
+		if err := a.requireScopedUser(r.ctx(), tx, scopes[0], number(locked["owner_id"])); err != nil {
+			return err
+		}
+		for _, uid := range users {
+			if err := a.requireScopedUser(r.ctx(), tx, scopes[0], uid); err != nil {
+				return err
+			}
+		}
 	}
 	n, e := one(r.ctx(), tx, "SELECT COUNT(*) n FROM "+a.t("group_user")+" WHERE group_id=? AND status=1", gid)
 	if e != nil {
@@ -375,7 +423,7 @@ func (a *App) addMembers(r *request, g M, users []int64) error {
 	a.hub.send(added, "addGroup", M{"id": data["group_id"], "displayName": g["name"], "is_group": 1, "role": 3, "avatar": data["avatar"], "setting": obj(g["setting"])})
 	return nil
 }
-func (a *App) changeOwner(r *request, gid, uid int64) error {
+func (a *App) changeOwner(r *request, gid, uid int64, scopes ...adminScope) error {
 	tx, e := a.db.BeginTx(r.ctx(), nil)
 	if e != nil {
 		return e
@@ -384,6 +432,14 @@ func (a *App) changeOwner(r *request, gid, uid int64) error {
 	g, e := one(r.ctx(), tx, "SELECT * FROM "+a.t("group")+" WHERE group_id=? AND status=1 FOR UPDATE", gid)
 	if e != nil {
 		return e
+	}
+	if len(scopes) > 0 && !scopes[0].Global {
+		if err := a.requireScopedUser(r.ctx(), tx, scopes[0], number(g["owner_id"])); err != nil {
+			return err
+		}
+		if err := a.requireScopedUser(r.ctx(), tx, scopes[0], uid); err != nil {
+			return err
+		}
 	}
 	if _, e = a.member(r.ctx(), tx, gid, uid); e != nil {
 		return e
@@ -406,12 +462,21 @@ func (a *App) changeOwner(r *request, gid, uid int64) error {
 	a.groupEvent(r.ctx(), gid, "changeOwner", M{"group_id": "group-" + fmt.Sprint(gid), "user_id": uid})
 	return nil
 }
-func (a *App) deleteGroup(r *request, gid int64) error {
+func (a *App) deleteGroup(r *request, gid int64, scopes ...adminScope) error {
 	tx, e := a.db.BeginTx(r.ctx(), nil)
 	if e != nil {
 		return e
 	}
 	defer tx.Rollback()
+	if len(scopes) > 0 && !scopes[0].Global {
+		locked, err := one(r.ctx(), tx, "SELECT owner_id FROM "+a.t("group")+" WHERE group_id=? AND status=1 FOR UPDATE", gid)
+		if err != nil {
+			return err
+		}
+		if err := a.requireScopedUser(r.ctx(), tx, scopes[0], number(locked["owner_id"])); err != nil {
+			return err
+		}
+	}
 	members, e := rows(r.ctx(), tx, "SELECT user_id FROM "+a.t("group_user")+" WHERE group_id=?", gid)
 	if e != nil {
 		return e

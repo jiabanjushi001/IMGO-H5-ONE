@@ -101,3 +101,66 @@ func (a *App) nearestAgent(ctx context.Context, db DB, userID int64) (int64, err
 	}
 	return agentID, nil
 }
+
+// Resource predicates delegate descendant membership to the single user policy.
+func (a *App) groupScopePredicate(scope adminScope, alias string) (string, []any) {
+	if scope.Global {
+		return "1=1", nil
+	}
+	if alias != a.t("group") && !safeSQLAlias(alias) {
+		panic("invalid group scope alias")
+	}
+	predicate, args := scope.userPredicate("scope_owner")
+	return "EXISTS (SELECT 1 FROM " + a.t("user") + " scope_owner WHERE scope_owner.user_id=" + alias + ".owner_id AND " + predicate + ")", args
+}
+
+func (a *App) messageScopePredicate(scope adminScope, qualifier string) (string, []any) {
+	if scope.Global {
+		return "1=1", nil
+	}
+	// The table qualifier also works in encrypted search, which has no alias.
+	if qualifier != a.t("message") && !safeSQLAlias(qualifier) {
+		panic("invalid message scope qualifier")
+	}
+	from, fromArgs := scope.userPredicate("scope_from")
+	to, toArgs := scope.userPredicate("scope_to")
+	group, groupArgs := a.groupScopePredicate(scope, "scope_group")
+	predicate := "((" + qualifier + ".is_group=0 AND (EXISTS (SELECT 1 FROM " + a.t("user") + " scope_from WHERE scope_from.user_id=" + qualifier + ".from_user AND " + from + ") OR EXISTS (SELECT 1 FROM " + a.t("user") + " scope_to WHERE scope_to.user_id=" + qualifier + ".to_user AND " + to + "))) OR (" + qualifier + ".is_group=1 AND EXISTS (SELECT 1 FROM " + a.t("group") + " scope_group WHERE scope_group.group_id=" + qualifier + ".to_user AND " + group + ")))"
+	return predicate, append(append(fromArgs, toArgs...), groupArgs...)
+}
+
+func (a *App) requireScopedGroup(ctx context.Context, db DB, scope adminScope, gid int64) error {
+	if scope.Global {
+		return nil
+	}
+	group, err := one(ctx, db, "SELECT owner_id FROM "+a.t("group")+" WHERE group_id=? AND status=1 AND COALESCE(delete_time,0)=0", gid)
+	if errors.Is(err, sql.ErrNoRows) {
+		return deny()
+	}
+	if err != nil {
+		return err
+	}
+	return a.requireScopedUser(ctx, db, scope, number(group["owner_id"]))
+}
+
+func (a *App) requireGlobalAdminScope(r *request) error {
+	scope, err := a.adminScope(r.ctx(), r.user)
+	if err != nil {
+		return err
+	}
+	if !scope.Global {
+		return deny()
+	}
+	return nil
+}
+
+func (a *App) groupMemberScopeWhere(scope adminScope, gid, uid int64) (string, []any) {
+	where, args := "group_id=? AND user_id=?", []any{gid, uid}
+	if scope.Global {
+		return where, args
+	}
+	group, groupArgs := a.groupScopePredicate(scope, "scope_group")
+	member, memberArgs := scope.userPredicate("scope_member")
+	where += " AND EXISTS (SELECT 1 FROM " + a.t("group") + " scope_group WHERE scope_group.group_id=" + a.t("group_user") + ".group_id AND " + group + ") AND EXISTS (SELECT 1 FROM " + a.t("user") + " scope_member WHERE scope_member.user_id=" + a.t("group_user") + ".user_id AND " + member + ")"
+	return where, append(append(args, groupArgs...), memberArgs...)
+}

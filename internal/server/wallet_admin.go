@@ -40,7 +40,7 @@ func (a *App) priorWalletCredit(r *request, userID int64, requestID string, cent
 	return M{"credited": true, "entry_id": entry["entry_id"]}, nil
 }
 
-func (a *App) manageWalletCredit(r *request) (any, error) {
+func (a *App) manageWalletCredit(r *request, scope adminScope) (any, error) {
 	uid := r.n("user_id")
 	cents, valid := parseWalletAmount(r.s("amount"))
 	requestID := r.s("request_id")
@@ -70,6 +70,11 @@ func (a *App) manageWalletCredit(r *request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	if !scope.Global {
+		if err := a.requireScopedUser(ctx, tx, scope, uid); err != nil {
+			return nil, err
+		}
+	}
 	if number(wallet["available_cents"]) > 9000000000000000-cents {
 		return nil, clientError{"余额超出系统支持范围", 409}
 	}
@@ -95,7 +100,7 @@ func (a *App) manageWalletCredit(r *request) (any, error) {
 	return M{"credited": true, "entry_id": id}, nil
 }
 
-func (a *App) manageWalletReview(r *request) (any, error) {
+func (a *App) manageWalletReview(r *request, scope adminScope) (any, error) {
 	id := r.n("withdrawal_id")
 	status, valid := bankStatus(r.p["status"])
 	remark := strings.TrimSpace(r.s("remark"))
@@ -111,6 +116,11 @@ func (a *App) manageWalletReview(r *request) (any, error) {
 	withdrawal, err := one(ctx, tx, "SELECT user_id,amount_cents,status FROM "+a.t("imgo_withdrawal")+" WHERE withdrawal_id=? FOR UPDATE", id)
 	if err != nil {
 		return nil, err
+	}
+	if !scope.Global {
+		if err := a.requireScopedUser(ctx, tx, scope, number(withdrawal["user_id"])); err != nil {
+			return nil, err
+		}
 	}
 	if current := number(withdrawal["status"]); current != 0 {
 		if current == status {
@@ -156,6 +166,29 @@ func (a *App) manageWalletReview(r *request) (any, error) {
 }
 
 func (a *App) manageWallet(r *request) (any, error) {
+	scope, err := a.adminScope(r.ctx(), r.user)
+	if err != nil {
+		return nil, err
+	}
+	if !scope.Global {
+		switch action(r) {
+		case "account", "entries", "credit", "recharge", "withdraw":
+			if err := a.requireScopedUser(r.ctx(), a.db, scope, r.n("user_id")); err != nil {
+				return nil, err
+			}
+		case "detail", "review":
+			item, err := r.one("SELECT user_id FROM "+a.t("imgo_withdrawal")+" WHERE withdrawal_id=?", r.n("withdrawal_id"))
+			if errors.Is(err, sql.ErrNoRows) {
+				return nil, deny()
+			}
+			if err != nil {
+				return nil, err
+			}
+			if err := a.requireScopedUser(r.ctx(), a.db, scope, number(item["user_id"])); err != nil {
+				return nil, err
+			}
+		}
+	}
 	r.c.Header("Cache-Control", "no-store")
 	switch action(r) {
 	case "account":
@@ -167,6 +200,11 @@ func (a *App) manageWallet(r *request) (any, error) {
 		return a.walletEntries(r, r.n("user_id"))
 	case "recharges":
 		where, args := "1=1", []any{}
+		if !scope.Global {
+			predicate, params := scope.userPredicate("o")
+			where += " AND " + predicate
+			args = append(args, params...)
+		}
 		if uid := r.n("user_id"); uid > 0 {
 			where += " AND o.user_id=?"
 			args = append(args, uid)
@@ -184,15 +222,20 @@ func (a *App) manageWallet(r *request) (any, error) {
 		limit, offset := r.pagination()
 		return r.list("SELECT o.order_id,o.user_id,o.amount_cents,o.bonus_mode,o.bonus_value,o.bonus_cents,o.total_cents,o.note,o.status,o.created_at,o.created_by,u.account,u.realname FROM "+from+" ORDER BY o.order_id DESC LIMIT ? OFFSET ?", append(args, limit, offset)...)
 	case "recharge":
-		return a.manageWalletRecharge(r)
+		return a.manageWalletRecharge(r, scope)
 	case "withdraw":
-		return a.manageWalletWithdraw(r)
+		return a.manageWalletWithdraw(r, scope)
 	case "credit":
-		return a.manageWalletCredit(r)
+		return a.manageWalletCredit(r, scope)
 	case "review":
-		return a.manageWalletReview(r)
+		return a.manageWalletReview(r, scope)
 	case "index":
 		where, args := "u.delete_time=0", []any{}
+		if !scope.Global {
+			predicate, params := scope.userPredicate("w")
+			where += " AND " + predicate
+			args = append(args, params...)
+		}
 		if uid := r.n("user_id"); uid > 0 {
 			where += " AND w.user_id=?"
 			args = append(args, uid)
@@ -220,7 +263,16 @@ func (a *App) manageWallet(r *request) (any, error) {
 		if r.n("withdrawal_id") < 1 {
 			return nil, r.fail("提现记录ID无效")
 		}
-		item, err := r.one("SELECT w.withdrawal_id,w.user_id,w.amount_cents,w.status,w.receipt_name,w.bank_name,w.branch_name,w.account_cipher,w.account_last4,w.created_at,w.processed_at,w.processed_by,w.remark,u.account,u.realname FROM "+a.t("imgo_withdrawal")+" w JOIN "+a.t("user")+" u ON u.user_id=w.user_id WHERE w.withdrawal_id=?", r.n("withdrawal_id"))
+		where, args := "w.withdrawal_id=?", []any{r.n("withdrawal_id")}
+		if !scope.Global {
+			predicate, params := scope.userPredicate("w")
+			where += " AND " + predicate
+			args = append(args, params...)
+		}
+		item, err := r.one("SELECT w.withdrawal_id,w.user_id,w.amount_cents,w.status,w.receipt_name,w.bank_name,w.branch_name,w.account_cipher,w.account_last4,w.created_at,w.processed_at,w.processed_by,w.remark,u.account,u.realname FROM "+a.t("imgo_withdrawal")+" w JOIN "+a.t("user")+" u ON u.user_id=w.user_id WHERE "+where, args...)
+		if errors.Is(err, sql.ErrNoRows) && !scope.Global {
+			return nil, deny()
+		}
 		if err != nil {
 			return nil, err
 		}

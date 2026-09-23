@@ -36,8 +36,36 @@ func (a *App) mediaUser(c *gin.Context) (int64, error) {
 	if e != nil {
 		return 0, e
 	}
+	c.Set("mediaUser", u)
 	return number(u["user_id"]), nil
 }
+
+// Media keeps the existing chat authorization and adds the current agent's uploader scope.
+func (a *App) scopedMediaAccess(c *gin.Context, f M) bool {
+	value, ok := c.Get("mediaUser")
+	if !ok {
+		c.AbortWithStatus(403)
+		return false
+	}
+	user, ok := value.(M)
+	if !ok {
+		c.AbortWithStatus(403)
+		return false
+	}
+	if number(user["user_id"]) == 1 || number(user["admin_role_id"]) == 0 {
+		return true
+	}
+	scope, err := a.adminScope(c.Request.Context(), user)
+	if err == nil && !scope.Global {
+		err = a.requireScopedUser(c.Request.Context(), a.db, scope, number(f["user_id"]))
+	}
+	if err != nil {
+		c.AbortWithStatus(403)
+		return false
+	}
+	return true
+}
+
 func (a *App) canReadFile(ctx context.Context, uid int64, f M) bool {
 	if number(f["parent_id"]) > 0 {
 		parent, e := one(ctx, a.db, "SELECT * FROM "+a.t("file")+" WHERE file_id=? AND parent_id=0 AND status=1", f["parent_id"])
@@ -81,6 +109,9 @@ func (a *App) authorizeStorage(c *gin.Context, p string) bool {
 	uid, e := a.mediaUser(c)
 	if e != nil {
 		c.Status(401)
+		return false
+	}
+	if !a.scopedMediaAccess(c, f) {
 		return false
 	}
 	// The system super administrator moderates all messages. Other accounts

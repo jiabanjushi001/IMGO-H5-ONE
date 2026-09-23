@@ -405,6 +405,17 @@ func (a *App) messageList(r *request, admin bool) (any, error) {
 	}
 	where := "status=1"
 	args := []any{}
+	if admin {
+		scope, err := a.adminScope(r.ctx(), r.user)
+		if err != nil {
+			return nil, err
+		}
+		if !scope.Global {
+			predicate, params := a.messageScopePredicate(scope, a.t("message"))
+			where += " AND " + predicate
+			args = append(args, params...)
+		}
+	}
 	if !admin {
 		if e := a.canChat(r, to, g, false); e != nil {
 			return nil, e

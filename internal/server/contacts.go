@@ -129,7 +129,7 @@ func (a *App) contact(r *request, id string) (M, error) {
 	}
 	return v, nil
 }
-func (a *App) contacts(r *request, uid int64) (any, error) {
+func (a *App) contacts(r *request, uid int64, scopes ...adminScope) (any, error) {
 	where := "u.status=1 AND u.delete_time=0 AND u.user_id<>?"
 	args := []any{uid, uid}
 	if number(a.config(r.ctx(), "sysInfo")["runMode"]) == 2 {
@@ -148,11 +148,21 @@ func (a *App) contacts(r *request, uid int64) (any, error) {
 	for _, m := range unread {
 		unreadMap[number(m["from_user"])] = number(m["n"])
 	}
-	groups, e := r.list("SELECT g.*,gu.role,gu.unread,gu.is_notice,gu.is_top,gu.create_time AS joined_at FROM "+a.t("group")+" g JOIN "+a.t("group_user")+" gu ON gu.group_id=g.group_id WHERE gu.user_id=? AND gu.status=1 AND g.status=1 AND COALESCE(g.delete_time,0)=0", uid)
+	groupWhere, groupArgs := "", []any{uid}
+	latestWhere, latestArgs := "", []any{uid, uid, uid, uid, uid}
+	if len(scopes) > 0 && !scopes[0].Global {
+		predicate, params := a.groupScopePredicate(scopes[0], "g")
+		groupWhere = " AND " + predicate
+		groupArgs = append(groupArgs, params...)
+		predicate, params = a.messageScopePredicate(scopes[0], a.t("message"))
+		latestWhere = " AND " + predicate
+		latestArgs = append(latestArgs, params...)
+	}
+	groups, e := r.list("SELECT g.*,gu.role,gu.unread,gu.is_notice,gu.is_top,gu.create_time AS joined_at FROM "+a.t("group")+" g JOIN "+a.t("group_user")+" gu ON gu.group_id=g.group_id WHERE gu.user_id=? AND gu.status=1 AND g.status=1 AND COALESCE(g.delete_time,0)=0"+groupWhere, groupArgs...)
 	if e != nil {
 		return nil, e
 	}
-	latest, e := r.list("SELECT m.* FROM "+a.t("message")+" m JOIN (SELECT MAX(msg_id) AS last_id FROM "+a.t("message")+" WHERE status=1 AND NOT FIND_IN_SET(?,COALESCE(del_user,'')) AND ((is_group=0 AND (from_user=? OR to_user=?)) OR (is_group=3 AND from_user=?) OR chat_identify='admin_notice' OR (is_group=1 AND to_user IN (SELECT group_id FROM "+a.t("group_user")+" WHERE user_id=? AND status=1))) GROUP BY chat_identify) latest ON latest.last_id=m.msg_id", uid, uid, uid, uid, uid)
+	latest, e := r.list("SELECT m.* FROM "+a.t("message")+" m JOIN (SELECT MAX(msg_id) AS last_id FROM "+a.t("message")+" WHERE status=1 AND NOT FIND_IN_SET(?,COALESCE(del_user,'')) AND ((is_group=0 AND (from_user=? OR to_user=?)) OR (is_group=3 AND from_user=?) OR chat_identify='admin_notice' OR (is_group=1 AND to_user IN (SELECT group_id FROM "+a.t("group_user")+" WHERE user_id=? AND status=1))) "+latestWhere+" GROUP BY chat_identify) latest ON latest.last_id=m.msg_id", latestArgs...)
 	if e != nil {
 		return nil, e
 	}

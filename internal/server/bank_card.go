@@ -190,10 +190,19 @@ func (a *App) bankCard(r *request) (any, error) {
 }
 
 func (a *App) manageBankCard(r *request) (any, error) {
+	scope, err := a.adminScope(r.ctx(), r.user)
+	if err != nil {
+		return nil, err
+	}
 	r.c.Header("Cache-Control", "no-store")
 	switch action(r) {
 	case "index":
 		where, args := "u.delete_time=0", []any{}
+		if !scope.Global {
+			predicate, params := scope.userPredicate("b")
+			where += " AND " + predicate
+			args = append(args, params...)
+		}
 		if s := strings.TrimSpace(r.s("keywords")); s != "" {
 			where += " AND (u.account LIKE ? OR u.realname LIKE ? OR b.receipt_name LIKE ? OR b.bank_name LIKE ? OR b.branch_name LIKE ?)"
 			for i := 0; i < 5; i++ {
@@ -224,6 +233,11 @@ func (a *App) manageBankCard(r *request) (any, error) {
 		uid := r.n("user_id")
 		if uid <= 0 {
 			return nil, r.fail("用户ID无效")
+		}
+		if !scope.Global {
+			if err := a.requireScopedUser(r.ctx(), a.db, scope, uid); err != nil {
+				return nil, err
+			}
 		}
 		fields := "user_id,receipt_name,bank_name,branch_name,account_last4,status,remark,version,created_at,updated_at"
 		if action(r) == "detail" {
@@ -279,6 +293,11 @@ func (a *App) manageBankCard(r *request) (any, error) {
 		}
 		query += " WHERE user_id=? AND version=?"
 		params = append(params, uid, r.n("version"))
+		if !scope.Global {
+			predicate, scopeArgs := scope.userPredicate("imgo_bank_scope")
+			query += " AND EXISTS (SELECT 1 FROM " + a.t("user") + " imgo_bank_scope WHERE imgo_bank_scope.user_id=" + a.t("imgo_bank_card") + ".user_id AND " + predicate + ")"
+			params = append(params, scopeArgs...)
+		}
 		result, err := a.db.ExecContext(r.ctx(), query, params...)
 		if err != nil {
 			return nil, err

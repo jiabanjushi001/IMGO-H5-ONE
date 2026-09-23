@@ -19,6 +19,7 @@ func TestEnterpriseFilesAllReturnsAllFilesForAuthorizedRole(t *testing.T) {
 	a, mock := testApp(t)
 	mock.ExpectQuery("SELECT p.permission_key FROM `yu_imgo_admin_role`").WithArgs(int64(3)).
 		WillReturnRows(sqlmock.NewRows([]string{"permission_key"}).AddRow("manage.files"))
+	mock.ExpectQuery("SELECT agent_mode FROM `yu_imgo_admin_role`").WithArgs(int64(3)).WillReturnRows(sqlmock.NewRows([]string{"agent_mode"}).AddRow(0))
 	where := "f.status=1 AND COALESCE(f.delete_time,0)=0"
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*) n FROM `yu_file` f WHERE " + where)).
 		WillReturnRows(sqlmock.NewRows([]string{"n"}).AddRow(1))

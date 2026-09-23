@@ -9,7 +9,7 @@ import (
 
 // These administrator actions are atomic: an order and its wallet ledger entries
 // either commit together with the balance change, or none of them commit.
-func (a *App) manageWalletRecharge(r *request) (any, error) {
+func (a *App) manageWalletRecharge(r *request, scope adminScope) (any, error) {
 	uid, requestID := r.n("user_id"), r.s("request_id")
 	principal, valid := parseWalletAmount(r.s("amount"))
 	mode, value := r.s("bonus_mode"), strings.TrimSpace(r.s("bonus_value"))
@@ -28,7 +28,13 @@ func (a *App) manageWalletRecharge(r *request) (any, error) {
 		return nil, err
 	}
 	defer tx.Rollback()
-	if _, err = one(ctx, tx, "SELECT user_id FROM "+a.t("user")+" WHERE user_id=? AND delete_time=0", uid); err != nil {
+	// A current read avoids creating a repeatable-read snapshot before waiting
+	// for the wallet lock; the subsequent scope check must see the latest tree.
+	userQuery := "SELECT user_id FROM " + a.t("user") + " WHERE user_id=? AND delete_time=0"
+	if !scope.Global {
+		userQuery += " FOR SHARE"
+	}
+	if _, err = one(ctx, tx, userQuery, uid); err != nil {
 		return nil, err
 	}
 	now := time.Now().Unix()
@@ -38,6 +44,11 @@ func (a *App) manageWalletRecharge(r *request) (any, error) {
 	wallet, err := one(ctx, tx, "SELECT available_cents FROM "+a.t("imgo_wallet")+" WHERE user_id=? FOR UPDATE", uid)
 	if err != nil {
 		return nil, err
+	}
+	if !scope.Global {
+		if err := a.requireScopedUser(ctx, tx, scope, uid); err != nil {
+			return nil, err
+		}
 	}
 	// Locking the wallet serializes retries even if they arrive concurrently.
 	previous, err := one(ctx, tx, "SELECT order_id,amount_cents,bonus_mode,bonus_value,bonus_cents,total_cents,note,status FROM "+a.t("imgo_recharge_order")+" WHERE user_id=? AND request_id=?", uid, requestID)
@@ -82,7 +93,7 @@ func (a *App) manageWalletRecharge(r *request) (any, error) {
 	return M{"order_id": id, "total_cents": total, "bonus_cents": bonus, "status": 1}, nil
 }
 
-func (a *App) manageWalletWithdraw(r *request) (any, error) {
+func (a *App) manageWalletWithdraw(r *request, scope adminScope) (any, error) {
 	uid, requestID := r.n("user_id"), r.s("request_id")
 	amount, valid := parseWalletAmount(r.s("amount"))
 	note := strings.TrimSpace(r.s("note"))
@@ -95,7 +106,13 @@ func (a *App) manageWalletWithdraw(r *request) (any, error) {
 		return nil, err
 	}
 	defer tx.Rollback()
-	if _, err = one(ctx, tx, "SELECT user_id FROM "+a.t("user")+" WHERE user_id=? AND delete_time=0", uid); err != nil {
+	// A current read avoids creating a repeatable-read snapshot before waiting
+	// for the wallet lock; the subsequent scope check must see the latest tree.
+	userQuery := "SELECT user_id FROM " + a.t("user") + " WHERE user_id=? AND delete_time=0"
+	if !scope.Global {
+		userQuery += " FOR SHARE"
+	}
+	if _, err = one(ctx, tx, userQuery, uid); err != nil {
 		return nil, err
 	}
 	now := time.Now().Unix()
@@ -105,6 +122,11 @@ func (a *App) manageWalletWithdraw(r *request) (any, error) {
 	wallet, err := one(ctx, tx, "SELECT available_cents,pending_cents FROM "+a.t("imgo_wallet")+" WHERE user_id=? FOR UPDATE", uid)
 	if err != nil {
 		return nil, err
+	}
+	if !scope.Global {
+		if err := a.requireScopedUser(ctx, tx, scope, uid); err != nil {
+			return nil, err
+		}
 	}
 	previous, err := one(ctx, tx, "SELECT withdrawal_id,amount_cents,status,request_note FROM "+a.t("imgo_withdrawal")+" WHERE user_id=? AND request_id=?", uid, requestID)
 	if err == nil {

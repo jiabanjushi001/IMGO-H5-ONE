@@ -245,6 +245,17 @@ func (a *App) files(r *request) (any, error) {
 	}
 	where := "f.status=1 AND COALESCE(f.delete_time,0)=0"
 	args := []any{}
+	if manageAll {
+		scope, err := a.adminScope(r.ctx(), r.user)
+		if err != nil {
+			return nil, err
+		}
+		if !scope.Global {
+			predicate, params := scope.userPredicate("f")
+			where += " AND " + predicate
+			args = append(args, params...)
+		}
+	}
 	if r.uid() != 1 && !manageAll {
 		where += " AND (f.user_id=? OR EXISTS (SELECT 1 FROM " + a.t("message") + " m WHERE m.file_id=f.file_id AND m.status=1 AND (m.from_user=? OR (m.is_group=0 AND m.to_user=?) OR (m.is_group=1 AND m.to_user IN (SELECT group_id FROM " + a.t("group_user") + " WHERE user_id=? AND status=1)))))"
 		args = append(args, r.uid(), r.uid(), r.uid(), r.uid())
@@ -308,6 +319,9 @@ func (a *App) download(c *gin.Context) {
 	uid, authErr := a.mediaUser(c)
 	if authErr != nil {
 		c.Status(401)
+		return
+	}
+	if !a.scopedMediaAccess(c, f) {
 		return
 	}
 	if uid != 1 && !a.canReadFile(c.Request.Context(), uid, f) {

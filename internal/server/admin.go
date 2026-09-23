@@ -309,14 +309,40 @@ func (a *App) manageUser(r *request) (any, error) {
 	return nil, r.fail("未知操作")
 }
 func (a *App) manageGroup(r *request) (any, error) {
+	scope, err := a.adminScope(r.ctx(), r.user)
+	if err != nil {
+		return nil, err
+	}
 	gid := groupID(r)
 	if gid == 0 {
 		gid = r.n("group_id")
+	}
+	if !scope.Global && action(r) != "index" {
+		if err := a.requireScopedGroup(r.ctx(), a.db, scope, gid); err != nil {
+			return nil, err
+		}
+		targets := []int64{}
+		switch action(r) {
+		case "changeowner", "delgroupuser", "setmanager":
+			targets = []int64{r.n("user_id")}
+		case "addgroupuser":
+			targets = ids(r.p["user_ids"])
+		}
+		for _, uid := range targets {
+			if err := a.requireScopedUser(r.ctx(), a.db, scope, uid); err != nil {
+				return nil, err
+			}
+		}
 	}
 	switch action(r) {
 	case "index":
 		where := "g.status=1 AND COALESCE(g.delete_time,0)=0"
 		args := []any{}
+		if !scope.Global {
+			predicate, params := a.groupScopePredicate(scope, "g")
+			where += " AND " + predicate
+			args = append(args, params...)
+		}
 		if r.s("keywords") != "" {
 			where += " AND g.name LIKE ?"
 			args = append(args, "%"+r.s("keywords")+"%")
@@ -341,15 +367,15 @@ func (a *App) manageGroup(r *request) (any, error) {
 		}
 		return list, nil
 	case "changeowner":
-		return nil, a.changeOwner(r, gid, r.n("user_id"))
+		return nil, a.changeOwner(r, gid, r.n("user_id"), scope)
 	case "del":
-		return nil, a.deleteGroup(r, gid)
+		return nil, a.deleteGroup(r, gid, scope)
 	case "addgroupuser":
 		g, e := r.one("SELECT * FROM "+a.t("group")+" WHERE group_id=? AND status=1", gid)
 		if e != nil {
 			return nil, e
 		}
-		return nil, a.addMembers(r, g, ids(r.p["user_ids"]))
+		return nil, a.addMembers(r, g, ids(r.p["user_ids"]), scope)
 	case "delgroupuser":
 		g, e := r.one("SELECT owner_id FROM "+a.t("group")+" WHERE group_id=?", gid)
 		if e != nil {
@@ -359,7 +385,8 @@ func (a *App) manageGroup(r *request) (any, error) {
 		if uid == number(g["owner_id"]) {
 			return nil, r.fail("请先转让群主")
 		}
-		e = r.exec("DELETE FROM "+a.t("group_user")+" WHERE group_id=? AND user_id=?", gid, uid)
+		where, args := a.groupMemberScopeWhere(scope, gid, uid)
+		e = r.exec("DELETE FROM "+a.t("group_user")+" WHERE "+where, args...)
 		if e == nil {
 			a.hub.send([]int64{uid}, "removeUser", M{"group_id": "group-" + fmt.Sprint(gid), "user_id": uid})
 		}
@@ -369,7 +396,8 @@ func (a *App) manageGroup(r *request) (any, error) {
 		if role != 2 && role != 3 {
 			return nil, r.fail("角色无效")
 		}
-		return nil, update(r.ctx(), a.db, a.t("group_user"), M{"role": role}, "group_id=? AND user_id=? AND role<>1", gid, r.n("user_id"))
+		where, args := a.groupMemberScopeWhere(scope, gid, r.n("user_id"))
+		return nil, update(r.ctx(), a.db, a.t("group_user"), M{"role": role}, where+" AND role<>1", args...)
 	}
 	return nil, r.fail("未知操作")
 }
@@ -434,6 +462,11 @@ func validateAutoGroupUserMax(value any) error {
 	return nil
 }
 func (a *App) manageIndex(r *request) (any, error) {
+	if action(r) != "noticelist" {
+		if err := a.requireGlobalAdminScope(r); err != nil {
+			return nil, err
+		}
+	}
 	switch action(r) {
 	case "noticelist":
 		n, e := r.one("SELECT COUNT(*) n FROM " + a.t("message") + " WHERE chat_identify='admin_notice' AND status=1")
@@ -491,22 +524,41 @@ func (a *App) manageIndex(r *request) (any, error) {
 	return nil, r.fail("未知操作")
 }
 func (a *App) manageMessage(r *request) (any, error) {
-	switch action(r) {
-	case "index":
+	if action(r) == "index" {
 		return a.messageList(r, true)
+	}
+	scope, err := a.adminScope(r.ctx(), r.user)
+	if err != nil {
+		return nil, err
+	}
+	switch action(r) {
 	case "getcontacts":
 		uid := r.n("user_id")
+		if !scope.Global {
+			if err := a.requireScopedUser(r.ctx(), a.db, scope, uid); err != nil {
+				return nil, err
+			}
+		}
 		u, e := r.one("SELECT * FROM "+a.t("user")+" WHERE user_id=? AND delete_time=0", uid)
 		if e != nil {
 			return nil, e
 		}
 		copy := *r
 		copy.user = u
-		out, e := a.contacts(&copy, uid)
+		out, e := a.contacts(&copy, uid, scope)
 		r.count = copy.count
 		return out, e
 	case "dealmsg":
-		m, e := r.one("SELECT * FROM "+a.t("message")+" WHERE id=?", r.s("id"))
+		where, args := "id=?", []any{r.s("id")}
+		if !scope.Global {
+			predicate, params := a.messageScopePredicate(scope, a.t("message"))
+			where += " AND " + predicate
+			args = append(args, params...)
+		}
+		m, e := r.one("SELECT * FROM "+a.t("message")+" WHERE "+where, args...)
+		if e == sql.ErrNoRows && !scope.Global {
+			return nil, deny()
+		}
 		if e != nil {
 			return nil, e
 		}
@@ -514,10 +566,10 @@ func (a *App) manageMessage(r *request) (any, error) {
 		content := "此消息已被管理员屏蔽"
 		if r.n("dealType") == 1 {
 			event = "delMessage"
-			e = update(r.ctx(), a.db, a.t("message"), M{"status": 0}, "msg_id=?", m["msg_id"])
+			e = update(r.ctx(), a.db, a.t("message"), M{"status": 0}, where, args...)
 		} else {
 			encrypted, _ := encryptContent(a.cfg.ChatKey, content)
-			e = update(r.ctx(), a.db, a.t("message"), M{"content": encrypted, "type": "text"}, "msg_id=?", m["msg_id"])
+			e = update(r.ctx(), a.db, a.t("message"), M{"content": encrypted, "type": "text"}, where, args...)
 		}
 		if e == nil {
 			a.messageEvent(r.ctx(), m, event, M{"id": m["id"], "content": content})
@@ -527,6 +579,12 @@ func (a *App) manageMessage(r *request) (any, error) {
 	return nil, r.fail("未知操作")
 }
 func (a *App) task(r *request) (any, error) {
+	switch action(r) {
+	case "settaskconfig", "starttask", "stoptask", "cleartasklog":
+		if err := a.requireGlobalAdminScope(r); err != nil {
+			return nil, err
+		}
+	}
 	switch action(r) {
 	case "gettasklist":
 		c, e := a.loadMaintenance(r.ctx())
