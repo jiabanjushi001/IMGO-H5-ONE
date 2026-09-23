@@ -1,0 +1,225 @@
+[
+  {
+    "file": "origin-10-retry.log",
+    "result": {
+      "accepted": 59,
+      "api_p95_ms": 65.971,
+      "attempted": 59,
+      "delivery_p95_ms": 73.108,
+      "delivery_p99_ms": 76.607,
+      "disconnects": 0,
+      "errors": {},
+      "expected_deliveries": 590,
+      "failed": 0,
+      "generator_skipped": 0,
+      "observed_seconds": 65.002547333,
+      "online_end": 10,
+      "received_deliveries": 590,
+      "started_at": "2026-09-21T16:19:24Z",
+      "stop_reason": "duration complete"
+    },
+    "resources": {
+      "samples": 33,
+      "cpu_avg": 53.16,
+      "cpu_max": 61.21,
+      "available_mb_min": 2459,
+      "imgo_rss_mb_max": 71.5,
+      "imgo_cpu_pct_max_one_core": 15.5,
+      "tx_mbps_max": 3.05
+    }
+  },
+  {
+    "file": "origin-10.log",
+    "result": {
+      "accepted": 30,
+      "api_p95_ms": 10000.85,
+      "attempted": 44,
+      "delivery_p95_ms": 1068.989,
+      "delivery_p99_ms": 1238.861,
+      "disconnects": 10,
+      "expected_deliveries": 300,
+      "failed": 14,
+      "generator_skipped": 0,
+      "observed_seconds": 54.9471195,
+      "online_end": 0,
+      "received_deliveries": 300,
+      "stop_reason": "stopped: disconnect or API errors >5%"
+    }
+  },
+  {
+    "file": "origin-100.log",
+    "result": {
+      "accepted": 449,
+      "api_p95_ms": 72.528,
+      "attempted": 449,
+      "delivery_p95_ms": 70.631,
+      "delivery_p99_ms": 130.769,
+      "disconnects": 0,
+      "errors": {},
+      "expected_deliveries": 44900,
+      "failed": 0,
+      "generator_skipped": 0,
+      "observed_seconds": 95.004558125,
+      "online_end": 100,
+      "received_deliveries": 44900,
+      "started_at": "2026-09-21T16:21:56Z",
+      "stop_reason": "duration complete"
+    },
+    "resources": {
+      "samples": 48,
+      "cpu_avg": 56.81,
+      "cpu_max": 61.81,
+      "available_mb_min": 2455,
+      "imgo_rss_mb_max": 69.9,
+      "imgo_cpu_pct_max_one_core": 15.0,
+      "tx_mbps_max": 7.13
+    }
+  },
+  {
+    "file": "origin-1000-10-split.log",
+    "result": {
+      "accepted": 600,
+      "api_p95_ms": 169.98,
+      "attempted": 600,
+      "delivery_p95_ms": 175.484,
+      "delivery_p99_ms": 289.08,
+      "disconnects": 0,
+      "errors": {},
+      "expected_deliveries": 600000,
+      "failed": 0,
+      "generator_skipped": 0,
+      "observed_seconds": 65.123440333,
+      "online_end": 1000,
+      "received_deliveries": 600000,
+      "started_at": "2026-09-21T16:46:20Z",
+      "stop_reason": "duration complete"
+    },
+    "resources": {
+      "samples": 32,
+      "cpu_avg": 86.3,
+      "cpu_max": 90.18,
+      "available_mb_min": 2132,
+      "imgo_rss_mb_max": 131.7,
+      "imgo_cpu_pct_max_one_core": 52.9,
+      "tx_mbps_max": 104.05
+    }
+  },
+  {
+    "file": "origin-1000-10.log",
+    "result": {
+      "accepted": 1199,
+      "api_p95_ms": 167.517,
+      "attempted": 1199,
+      "delivery_p95_ms": 150.172,
+      "delivery_p99_ms": 237.718,
+      "disconnects": 0,
+      "errors": {},
+      "expected_deliveries": 1199000,
+      "failed": 0,
+      "generator_skipped": 0,
+      "observed_seconds": 125.049779292,
+      "online_end": 1000,
+      "received_deliveries": 1199000,
+      "started_at": "2026-09-21T16:36:44Z",
+      "stop_reason": "duration complete"
+    },
+    "resources": {
+      "samples": 63,
+      "cpu_avg": 85.57,
+      "cpu_max": 89.14,
+      "available_mb_min": 2362,
+      "imgo_rss_mb_max": 125.8,
+      "imgo_cpu_pct_max_one_core": 53.9,
+      "tx_mbps_max": 109.07
+    }
+  },
+  {
+    "file": "origin-1000-20-split.log",
+    "result": {
+      "accepted": 999,
+      "api_p95_ms": 939.775,
+      "attempted": 999,
+      "delivery_p95_ms": 51214.992,
+      "delivery_p99_ms": 52276.749,
+      "disconnects": 163,
+      "errors": {},
+      "expected_deliveries": 999000,
+      "failed": 0,
+      "generator_skipped": 0,
+      "observed_seconds": 55.03376125,
+      "online_end": 837,
+      "received_deliveries": 41679,
+      "started_at": "2026-09-21T16:42:50Z",
+      "stop_reason": "stopped: disconnect or API errors >5%"
+    },
+    "resources": {
+      "samples": 27,
+      "cpu_avg": 86.64,
+      "cpu_max": 100.0,
+      "available_mb_min": 1915,
+      "imgo_rss_mb_max": 270.1,
+      "imgo_cpu_pct_max_one_core": 83.8,
+      "tx_mbps_max": 42.13
+    }
+  },
+  {
+    "file": "origin-1000-20.log",
+    "result": {
+      "accepted": 94,
+      "api_p95_ms": 2312.854,
+      "attempted": 179,
+      "delivery_p95_ms": 2419.543,
+      "delivery_p99_ms": 2612.744,
+      "disconnects": 1000,
+      "errors": {
+        "HTTP transport failed": 85
+      },
+      "expected_deliveries": 94000,
+      "failed": 85,
+      "generator_skipped": 20,
+      "observed_seconds": 15.005697292,
+      "online_end": 0,
+      "received_deliveries": 93970,
+      "started_at": "2026-09-21T16:40:19Z",
+      "stop_reason": "stopped: disconnect or API errors >5%"
+    },
+    "resources": {
+      "samples": 7,
+      "cpu_avg": 82.59,
+      "cpu_max": 100.0,
+      "available_mb_min": 2377,
+      "imgo_rss_mb_max": 131.0,
+      "imgo_cpu_pct_max_one_core": 81.4,
+      "tx_mbps_max": 192.36
+    }
+  },
+  {
+    "file": "origin-500.log",
+    "result": {
+      "accepted": 900,
+      "api_p95_ms": 137.884,
+      "attempted": 900,
+      "delivery_p95_ms": 128.782,
+      "delivery_p99_ms": 205.54,
+      "disconnects": 0,
+      "errors": {},
+      "expected_deliveries": 450000,
+      "failed": 0,
+      "generator_skipped": 0,
+      "observed_seconds": 95.106704875,
+      "online_end": 500,
+      "received_deliveries": 450000,
+      "started_at": "2026-09-21T16:28:24Z",
+      "stop_reason": "duration complete"
+    },
+    "resources": {
+      "samples": 47,
+      "cpu_avg": 72.67,
+      "cpu_max": 76.38,
+      "available_mb_min": 2408,
+      "imgo_rss_mb_max": 89.4,
+      "imgo_cpu_pct_max_one_core": 30.5,
+      "tx_mbps_max": 52.8
+    }
+  }
+]

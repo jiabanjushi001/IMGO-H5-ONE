@@ -1,0 +1,22 @@
+.imgo-wallet { padding:28px; }
+.imgo-wallet-heading h1 { margin:0 0 6px; color:#24314a; font-size:25px; }
+.imgo-wallet-heading p,.imgo-wallet-credit p { margin:0; color:#8590a4; font-size:13px; }
+.imgo-wallet-credit,.imgo-wallet-withdrawals { margin-top:22px; padding:24px; background:#fff; border:1px solid #e7ebf4; border-radius:14px; box-shadow:0 4px 20px #223e7005; }
+.imgo-wallet h2 { margin:0 0 10px; color:#303c54; font-size:17px; }
+.imgo-wallet-credit-fields { display:flex; align-items:center; gap:10px; margin-top:18px; }
+.imgo-wallet-credit-fields .el-input { width:220px; }
+.imgo-wallet-credit-fields:nth-last-child(1) .el-input:nth-child(2) { width:min(420px,40vw); }
+.imgo-wallet-account-summary { color:#526079; font-size:13px; }
+.imgo-wallet-toolbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin-bottom:18px; }
+.imgo-wallet-toolbar h2 { margin:0 auto 0 0; }
+.imgo-wallet-toolbar .el-input { width:220px; }
+.imgo-wallet-toolbar .el-select { width:145px; }
+.imgo-wallet-pagination { padding-top:18px; text-align:right; }
+body:has(.imgo-admin) .imgo-wallet-detail { display:grid; grid-template-columns:1fr 1fr; gap:13px 20px; }
+body:has(.imgo-admin) .imgo-wallet-detail>div { display:flex; flex-direction:column; gap:5px; min-width:0; color:#33405b; overflow-wrap:anywhere; }
+body:has(.imgo-admin) .imgo-wallet-detail span { color:#8a95a8; font-size:12px; }
+body:has(.imgo-admin) .imgo-wallet-detail strong { font-size:18px; }
+body:has(.imgo-admin) .imgo-wallet-account { font-variant-numeric:tabular-nums; letter-spacing:.5px; }
+body:has(.imgo-admin) .imgo-wallet-remark { margin-top:24px; }
+body:has(.imgo-admin) .imgo-wallet-remark label { display:block; margin-bottom:9px; color:#5c687e; font-size:13px; }
+@media(max-width:750px) { .imgo-wallet { padding:16px; } .imgo-wallet-credit-fields { flex-wrap:wrap; } .imgo-wallet-credit-fields .el-input,.imgo-wallet-toolbar .el-input { width:100%; } body:has(.imgo-admin) .imgo-wallet-detail { grid-template-columns:1fr; } }

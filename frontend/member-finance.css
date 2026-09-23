@@ -1,0 +1,15 @@
+.imgo-member-finance-actions {display:flex;align-items:center;gap:10px;justify-content:center;padding-bottom:4px;border-bottom:1px solid #e9edf5;margin-bottom:3px}
+.imgo-member-finance-actions .el-button {margin:0;padding:5px 2px;font-weight:600}
+.imgo-member-finance-summary {padding:12px 16px;background:#f2f6ff;border-radius:9px;color:#54627b;display:flex;align-items:center;gap:5px;flex-wrap:wrap}
+.imgo-member-finance-summary strong {color:#294871;margin-right:8px}
+.imgo-member-finance-summary .el-button {margin-left:auto}
+.imgo-member-finance-form {padding:18px 12px 4px}
+.imgo-member-finance-form .el-form-item {margin-bottom:15px}
+.imgo-member-finance-preview {margin:8px 0 5px 105px;color:#385ba5;font-weight:600}
+.imgo-member-finance-history {margin-top:20px}
+.imgo-member-finance-history h3 {font-size:14px;color:#394863;margin:0 0 9px}
+@media(max-width:700px){.imgo-member-finance-preview{margin-left:0}.imgo-member-finance-history{overflow:auto}}
+
+.imgo-admin .imgo-member-actions-inline { display:flex; flex-wrap:nowrap; align-items:center; justify-content:flex-start; gap:14px; white-space:nowrap; }
+.imgo-admin .imgo-member-actions-inline>.el-button,.imgo-admin .imgo-member-actions-inline .el-dropdown>.el-button { margin:0; padding:8px 0; font-size:12px; }
+.imgo-admin .imgo-member-actions-inline .el-icon-arrow-down { margin-left:3px; font-size:11px; }

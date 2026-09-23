@@ -1,0 +1,25 @@
+[Unit]
+Description=Imgo Gin IM backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=imgo
+Group=imgo
+WorkingDirectory=/opt/imgo
+EnvironmentFile=/opt/imgo/.env
+ExecStart=/opt/imgo/bin/imgo
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/imgo/public/storage
+UMask=0027
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

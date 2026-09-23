@@ -1,0 +1,8 @@
+.env
+bin/
+dist/
+run/
+coverage.out
+public/storage/
+*.log
+.DS_Store

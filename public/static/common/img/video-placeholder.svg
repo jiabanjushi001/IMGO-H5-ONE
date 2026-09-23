@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="640" height="360" viewBox="0 0 640 360" role="img" aria-label="IMGO 视频封面">
+ <defs>
+  <linearGradient id="bg" x2="1" y2="1"><stop stop-color="#eef2ff"/><stop offset="1" stop-color="#dce7f8"/></linearGradient>
+  <linearGradient id="brand" x2="1" y2="1"><stop stop-color="#6375ee"/><stop offset="1" stop-color="#4257cc"/></linearGradient>
+ </defs>
+ <rect width="640" height="360" rx="20" fill="url(#bg)"/>
+ <circle cx="595" cy="30" r="155" fill="#fff" opacity=".27"/>
+ <circle cx="32" cy="360" r="130" fill="#c6d5f5" opacity=".3"/>
+ <rect x="24" y="24" width="592" height="312" rx="16" fill="none" stroke="#fff" stroke-opacity=".65"/>
+ <g transform="translate(191 119)">
+  <rect width="78" height="78" rx="22" fill="url(#brand)"/>
+  <g transform="translate(7 7)"><path d="M17 20h30v21H30l-10 7v-7h-3z" fill="#fff"/><circle cx="26" cy="30" r="2" fill="#4f63e6"/><circle cx="38" cy="30" r="2" fill="#4f63e6"/></g>
+ </g>
+ <text x="291" y="172" font-family="Arial,Helvetica,sans-serif" font-size="49" font-weight="700" letter-spacing="3" fill="#354676">IMGO</text>
+ <rect x="269" y="220" width="102" height="28" rx="14" fill="#fff" fill-opacity=".65"/>
+ <path d="m285 229 8 5-8 5z" fill="#7184b2"/>
+ <text x="305" y="239" font-family="Arial,Helvetica,sans-serif" font-size="12" font-weight="600" letter-spacing="2" fill="#7184b2">VIDEO</text>
+</svg>

@@ -1,0 +1,12 @@
+.imgo-bank { padding: 24px; background: #f5f7fa; min-height: 100%; box-sizing: border-box; }
+.imgo-bank-heading { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; }
+.imgo-bank-heading h1 { margin: 0 0 8px; font-size: 24px; color: #27344c; }
+.imgo-bank-heading p { margin: 0; color: #8993a1; font-size: 14px; }
+.imgo-bank-toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; background: white; padding: 18px; border: 1px solid #e8edf4; border-bottom: 0; }
+.imgo-bank-toolbar .el-input { max-width: 280px; }
+.imgo-bank-pagination { text-align: right; padding: 20px 0; }
+.imgo-bank-form .el-input, .imgo-bank-form .el-select { width: 100%; }
+.imgo-bank-user { line-height: 1.45; overflow-wrap: anywhere; }
+.imgo-bank-user-account { font-weight: 600; color: #27344c; }
+.imgo-bank-user-name { color: #8993a1; }
+@media(max-width:600px) { .imgo-bank { padding: 12px; } .imgo-bank-heading h1 { font-size: 20px; } }
