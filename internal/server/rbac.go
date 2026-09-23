@@ -76,24 +76,28 @@ func (a *App) authorizeManage(ctx context.Context, user M, permission string) er
 func (a *App) adminAccessInfo(ctx context.Context, user M) (M, error) {
 	roleID := number(user["admin_role_id"])
 	if number(user["user_id"]) == 1 {
-		return M{"admin_role_id": int64(0), "admin_role_name": "超级管理员", "menu_permissions": allAdminPermissionKeys()}, nil
+		return M{"admin_role_id": int64(0), "admin_role_name": "超级管理员", "agent_mode": int64(0), "menu_permissions": allAdminPermissionKeys()}, nil
 	}
 	if roleID < 1 {
-		return M{"admin_role_id": int64(0), "admin_role_name": "普通用户", "menu_permissions": []string{}}, nil
+		return M{"admin_role_id": int64(0), "admin_role_name": "普通用户", "agent_mode": int64(0), "menu_permissions": []string{}}, nil
 	}
-	role, err := one(ctx, a.db, "SELECT name,status FROM "+a.t("imgo_admin_role")+" WHERE role_id=?", roleID)
+	role, err := one(ctx, a.db, "SELECT name,status,agent_mode FROM "+a.t("imgo_admin_role")+" WHERE role_id=?", roleID)
 	if errors.Is(err, sql.ErrNoRows) {
-		return M{"admin_role_id": roleID, "admin_role_name": "普通用户", "menu_permissions": []string{}}, nil
+		return M{"admin_role_id": roleID, "admin_role_name": "普通用户", "agent_mode": int64(0), "menu_permissions": []string{}}, nil
 	}
 	if err != nil {
 		return nil, err
 	}
 	permissions := []string{}
+	agentMode := int64(0)
 	if number(role["status"]) == 1 {
+		if number(role["agent_mode"]) != 0 {
+			agentMode = 1
+		}
 		permissions, err = a.menuPermissions(ctx, user)
 		if err != nil {
 			return nil, err
 		}
 	}
-	return M{"admin_role_id": roleID, "admin_role_name": str(role["name"]), "menu_permissions": permissions}, nil
+	return M{"admin_role_id": roleID, "admin_role_name": str(role["name"]), "agent_mode": agentMode, "menu_permissions": permissions}, nil
 }

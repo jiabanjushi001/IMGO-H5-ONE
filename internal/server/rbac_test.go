@@ -118,8 +118,8 @@ func TestAdminAccessInfoForOrdinaryAndCustomRoles(t *testing.T) {
 
 	t.Run("custom role returns its name and permissions", func(t *testing.T) {
 		a, mock := testApp(t)
-		mock.ExpectQuery("SELECT name,status FROM `yu_imgo_admin_role`").WithArgs(int64(3)).
-			WillReturnRows(sqlmock.NewRows([]string{"name", "status"}).AddRow("客服", 1))
+		mock.ExpectQuery("SELECT name,status,agent_mode FROM `yu_imgo_admin_role`").WithArgs(int64(3)).
+			WillReturnRows(sqlmock.NewRows([]string{"name", "status", "agent_mode"}).AddRow("客服", 1, 0))
 		mock.ExpectQuery("SELECT p.permission_key FROM `yu_imgo_admin_role`").WithArgs(int64(3)).
 			WillReturnRows(sqlmock.NewRows([]string{"permission_key"}).AddRow("manage.users"))
 		info, err := a.adminAccessInfo(context.Background(), M{"user_id": 7, "admin_role_id": 3})
