@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"database/sql/driver"
+	"errors"
 	"regexp"
 	"testing"
 	"time"
@@ -72,8 +73,8 @@ func TestAgentOverviewScopesCardsTrendsAndOnlineSamples(t *testing.T) {
 		mock.ExpectQuery("SELECT COUNT\\(\\*\\).*FROM `yu_" + tc.table + "` .*" + regexp.QuoteMeta(tc.scope)).WithArgs(args...).
 			WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)", "COALESCE(SUM(create_time>=?),0)"}).AddRow(2, 1))
 	}
-	mock.ExpectQuery("SELECT .*FROM `yu_imgo_referral_path`.*descendant_user_id").WithArgs(int64(7)).
-		WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(12).AddRow(13))
+	mock.ExpectQuery("SELECT .*FROM `yu_imgo_referral_path`.*path.descendant_user_id<>\\?").WithArgs(int64(7), int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(7).AddRow(12).AddRow(13))
 	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(users\\),0\\).*FROM `yu_imgo_agent_online_sample`.*agent_user_id=\\?").
 		WithArgs(int64(7), sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"peak_users", "peak_devices"}).AddRow(1, 2))
 	for _, tc := range []struct {
@@ -122,13 +123,51 @@ func TestAgentOverviewRecordsEachEnabledAgentIncludingEmptyTeams(t *testing.T) {
 	a.hub.peers["child-a-device"] = &peer{uid: 12, claims: claims{Exp: now.Add(time.Hour).Unix()}, done: make(chan struct{})}
 	a.hub.peers["child-b"] = &peer{uid: 13, claims: claims{Exp: now.Add(time.Hour).Unix()}, done: make(chan struct{})}
 	a.hub.peers["outsider"] = &peer{uid: 99, claims: claims{Exp: now.Add(time.Hour).Unix()}, done: make(chan struct{})}
+	mock.ExpectExec("INSERT INTO `yu_imgo_online_sample`").WithArgs(now.Unix()/60*60, 3, 4).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectQuery("SELECT .*agent_user_id.*descendant_user_id.*FROM `yu_user`.*JOIN `yu_imgo_admin_role`.*LEFT JOIN `yu_imgo_referral_path`").
 		WillReturnRows(sqlmock.NewRows([]string{"agent_user_id", "descendant_user_id"}).AddRow(7, 12).AddRow(7, 12).AddRow(7, 13).AddRow(8, nil))
-	mock.ExpectExec("INSERT INTO `yu_imgo_online_sample`").WithArgs(now.Unix()/60*60, 3, 4).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec("INSERT INTO `yu_imgo_agent_online_sample`").WithArgs(int64(7), now.Unix()/60*60, 2, 3).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec("INSERT INTO `yu_imgo_agent_online_sample`").WithArgs(int64(8), now.Unix()/60*60, 0, 0).WillReturnResult(sqlmock.NewResult(0, 1))
 	if err := a.recordOnline(context.Background(), now); err != nil {
 		t.Fatal(err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAgentOverviewGlobalSampleSurvivesTeamLookupFailure(t *testing.T) {
+	a, mock := testApp(t)
+	now := time.Now()
+	lookupError := errors.New("team lookup unavailable")
+	mock.ExpectExec("INSERT INTO `yu_imgo_online_sample`").WithArgs(now.Unix()/60*60, 0, 0).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery("SELECT .*agent_user_id.*descendant_user_id.*FROM `yu_user`").
+		WillReturnError(lookupError)
+	if err := a.recordOnline(context.Background(), now); !errors.Is(err, lookupError) {
+		t.Fatalf("lookup error = %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAgentOverviewContinuesAfterAgentSampleFailure(t *testing.T) {
+	a, mock := testApp(t)
+	now := time.Now()
+	writeError := errors.New("one agent sample failed")
+	mock.ExpectExec("INSERT INTO `yu_imgo_online_sample`").WithArgs(now.Unix()/60*60, 0, 0).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery("SELECT .*agent_user_id.*descendant_user_id.*FROM `yu_user`").
+		WillReturnRows(sqlmock.NewRows([]string{"agent_user_id", "descendant_user_id"}).AddRow(7, nil).AddRow(8, nil).AddRow(9, nil))
+	mock.ExpectExec("INSERT INTO `yu_imgo_agent_online_sample`").WithArgs(int64(7), now.Unix()/60*60, 0, 0).
+		WillReturnError(writeError)
+	mock.ExpectExec("INSERT INTO `yu_imgo_agent_online_sample`").WithArgs(int64(8), now.Unix()/60*60, 0, 0).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("INSERT INTO `yu_imgo_agent_online_sample`").WithArgs(int64(9), now.Unix()/60*60, 0, 0).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	if err := a.recordOnline(context.Background(), now); !errors.Is(err, writeError) {
+		t.Fatalf("sample error = %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

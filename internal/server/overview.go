@@ -2,17 +2,31 @@ package server
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"time"
 )
 
 var dashboardZone = time.FixedZone("Asia/Shanghai", 8*60*60)
 
 func (a *App) recordOnline(ctx context.Context, now time.Time) error {
-	// Resolve team membership before touching the Hub, then release its lock
-	// before any sample write. A LEFT JOIN keeps agents with no descendants.
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	users, devices := a.hub.onlineCounts(now)
+	sampleAt := now.Unix() / 60 * 60
+	_, sampleErr := a.db.ExecContext(ctx, "INSERT INTO "+a.t("imgo_online_sample")+" (sample_at,users,devices) VALUES (?,?,?) ON DUPLICATE KEY UPDATE users=GREATEST(users,VALUES(users)),devices=GREATEST(devices,VALUES(devices))", sampleAt, users, devices)
+	if sampleErr != nil {
+		sampleErr = fmt.Errorf("global online sample: %w", sampleErr)
+	}
+	if err := ctx.Err(); err != nil {
+		return errors.Join(sampleErr, err)
+	}
+	// Resolve team membership outside the Hub lock. A LEFT JOIN keeps agents
+	// with no descendants, so each enabled agent receives a zero sample.
 	teams, err := rows(ctx, a.db, "SELECT agent.user_id AS agent_user_id,child.user_id AS descendant_user_id FROM "+a.t("user")+" agent JOIN "+a.t("imgo_admin_role")+" ar ON ar.role_id=agent.admin_role_id LEFT JOIN "+a.t("imgo_referral_path")+" rp ON rp.ancestor_user_id=agent.user_id AND rp.depth>0 LEFT JOIN "+a.t("user")+" child ON child.user_id=rp.descendant_user_id AND child.delete_time=0 WHERE agent.status=1 AND agent.delete_time=0 AND ar.status=1 AND ar.agent_mode=1 ORDER BY agent.user_id,rp.descendant_user_id")
 	if err != nil {
-		return err
+		return errors.Join(sampleErr, fmt.Errorf("agent online membership: %w", err))
 	}
 	teamUsers := map[int64]map[int64]bool{}
 	agentIDs := []int64{}
@@ -29,18 +43,16 @@ func (a *App) recordOnline(ctx context.Context, now time.Time) error {
 			teamUsers[agentID][childID] = true
 		}
 	}
-	users, devices := a.hub.onlineCounts(now)
-	sampleAt := now.Unix() / 60 * 60
-	if _, err := a.db.ExecContext(ctx, "INSERT INTO "+a.t("imgo_online_sample")+" (sample_at,users,devices) VALUES (?,?,?) ON DUPLICATE KEY UPDATE users=GREATEST(users,VALUES(users)),devices=GREATEST(devices,VALUES(devices))", sampleAt, users, devices); err != nil {
-		return err
-	}
 	for _, agentID := range agentIDs {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(sampleErr, err)
+		}
 		users, devices := a.hub.onlineCountsForUsers(teamUsers[agentID], now)
 		if _, err := a.db.ExecContext(ctx, "INSERT INTO "+a.t("imgo_agent_online_sample")+" (agent_user_id,sample_at,users,devices) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE users=GREATEST(users,VALUES(users)),devices=GREATEST(devices,VALUES(devices))", agentID, sampleAt, users, devices); err != nil {
-			return err
+			sampleErr = errors.Join(sampleErr, fmt.Errorf("agent %d online sample: %w", agentID, err))
 		}
 	}
-	return nil
+	return sampleErr
 }
 
 // Called only by the HTTP server, after schema validation, not by migration tools.
@@ -53,7 +65,7 @@ func (a *App) StartOverviewMetrics() {
 		tick := time.NewTicker(time.Minute)
 		defer tick.Stop()
 		for {
-			job, stop := context.WithTimeout(ctx, 5*time.Second)
+			job, stop := context.WithTimeout(ctx, 50*time.Second)
 			if err := a.recordOnline(job, time.Now()); err != nil && ctx.Err() == nil {
 				a.log.Error("online metrics", "error", err)
 			}
@@ -150,12 +162,14 @@ func (a *App) overview(r *request) (any, error) {
 		users, devices = a.hub.onlineCounts(now)
 	} else {
 		allowed := map[int64]bool{}
-		members, err := rows(r.ctx(), a.db, "SELECT path.descendant_user_id AS user_id FROM "+a.t("imgo_referral_path")+" path JOIN "+a.t("user")+" child ON child.user_id=path.descendant_user_id WHERE path.ancestor_user_id=? AND path.depth>0 AND child.delete_time=0", scope.AgentUserID)
+		members, err := rows(r.ctx(), a.db, "SELECT path.descendant_user_id AS user_id FROM "+a.t("imgo_referral_path")+" path JOIN "+a.t("user")+" child ON child.user_id=path.descendant_user_id WHERE path.ancestor_user_id=? AND path.depth>0 AND path.descendant_user_id<>? AND child.delete_time=0", scope.AgentUserID, scope.AgentUserID)
 		if err != nil {
 			return nil, err
 		}
 		for _, member := range members {
-			allowed[number(member["user_id"])] = true
+			if userID := number(member["user_id"]); userID > 0 && userID != scope.AgentUserID {
+				allowed[userID] = true
+			}
 		}
 		users, devices = a.hub.onlineCountsForUsers(allowed, now)
 	}
