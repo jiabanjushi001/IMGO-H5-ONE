@@ -25,18 +25,19 @@ func (a *App) manageRole(r *request) (any, error) {
 		}
 		return result, nil
 	case "index":
-		list, err := r.list("SELECT r.role_id,r.name,r.remark,r.status,r.created_at,r.updated_at," +
+		list, err := r.list("SELECT r.role_id,r.name,r.remark,r.status,r.agent_mode,r.role_code,r.created_at,r.updated_at," +
 			"COUNT(DISTINCT u.user_id) user_count,GROUP_CONCAT(DISTINCT p.permission_key ORDER BY p.sort SEPARATOR ',') permissions " +
 			"FROM " + a.t("imgo_admin_role") + " r " +
 			"LEFT JOIN " + a.t("user") + " u ON u.admin_role_id=r.role_id AND u.delete_time=0 " +
 			"LEFT JOIN " + a.t("imgo_admin_role_permission") + " rp ON rp.role_id=r.role_id " +
 			"LEFT JOIN " + a.t("imgo_admin_permission") + " p ON p.permission_id=rp.permission_id " +
-			"GROUP BY r.role_id,r.name,r.remark,r.status,r.created_at,r.updated_at ORDER BY r.role_id")
+			"GROUP BY r.role_id,r.name,r.remark,r.status,r.agent_mode,r.role_code,r.created_at,r.updated_at ORDER BY r.role_id")
 		if err != nil {
 			return nil, err
 		}
 		for _, role := range list {
 			role["permissions"] = splitPermissionKeys(str(role["permissions"]))
+			role["role_code"] = str(role["role_code"])
 		}
 		counts, err := r.one("SELECT SUM(CASE WHEN user_id=1 THEN 1 ELSE 0 END) super_count," +
 			"SUM(CASE WHEN user_id<>1 AND COALESCE(admin_role_id,0)=0 THEN 1 ELSE 0 END) ordinary_count " +
@@ -45,12 +46,12 @@ func (a *App) manageRole(r *request) (any, error) {
 			return nil, err
 		}
 		builtins := []M{
-			{"role_id": int64(-1), "name": "超级管理员", "remark": "拥有后台全部权限", "status": int64(1), "user_count": number(counts["super_count"]), "permissions": allAdminPermissionKeys(), "builtin": true},
-			{"role_id": int64(0), "name": "普通用户", "remark": "仅使用聊天功能", "status": int64(1), "user_count": number(counts["ordinary_count"]), "permissions": []string{}, "builtin": true},
+			{"role_id": int64(-1), "name": "超级管理员", "remark": "拥有后台全部权限", "status": int64(1), "agent_mode": int64(0), "role_code": "", "user_count": number(counts["super_count"]), "permissions": allAdminPermissionKeys(), "builtin": true},
+			{"role_id": int64(0), "name": "普通用户", "remark": "仅使用聊天功能", "status": int64(1), "agent_mode": int64(0), "role_code": "", "user_count": number(counts["ordinary_count"]), "permissions": []string{}, "builtin": true},
 		}
 		return append(builtins, list...), nil
 	case "detail":
-		role, err := r.one("SELECT role_id,name,remark,status,created_at,updated_at FROM "+a.t("imgo_admin_role")+" WHERE role_id=?", r.n("role_id"))
+		role, err := r.one("SELECT role_id,name,remark,status,agent_mode,role_code,created_at,updated_at FROM "+a.t("imgo_admin_role")+" WHERE role_id=?", r.n("role_id"))
 		if err != nil {
 			return nil, err
 		}
@@ -58,6 +59,7 @@ func (a *App) manageRole(r *request) (any, error) {
 		if err != nil {
 			return nil, err
 		}
+		role["role_code"] = str(role["role_code"])
 		keys := make([]string, 0, len(permissions))
 		for _, permission := range permissions {
 			keys = append(keys, str(permission["permission_key"]))
@@ -88,6 +90,7 @@ func (a *App) manageRole(r *request) (any, error) {
 func (a *App) attachAdminRoleNames(r *request, users []M) error {
 	roleIDs := map[int64]bool{}
 	for _, user := range users {
+		user["admin_role_agent_mode"] = int64(0)
 		if number(user["user_id"]) == 1 {
 			user["admin_role_name"] = "超级管理员"
 			continue
@@ -112,17 +115,22 @@ func (a *App) attachAdminRoleNames(r *request, users []M) error {
 	for i, roleID := range ids {
 		args[i] = roleID
 	}
-	roles, err := rows(r.ctx(), a.db, "SELECT role_id,name FROM "+a.t("imgo_admin_role")+" WHERE role_id IN ("+marks(len(ids))+")", args...)
+	roles, err := rows(r.ctx(), a.db, "SELECT role_id,name,agent_mode FROM "+a.t("imgo_admin_role")+" WHERE role_id IN ("+marks(len(ids))+")", args...)
 	if err != nil {
 		return err
 	}
 	names := map[int64]string{}
+	agentModes := map[int64]int64{}
 	for _, role := range roles {
-		names[number(role["role_id"])] = str(role["name"])
+		roleID := number(role["role_id"])
+		names[roleID] = str(role["name"])
+		agentModes[roleID] = number(role["agent_mode"])
 	}
 	for _, user := range users {
-		if name := names[number(user["admin_role_id"])]; name != "" {
+		roleID := number(user["admin_role_id"])
+		if name := names[roleID]; name != "" {
 			user["admin_role_name"] = name
+			user["admin_role_agent_mode"] = agentModes[roleID]
 		}
 	}
 	return nil
@@ -141,6 +149,16 @@ func (a *App) saveAdminRole(r *request) (any, error) {
 	if status != 0 && status != 1 {
 		return nil, r.fail("角色状态无效")
 	}
+	agentMode := int64(0)
+	if value, supplied := r.p["agent_mode"]; supplied {
+		switch str(value) {
+		case "0":
+		case "1":
+			agentMode = 1
+		default:
+			return nil, r.fail("代理模式无效")
+		}
+	}
 	permissions, err := requestedPermissionKeys(r.p["permissions"])
 	if err != nil {
 		return nil, err
@@ -153,7 +171,7 @@ func (a *App) saveAdminRole(r *request) (any, error) {
 	roleID := r.n("role_id")
 	now := time.Now().Unix()
 	if roleID == 0 {
-		result, execErr := tx.ExecContext(r.ctx(), "INSERT INTO "+a.t("imgo_admin_role")+" (name,remark,status,created_at,updated_at) VALUES (?,?,?,?,?)", name, remark, status, now, now)
+		result, execErr := tx.ExecContext(r.ctx(), "INSERT INTO "+a.t("imgo_admin_role")+" (name,remark,status,agent_mode,created_at,updated_at) VALUES (?,?,?,?,?,?)", name, remark, status, agentMode, now, now)
 		if execErr != nil {
 			return nil, roleWriteError(execErr)
 		}
@@ -162,7 +180,7 @@ func (a *App) saveAdminRole(r *request) (any, error) {
 			return nil, err
 		}
 	} else {
-		result, execErr := tx.ExecContext(r.ctx(), "UPDATE "+a.t("imgo_admin_role")+" SET name=?,remark=?,status=?,updated_at=? WHERE role_id=?", name, remark, status, now, roleID)
+		result, execErr := tx.ExecContext(r.ctx(), "UPDATE "+a.t("imgo_admin_role")+" SET name=?,remark=?,status=?,agent_mode=?,updated_at=? WHERE role_id=?", name, remark, status, agentMode, now, roleID)
 		if execErr != nil {
 			return nil, roleWriteError(execErr)
 		}
@@ -198,6 +216,13 @@ func (a *App) deleteAdminRole(r *request) error {
 		return err
 	}
 	defer tx.Rollback()
+	var roleCode sql.NullString
+	if err = tx.QueryRowContext(r.ctx(), "SELECT role_code FROM "+a.t("imgo_admin_role")+" WHERE role_id=? FOR UPDATE", roleID).Scan(&roleCode); err != nil {
+		return err
+	}
+	if roleCode.String == "mentor" {
+		return clientError{"导师专员角色不能删除", 409}
+	}
 	var count int64
 	if err = tx.QueryRowContext(r.ctx(), "SELECT COUNT(*) FROM "+a.t("user")+" WHERE admin_role_id=? AND delete_time=0", roleID).Scan(&count); err != nil {
 		return err

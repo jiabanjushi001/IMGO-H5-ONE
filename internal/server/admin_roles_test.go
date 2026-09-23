@@ -21,9 +21,9 @@ func TestManageRolePermissionsReturnsAssignableCatalog(t *testing.T) {
 
 func TestManageRoleIndexIncludesBuiltInRoles(t *testing.T) {
 	a, mock := testApp(t)
-	mock.ExpectQuery("SELECT r.role_id,r.name,r.remark,r.status").
-		WillReturnRows(sqlmock.NewRows([]string{"role_id", "name", "remark", "status", "created_at", "updated_at", "user_count", "permissions"}).
-			AddRow(5, "客服", "", 1, 10, 10, 2, "manage.users"))
+	mock.ExpectQuery("SELECT r.role_id,r.name,r.remark,r.status,r.agent_mode,r.role_code").
+		WillReturnRows(sqlmock.NewRows([]string{"role_id", "name", "remark", "status", "agent_mode", "role_code", "created_at", "updated_at", "user_count", "permissions"}).
+			AddRow(5, "客服", "", 1, 0, nil, 10, 10, 2, "manage.users"))
 	mock.ExpectQuery("SELECT SUM\\(CASE WHEN user_id=1").
 		WillReturnRows(sqlmock.NewRows([]string{"super_count", "ordinary_count"}).AddRow(1, 6))
 
@@ -41,6 +41,9 @@ func TestManageRoleIndexIncludesBuiltInRoles(t *testing.T) {
 	if roles[1]["builtin"] != true || number(roles[1]["user_count"]) != 6 || len(roles[1]["permissions"].([]string)) != 0 {
 		t.Fatalf("ordinary role = %#v", roles[1])
 	}
+	if roles[2]["role_code"] != "" || number(roles[2]["agent_mode"]) != 0 || number(roles[0]["agent_mode"]) != 0 {
+		t.Fatalf("role metadata = %#v", roles)
+	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +53,7 @@ func TestManageRoleSaveCreatesRoleWithSelectedPermissions(t *testing.T) {
 	a, mock := testApp(t)
 	mock.ExpectBegin()
 	mock.ExpectExec("INSERT INTO `yu_imgo_admin_role`").
-		WithArgs("客服", "只管理成员", int64(1), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs("客服", "只管理成员", int64(1), int64(0), sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(5, 1))
 	mock.ExpectExec("INSERT INTO `yu_imgo_admin_role_permission`").WithArgs(int64(5), "manage.users").WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
@@ -60,6 +63,118 @@ func TestManageRoleSaveCreatesRoleWithSelectedPermissions(t *testing.T) {
 	}))
 	if err != nil || number(result.(M)["role_id"]) != 5 {
 		t.Fatalf("save role: result=%#v error=%v", result, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestManageRoleDetailReturnsAgentModeAndRoleCode(t *testing.T) {
+	a, mock := testApp(t)
+	mock.ExpectQuery("SELECT role_id,name,remark,status,agent_mode,role_code,created_at,updated_at FROM `yu_imgo_admin_role` WHERE role_id=\\?").
+		WithArgs(int64(5)).WillReturnRows(sqlmock.NewRows([]string{"role_id", "name", "remark", "status", "agent_mode", "role_code", "created_at", "updated_at"}).
+		AddRow(5, "导师专员", "", 1, 1, "mentor", 10, 10))
+	mock.ExpectQuery("SELECT p.permission_key FROM `yu_imgo_admin_role_permission`").
+		WithArgs(int64(5)).WillReturnRows(sqlmock.NewRows([]string{"permission_key"}).AddRow("manage.users"))
+	result, err := a.manageRole(bankRequest(a, "/manage/role/detail", 1, M{"role_id": 5}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	role := result.(M)
+	if number(role["agent_mode"]) != 1 || role["role_code"] != "mentor" {
+		t.Fatalf("role metadata = %#v", role)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSaveAdminRolePersistsAgentMode(t *testing.T) {
+	a, mock := testApp(t)
+	mock.ExpectBegin()
+	mock.ExpectExec("INSERT INTO `yu_imgo_admin_role` \\(name,remark,status,agent_mode,created_at,updated_at\\)").
+		WithArgs("导师助手", "", int64(1), int64(1), sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(9, 1))
+	mock.ExpectCommit()
+	result, err := a.manageRole(bankRequest(a, "/manage/role/save", 1, M{
+		"name": "导师助手", "status": 1, "agent_mode": 1,
+	}))
+	if err != nil || number(result.(M)["role_id"]) != 9 {
+		t.Fatalf("save agent role: result=%#v error=%v", result, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSaveAdminRoleUpdatesAgentMode(t *testing.T) {
+	a, mock := testApp(t)
+	mock.ExpectBegin()
+	mock.ExpectExec("UPDATE `yu_imgo_admin_role` SET name=\\?,remark=\\?,status=\\?,agent_mode=\\?,updated_at=\\? WHERE role_id=\\?").
+		WithArgs("客服", "", int64(1), int64(1), sqlmock.AnyArg(), int64(5)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("DELETE FROM `yu_imgo_admin_role_permission` WHERE role_id=\\?").
+		WithArgs(int64(5)).WillReturnResult(sqlmock.NewResult(0, 0))
+	mock.ExpectCommit()
+	result, err := a.manageRole(bankRequest(a, "/manage/role/save", 1, M{
+		"role_id": 5, "name": "客服", "status": 1, "agent_mode": 1,
+	}))
+	if err != nil || number(result.(M)["role_id"]) != 5 {
+		t.Fatalf("update agent role: result=%#v error=%v", result, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSaveAdminRoleRejectsInvalidAgentMode(t *testing.T) {
+	for _, mode := range []any{-1, 2, "invalid", 0.5, nil} {
+		a, mock := testApp(t)
+		_, err := a.manageRole(bankRequest(a, "/manage/role/save", 1, M{
+			"name": "导师助手", "status": 1, "agent_mode": mode,
+		}))
+		if got, ok := err.(clientError); !ok || got.code != 400 || got.message != "代理模式无效" {
+			t.Fatalf("agent_mode=%v returned %v", mode, err)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+func TestMentorPresetCannotBeDeleted(t *testing.T) {
+	a, mock := testApp(t)
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT role_code FROM `yu_imgo_admin_role` WHERE role_id=\\? FOR UPDATE").
+		WithArgs(int64(5)).WillReturnRows(sqlmock.NewRows([]string{"role_code"}).AddRow("mentor"))
+	mock.ExpectRollback()
+	_, err := a.manageRole(bankRequest(a, "/manage/role/del", 1, M{"role_id": 5}))
+	if got, ok := err.(clientError); !ok || got.code != 409 || got.message != "导师专员角色不能删除" {
+		t.Fatalf("delete mentor role: %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAttachAdminRoleNamesIncludesAgentMode(t *testing.T) {
+	a, mock := testApp(t)
+	users := []M{
+		{"user_id": int64(1), "admin_role_id": int64(0)},
+		{"user_id": int64(7), "admin_role_id": int64(3)},
+		{"user_id": int64(8), "admin_role_id": int64(0)},
+		{"user_id": int64(9), "admin_role_id": int64(4)},
+	}
+	mock.ExpectQuery("SELECT role_id,name,agent_mode FROM `yu_imgo_admin_role` WHERE role_id IN").
+		WithArgs(int64(3), int64(4)).
+		WillReturnRows(sqlmock.NewRows([]string{"role_id", "name", "agent_mode"}).AddRow(3, "导师专员", 1).AddRow(4, "客服", 0))
+	if err := a.attachAdminRoleNames(bankRequest(a, "/manage/user/index", 1, M{}), users); err != nil {
+		t.Fatal(err)
+	}
+	for i, want := range []int64{0, 1, 0, 0} {
+		if got := number(users[i]["admin_role_agent_mode"]); got != want {
+			t.Fatalf("user %d agent mode = %d, want %d", i, got, want)
+		}
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
@@ -89,8 +204,8 @@ func TestAttachAdminRoleNamesDecoratesMemberRows(t *testing.T) {
 		{"user_id": int64(7), "admin_role_id": int64(3)},
 		{"user_id": int64(8), "admin_role_id": int64(0)},
 	}
-	mock.ExpectQuery("SELECT role_id,name FROM `yu_imgo_admin_role` WHERE role_id IN").WithArgs(int64(3)).
-		WillReturnRows(sqlmock.NewRows([]string{"role_id", "name"}).AddRow(3, "客服"))
+	mock.ExpectQuery("SELECT role_id,name,agent_mode FROM `yu_imgo_admin_role` WHERE role_id IN").WithArgs(int64(3)).
+		WillReturnRows(sqlmock.NewRows([]string{"role_id", "name", "agent_mode"}).AddRow(3, "客服", 0))
 	if err := a.attachAdminRoleNames(bankRequest(a, "/manage/user/index", 1, M{}), users); err != nil {
 		t.Fatal(err)
 	}

@@ -22,9 +22,11 @@ const ImgoMemberRoleSelect = {
       if (this.saving || Number(adminRoleID) === this.roleValue) return
       const previousID = this.roleValue
       const previousName = this.roleLabel
+      const previousAgentMode = Number(this.row.admin_role_agent_mode || 0)
       const selected = this.roles.find(role => Number(role.role_id) === Number(adminRoleID))
       this.$set(this.row, 'admin_role_id', Number(adminRoleID))
       this.$set(this.row, 'admin_role_name', selected ? selected.name : '普通用户')
+      this.$set(this.row, 'admin_role_agent_mode', selected ? Number(selected.agent_mode || 0) : 0)
       this.saving = true
       try {
         const result = await this.$api.userApi.setRole({ user_id: this.row.user_id, admin_role_id: Number(adminRoleID) })
@@ -33,6 +35,7 @@ const ImgoMemberRoleSelect = {
       } catch (error) {
         this.$set(this.row, 'admin_role_id', previousID)
         this.$set(this.row, 'admin_role_name', previousName)
+        this.$set(this.row, 'admin_role_agent_mode', previousAgentMode)
         this.$message.error(error.message || '角色设置失败')
       } finally { this.saving = false }
     }

@@ -232,6 +232,7 @@ const referralFilterControl = 't("imgo-member-referral-filter",{attrs:{scope:e.p
 const financeAction = 'Number((e.$store.state.userInfo||{}).user_id)===1?t("div",{staticClass:"imgo-member-finance-actions"},[t("el-button",{attrs:{type:"text",size:"small"},on:{click:function(){return e.$refs.memberFinance.open(s.row,"recharge")}}},[e._v("充值")]),t("el-button",{attrs:{type:"text",size:"small"},on:{click:function(){return e.$refs.memberFinance.open(s.row,"withdraw")}}},[e._v("提现")])]):e._e()';
 members = members.split(checkInModule + '\n').join('');
 members = members.split(financeModule + '\n').join('');
+members = members.replace(/\/\* IMGO_MEMBER_ROLE_BEGIN \*\/[\s\S]*?\/\* IMGO_MEMBER_ROLE_END \*\//, '');
 members = members.replace(/\/\* IMGO_REFERRAL_FILTER_BEGIN \*\/[\s\S]*?\/\* IMGO_REFERRAL_FILTER_END \*\/\n?/, '');
 members = members.replace(/\/\/ Vue 2 component embedded in the existing compiled member page\.[\s\S]*?\n(?=s\.r\(t\))/, '');
 members = members.split(referralFilterControl + ',').join('');

@@ -3,7 +3,7 @@ const ImgoRolePanel = {
   data() {
     return {
       roles: [], permissions: [], activeRoleID: null, loading: false, saving: false,
-      form: { role_id: 0, name: '', remark: '', status: 1, permissions: [], builtin: false }
+      form: { role_id: 0, name: '', remark: '', status: 1, agent_mode: 1, role_code: '', permissions: [], builtin: false }
     }
   },
   mounted() { this.load() },
@@ -28,13 +28,14 @@ const ImgoRolePanel = {
     },
     create() {
       this.activeRoleID = null
-      this.form = { role_id: 0, name: '', remark: '', status: 1, permissions: [], builtin: false }
+      this.form = { role_id: 0, name: '', remark: '', status: 1, agent_mode: 1, role_code: '', permissions: [], builtin: false }
     },
     select(role) {
       this.activeRoleID = Number(role.role_id)
       this.form = {
         role_id: Number(role.role_id), name: role.name || '', remark: role.remark || '',
-        status: Number(role.status), permissions: Array.isArray(role.permissions) ? [...role.permissions] : [],
+        status: Number(role.status), agent_mode: Number(role.agent_mode || 0), role_code: role.role_code || '',
+        permissions: Array.isArray(role.permissions) ? [...role.permissions] : [],
         builtin: Boolean(role.builtin)
       }
     },
@@ -54,7 +55,7 @@ const ImgoRolePanel = {
       finally { this.saving = false }
     },
     async remove() {
-      if (!this.form.role_id || this.form.builtin) return
+      if (!this.form.role_id || this.form.builtin || this.form.role_code === 'mentor') return
       try {
         await this.$confirm('确定删除该角色？已绑定用户的角色不能删除。', '删除角色', { type: 'warning' })
         const result = await this.$api.roleApi.del({ role_id: this.form.role_id })
@@ -93,11 +94,15 @@ const ImgoRolePanel = {
           h('el-form', { props: { labelWidth: '92px' } }, [
             h('el-form-item', { props: { label: '角色名称', required: !this.form.builtin } }, [h('el-input', { props: { value: this.form.name, disabled: this.form.builtin, maxlength: 64, showWordLimit: !this.form.builtin, placeholder: '例如：客服、群聊管理员' }, on: { input: value => { this.form.name = value } } })]),
             h('el-form-item', { props: { label: '角色状态' } }, [h('el-switch', { props: { value: this.form.status, disabled: this.form.builtin, activeValue: 1, inactiveValue: 0, activeText: '启用', inactiveText: '禁用' }, on: { input: value => { this.form.status = Number(value) } } })]),
+            h('el-form-item', { props: { label: '代理模式' } }, [
+              h('el-switch', { props: { value: this.form.agent_mode, disabled: this.form.builtin, activeValue: 1, inactiveValue: 0, activeText: '开启', inactiveText: '关闭' }, on: { input: value => { this.form.agent_mode = Number(value) } } }),
+              h('p', { class: 'imgo-role-agent-help' }, '开启后，该角色只能管理自己的邀请下级')
+            ]),
             h('el-form-item', { props: { label: '角色备注' } }, [h('el-input', { props: { value: this.form.remark, disabled: this.form.builtin, type: 'textarea', rows: 3, maxlength: 255, showWordLimit: !this.form.builtin, placeholder: '说明该角色的使用范围' }, on: { input: value => { this.form.remark = value } } })]),
             h('el-form-item', { props: { label: '菜单权限' } }, [h('el-checkbox-group', { class: 'imgo-role-permissions', props: { value: this.form.permissions, disabled: this.form.builtin }, on: { input: value => { this.form.permissions = value } } }, permissionBoxes)])
           ]),
           this.form.builtin ? h('div', { class: 'imgo-role-system-note' }, '系统角色为固定权限，不可编辑或删除。') : h('div', { class: 'imgo-role-actions' }, [
-            this.form.role_id ? h('el-button', { props: { type: 'danger', plain: true }, on: { click: this.remove } }, '删除角色') : null,
+            this.form.role_id && this.form.role_code !== 'mentor' ? h('el-button', { props: { type: 'danger', plain: true }, on: { click: this.remove } }, '删除角色') : null,
             h('el-button', { props: { type: 'primary', loading: this.saving }, on: { click: this.save } }, '保存角色')
           ])
         ])
