@@ -108,19 +108,45 @@ func TestSaveAdminRolePersistsAgentMode(t *testing.T) {
 }
 
 func TestSaveAdminRoleUpdatesAgentMode(t *testing.T) {
+	for _, mode := range []int64{0, 1} {
+		t.Run(str(mode), func(t *testing.T) {
+			a, mock := testApp(t)
+			mock.ExpectBegin()
+			mock.ExpectExec("UPDATE `yu_imgo_admin_role` SET name=\\?,remark=\\?,status=\\?,agent_mode=\\?,updated_at=\\? WHERE role_id=\\?").
+				WithArgs("客服", "", int64(1), mode, sqlmock.AnyArg(), int64(5)).
+				WillReturnResult(sqlmock.NewResult(0, 1))
+			mock.ExpectExec("DELETE FROM `yu_imgo_admin_role_permission` WHERE role_id=\\?").
+				WithArgs(int64(5)).WillReturnResult(sqlmock.NewResult(0, 0))
+			mock.ExpectCommit()
+			result, err := a.manageRole(bankRequest(a, "/manage/role/save", 1, M{
+				"role_id": 5, "name": "客服", "status": 1, "agent_mode": mode,
+			}))
+			if err != nil || number(result.(M)["role_id"]) != 5 {
+				t.Fatalf("update agent role: result=%#v error=%v", result, err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestSaveAdminRoleOmittingAgentModePreservesExistingMode(t *testing.T) {
 	a, mock := testApp(t)
 	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT agent_mode FROM `yu_imgo_admin_role` WHERE role_id=\\? FOR UPDATE").
+		WithArgs(int64(5)).WillReturnRows(sqlmock.NewRows([]string{"agent_mode"}).AddRow(1))
 	mock.ExpectExec("UPDATE `yu_imgo_admin_role` SET name=\\?,remark=\\?,status=\\?,agent_mode=\\?,updated_at=\\? WHERE role_id=\\?").
-		WithArgs("客服", "", int64(1), int64(1), sqlmock.AnyArg(), int64(5)).
+		WithArgs("导师新名称", "更新备注", int64(1), int64(1), sqlmock.AnyArg(), int64(5)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec("DELETE FROM `yu_imgo_admin_role_permission` WHERE role_id=\\?").
 		WithArgs(int64(5)).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectCommit()
 	result, err := a.manageRole(bankRequest(a, "/manage/role/save", 1, M{
-		"role_id": 5, "name": "客服", "status": 1, "agent_mode": 1,
+		"role_id": 5, "name": "导师新名称", "remark": "更新备注", "status": 1,
 	}))
 	if err != nil || number(result.(M)["role_id"]) != 5 {
-		t.Fatalf("update agent role: result=%#v error=%v", result, err)
+		t.Fatalf("update role without agent_mode: result=%#v error=%v", result, err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

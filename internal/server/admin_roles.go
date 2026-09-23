@@ -150,7 +150,8 @@ func (a *App) saveAdminRole(r *request) (any, error) {
 		return nil, r.fail("角色状态无效")
 	}
 	agentMode := int64(0)
-	if value, supplied := r.p["agent_mode"]; supplied {
+	value, supplied := r.p["agent_mode"]
+	if supplied {
 		switch str(value) {
 		case "0":
 		case "1":
@@ -180,6 +181,11 @@ func (a *App) saveAdminRole(r *request) (any, error) {
 			return nil, err
 		}
 	} else {
+		if !supplied {
+			if err = tx.QueryRowContext(r.ctx(), "SELECT agent_mode FROM "+a.t("imgo_admin_role")+" WHERE role_id=? FOR UPDATE", roleID).Scan(&agentMode); err != nil {
+				return nil, err
+			}
+		}
 		result, execErr := tx.ExecContext(r.ctx(), "UPDATE "+a.t("imgo_admin_role")+" SET name=?,remark=?,status=?,agent_mode=?,updated_at=? WHERE role_id=?", name, remark, status, agentMode, now, roleID)
 		if execErr != nil {
 			return nil, roleWriteError(execErr)
