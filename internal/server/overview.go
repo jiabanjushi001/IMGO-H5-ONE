@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 )
 
 var dashboardZone = time.FixedZone("Asia/Shanghai", 8*60*60)
 
 const agentOnlineSampleBatchSize = 200
+const agentOnlineSampleWorkers = 4
 
 func (a *App) recordOnline(ctx context.Context, now time.Time) error {
 	if err := ctx.Err(); err != nil {
@@ -38,6 +40,9 @@ func (a *App) recordOnline(ctx context.Context, now time.Time) error {
 	teamUsers := map[int64]map[int64]bool{}
 	agentIDs := []int64{}
 	for _, row := range teams {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(sampleErr, err)
+		}
 		agentID := number(row["agent_user_id"])
 		if agentID < 1 {
 			continue
@@ -50,24 +55,47 @@ func (a *App) recordOnline(ctx context.Context, now time.Time) error {
 			teamUsers[agentID][childID] = true
 		}
 	}
+	jobs := make(chan []int64, (len(agentIDs)+agentOnlineSampleBatchSize-1)/agentOnlineSampleBatchSize)
 	for start := 0; start < len(agentIDs); start += agentOnlineSampleBatchSize {
-		if err := ctx.Err(); err != nil {
-			return errors.Join(sampleErr, err)
-		}
 		end := min(start+agentOnlineSampleBatchSize, len(agentIDs))
-		batch := agentIDs[start:end]
-		args := make([]any, 0, 4*len(batch))
-		for _, agentID := range batch {
-			users, devices := a.hub.onlineCountsForUsers(teamUsers[agentID], now)
-			args = append(args, agentID, sampleAt, users, devices)
-		}
-		values := strings.TrimSuffix(strings.Repeat("(?,?,?,?),", len(batch)), ",")
-		batchCtx, stopBatch := context.WithTimeout(ctx, 5*time.Second)
-		_, err := a.db.ExecContext(batchCtx, "INSERT INTO "+a.t("imgo_agent_online_sample")+" (agent_user_id,sample_at,users,devices) VALUES "+values+" ON DUPLICATE KEY UPDATE users=GREATEST(users,VALUES(users)),devices=GREATEST(devices,VALUES(devices))", args...)
-		stopBatch()
-		if err != nil {
-			sampleErr = errors.Join(sampleErr, fmt.Errorf("agent online samples %d-%d: %w", batch[0], batch[len(batch)-1], err))
-		}
+		jobs <- agentIDs[start:end]
+	}
+	close(jobs)
+	batchErrors := make(chan error, len(jobs))
+	var workers sync.WaitGroup
+	for range min(agentOnlineSampleWorkers, len(jobs)) {
+		workers.Add(1)
+		go func() {
+			defer workers.Done()
+			for batch := range jobs {
+				if ctx.Err() != nil {
+					return
+				}
+				args := make([]any, 0, 4*len(batch))
+				for _, agentID := range batch {
+					if ctx.Err() != nil {
+						return
+					}
+					users, devices := a.hub.onlineCountsForUsers(teamUsers[agentID], now)
+					args = append(args, agentID, sampleAt, users, devices)
+				}
+				values := strings.TrimSuffix(strings.Repeat("(?,?,?,?),", len(batch)), ",")
+				batchCtx, stopBatch := context.WithTimeout(ctx, 5*time.Second)
+				_, err := a.db.ExecContext(batchCtx, "INSERT INTO "+a.t("imgo_agent_online_sample")+" (agent_user_id,sample_at,users,devices) VALUES "+values+" ON DUPLICATE KEY UPDATE users=GREATEST(users,VALUES(users)),devices=GREATEST(devices,VALUES(devices))", args...)
+				stopBatch()
+				if err != nil {
+					batchErrors <- fmt.Errorf("agent online samples %d-%d: %w", batch[0], batch[len(batch)-1], err)
+				}
+			}
+		}()
+	}
+	workers.Wait()
+	close(batchErrors)
+	for err := range batchErrors {
+		sampleErr = errors.Join(sampleErr, err)
+	}
+	if err := ctx.Err(); err != nil {
+		return errors.Join(sampleErr, err)
 	}
 	return sampleErr
 }
@@ -82,9 +110,11 @@ func (a *App) StartOverviewMetrics() {
 		tick := time.NewTicker(time.Minute)
 		defer tick.Stop()
 		for {
-			if err := a.recordOnline(ctx, time.Now()); err != nil && ctx.Err() == nil {
+			job, stop := context.WithTimeout(ctx, 50*time.Second)
+			if err := a.recordOnline(job, time.Now()); err != nil && ctx.Err() == nil {
 				a.log.Error("online metrics", "error", err)
 			}
+			stop()
 			select {
 			case <-ctx.Done():
 				return

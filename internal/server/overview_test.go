@@ -155,6 +155,7 @@ func TestAgentOverviewGlobalSampleSurvivesTeamLookupFailure(t *testing.T) {
 
 func TestAgentOverviewBatchesManyAgentsAndContinuesAfterBatchTimeout(t *testing.T) {
 	a, mock := testApp(t)
+	mock.MatchExpectationsInOrder(false)
 	now := time.Now()
 	mock.ExpectExec("INSERT INTO `yu_imgo_online_sample`").WithArgs(now.Unix()/60*60, 0, 0).
 		WillReturnResult(sqlmock.NewResult(0, 1))
@@ -185,6 +186,78 @@ func TestAgentOverviewBatchesManyAgentsAndContinuesAfterBatchTimeout(t *testing.
 	}
 	if err := a.recordOnline(context.Background(), now); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("sample error = %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAgentOverviewRunsManySlowBatchesConcurrently(t *testing.T) {
+	a, mock := testApp(t)
+	mock.MatchExpectationsInOrder(false)
+	now := time.Now()
+	sampleAt := now.Unix() / 60 * 60
+	mock.ExpectExec("INSERT INTO `yu_imgo_online_sample`").WithArgs(sampleAt, 0, 0).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	agents := sqlmock.NewRows([]string{"agent_user_id", "descendant_user_id"})
+	for id := int64(1001); id <= 2401; id++ {
+		agents.AddRow(id, nil)
+	}
+	mock.ExpectQuery("SELECT .*agent_user_id.*descendant_user_id.*FROM `yu_user`").WillReturnRows(agents)
+	for batch := int64(0); batch < 8; batch++ {
+		first := int64(1001) + batch*200
+		last := min(first+199, int64(2401))
+		args := []driver.Value{}
+		for id := first; id <= last; id++ {
+			args = append(args, id, sampleAt, 0, 0)
+		}
+		expect := mock.ExpectExec("INSERT INTO `yu_imgo_agent_online_sample`.*VALUES \\(\\?,\\?,\\?,\\?\\)").WithArgs(args...).WillDelayFor(500 * time.Millisecond)
+		if batch == 0 {
+			expect.WillReturnError(context.DeadlineExceeded)
+		} else {
+			expect.WillReturnResult(sqlmock.NewResult(0, int64(len(args)/4)))
+		}
+	}
+	started := time.Now()
+	if err := a.recordOnline(context.Background(), now); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("first batch timeout = %v", err)
+	}
+	if elapsed := time.Since(started); elapsed > 2800*time.Millisecond {
+		t.Fatalf("slow batches ran serially: %v", elapsed)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAgentOverviewStopsConcurrentBatchesAtRoundDeadline(t *testing.T) {
+	a, mock := testApp(t)
+	mock.MatchExpectationsInOrder(false)
+	now := time.Now()
+	sampleAt := now.Unix() / 60 * 60
+	mock.ExpectExec("INSERT INTO `yu_imgo_online_sample`").WithArgs(sampleAt, 0, 0).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	agents := sqlmock.NewRows([]string{"agent_user_id", "descendant_user_id"})
+	for id := int64(1001); id <= 1800; id++ {
+		agents.AddRow(id, nil)
+	}
+	mock.ExpectQuery("SELECT .*agent_user_id.*descendant_user_id.*FROM `yu_user`").WillReturnRows(agents)
+	for batch := int64(0); batch < 4; batch++ {
+		args := []driver.Value{}
+		for id := int64(1001) + batch*200; id <= 1200+batch*200; id++ {
+			args = append(args, id, sampleAt, 0, 0)
+		}
+		mock.ExpectExec("INSERT INTO `yu_imgo_agent_online_sample`.*VALUES \\(\\?,\\?,\\?,\\?\\)").
+			WithArgs(args...).WillDelayFor(2 * time.Second).WillReturnResult(sqlmock.NewResult(0, 200))
+	}
+	round, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	started := time.Now()
+	if err := a.recordOnline(round, now); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("round deadline = %v", err)
+	}
+	if elapsed := time.Since(started); elapsed > 1500*time.Millisecond {
+		t.Fatalf("cancelled round kept workers alive: %v", elapsed)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
