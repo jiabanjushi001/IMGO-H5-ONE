@@ -126,8 +126,9 @@ func TestAgentOverviewRecordsEachEnabledAgentIncludingEmptyTeams(t *testing.T) {
 	mock.ExpectExec("INSERT INTO `yu_imgo_online_sample`").WithArgs(now.Unix()/60*60, 3, 4).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectQuery("SELECT .*agent_user_id.*descendant_user_id.*FROM `yu_user`.*JOIN `yu_imgo_admin_role`.*LEFT JOIN `yu_imgo_referral_path`").
 		WillReturnRows(sqlmock.NewRows([]string{"agent_user_id", "descendant_user_id"}).AddRow(7, 12).AddRow(7, 12).AddRow(7, 13).AddRow(8, nil))
-	mock.ExpectExec("INSERT INTO `yu_imgo_agent_online_sample`").WithArgs(int64(7), now.Unix()/60*60, 2, 3).WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec("INSERT INTO `yu_imgo_agent_online_sample`").WithArgs(int64(8), now.Unix()/60*60, 0, 0).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("INSERT INTO `yu_imgo_agent_online_sample`.*VALUES \\(\\?,\\?,\\?,\\?\\),\\(\\?,\\?,\\?,\\?\\)").
+		WithArgs(int64(7), now.Unix()/60*60, 2, 3, int64(8), now.Unix()/60*60, 0, 0).
+		WillReturnResult(sqlmock.NewResult(0, 2))
 	if err := a.recordOnline(context.Background(), now); err != nil {
 		t.Fatal(err)
 	}
@@ -152,21 +153,37 @@ func TestAgentOverviewGlobalSampleSurvivesTeamLookupFailure(t *testing.T) {
 	}
 }
 
-func TestAgentOverviewContinuesAfterAgentSampleFailure(t *testing.T) {
+func TestAgentOverviewBatchesManyAgentsAndContinuesAfterBatchTimeout(t *testing.T) {
 	a, mock := testApp(t)
 	now := time.Now()
-	writeError := errors.New("one agent sample failed")
 	mock.ExpectExec("INSERT INTO `yu_imgo_online_sample`").WithArgs(now.Unix()/60*60, 0, 0).
 		WillReturnResult(sqlmock.NewResult(0, 1))
+	agents := sqlmock.NewRows([]string{"agent_user_id", "descendant_user_id"})
+	for id := int64(1001); id <= 1401; id++ {
+		agents.AddRow(id, nil)
+	}
 	mock.ExpectQuery("SELECT .*agent_user_id.*descendant_user_id.*FROM `yu_user`").
-		WillReturnRows(sqlmock.NewRows([]string{"agent_user_id", "descendant_user_id"}).AddRow(7, nil).AddRow(8, nil).AddRow(9, nil))
-	mock.ExpectExec("INSERT INTO `yu_imgo_agent_online_sample`").WithArgs(int64(7), now.Unix()/60*60, 0, 0).
-		WillReturnError(writeError)
-	mock.ExpectExec("INSERT INTO `yu_imgo_agent_online_sample`").WithArgs(int64(8), now.Unix()/60*60, 0, 0).
-		WillReturnResult(sqlmock.NewResult(0, 1))
-	mock.ExpectExec("INSERT INTO `yu_imgo_agent_online_sample`").WithArgs(int64(9), now.Unix()/60*60, 0, 0).
-		WillReturnResult(sqlmock.NewResult(0, 1))
-	if err := a.recordOnline(context.Background(), now); !errors.Is(err, writeError) {
+		WillReturnRows(agents)
+	for _, batch := range []struct {
+		first, last int64
+		fail        bool
+	}{
+		{1001, 1200, true},
+		{1201, 1400, false},
+		{1401, 1401, false},
+	} {
+		args := []driver.Value{}
+		for id := batch.first; id <= batch.last; id++ {
+			args = append(args, id, now.Unix()/60*60, 0, 0)
+		}
+		expect := mock.ExpectExec("INSERT INTO `yu_imgo_agent_online_sample`.*VALUES \\(\\?,\\?,\\?,\\?\\)").WithArgs(args...)
+		if batch.fail {
+			expect.WillReturnError(context.DeadlineExceeded)
+		} else {
+			expect.WillReturnResult(sqlmock.NewResult(0, int64(len(args)/4)))
+		}
+	}
+	if err := a.recordOnline(context.Background(), now); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("sample error = %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {

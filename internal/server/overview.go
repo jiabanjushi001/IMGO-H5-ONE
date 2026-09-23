@@ -4,10 +4,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 )
 
 var dashboardZone = time.FixedZone("Asia/Shanghai", 8*60*60)
+
+const agentOnlineSampleBatchSize = 200
 
 func (a *App) recordOnline(ctx context.Context, now time.Time) error {
 	if err := ctx.Err(); err != nil {
@@ -15,7 +18,9 @@ func (a *App) recordOnline(ctx context.Context, now time.Time) error {
 	}
 	users, devices := a.hub.onlineCounts(now)
 	sampleAt := now.Unix() / 60 * 60
-	_, sampleErr := a.db.ExecContext(ctx, "INSERT INTO "+a.t("imgo_online_sample")+" (sample_at,users,devices) VALUES (?,?,?) ON DUPLICATE KEY UPDATE users=GREATEST(users,VALUES(users)),devices=GREATEST(devices,VALUES(devices))", sampleAt, users, devices)
+	globalCtx, stopGlobal := context.WithTimeout(ctx, 5*time.Second)
+	_, sampleErr := a.db.ExecContext(globalCtx, "INSERT INTO "+a.t("imgo_online_sample")+" (sample_at,users,devices) VALUES (?,?,?) ON DUPLICATE KEY UPDATE users=GREATEST(users,VALUES(users)),devices=GREATEST(devices,VALUES(devices))", sampleAt, users, devices)
+	stopGlobal()
 	if sampleErr != nil {
 		sampleErr = fmt.Errorf("global online sample: %w", sampleErr)
 	}
@@ -24,7 +29,9 @@ func (a *App) recordOnline(ctx context.Context, now time.Time) error {
 	}
 	// Resolve team membership outside the Hub lock. A LEFT JOIN keeps agents
 	// with no descendants, so each enabled agent receives a zero sample.
-	teams, err := rows(ctx, a.db, "SELECT agent.user_id AS agent_user_id,child.user_id AS descendant_user_id FROM "+a.t("user")+" agent JOIN "+a.t("imgo_admin_role")+" ar ON ar.role_id=agent.admin_role_id LEFT JOIN "+a.t("imgo_referral_path")+" rp ON rp.ancestor_user_id=agent.user_id AND rp.depth>0 LEFT JOIN "+a.t("user")+" child ON child.user_id=rp.descendant_user_id AND child.delete_time=0 WHERE agent.status=1 AND agent.delete_time=0 AND ar.status=1 AND ar.agent_mode=1 ORDER BY agent.user_id,rp.descendant_user_id")
+	membershipCtx, stopMembership := context.WithTimeout(ctx, 20*time.Second)
+	teams, err := rows(membershipCtx, a.db, "SELECT agent.user_id AS agent_user_id,child.user_id AS descendant_user_id FROM "+a.t("user")+" agent JOIN "+a.t("imgo_admin_role")+" ar ON ar.role_id=agent.admin_role_id LEFT JOIN "+a.t("imgo_referral_path")+" rp ON rp.ancestor_user_id=agent.user_id AND rp.depth>0 LEFT JOIN "+a.t("user")+" child ON child.user_id=rp.descendant_user_id AND child.delete_time=0 WHERE agent.status=1 AND agent.delete_time=0 AND ar.status=1 AND ar.agent_mode=1 ORDER BY agent.user_id,rp.descendant_user_id")
+	stopMembership()
 	if err != nil {
 		return errors.Join(sampleErr, fmt.Errorf("agent online membership: %w", err))
 	}
@@ -43,13 +50,23 @@ func (a *App) recordOnline(ctx context.Context, now time.Time) error {
 			teamUsers[agentID][childID] = true
 		}
 	}
-	for _, agentID := range agentIDs {
+	for start := 0; start < len(agentIDs); start += agentOnlineSampleBatchSize {
 		if err := ctx.Err(); err != nil {
 			return errors.Join(sampleErr, err)
 		}
-		users, devices := a.hub.onlineCountsForUsers(teamUsers[agentID], now)
-		if _, err := a.db.ExecContext(ctx, "INSERT INTO "+a.t("imgo_agent_online_sample")+" (agent_user_id,sample_at,users,devices) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE users=GREATEST(users,VALUES(users)),devices=GREATEST(devices,VALUES(devices))", agentID, sampleAt, users, devices); err != nil {
-			sampleErr = errors.Join(sampleErr, fmt.Errorf("agent %d online sample: %w", agentID, err))
+		end := min(start+agentOnlineSampleBatchSize, len(agentIDs))
+		batch := agentIDs[start:end]
+		args := make([]any, 0, 4*len(batch))
+		for _, agentID := range batch {
+			users, devices := a.hub.onlineCountsForUsers(teamUsers[agentID], now)
+			args = append(args, agentID, sampleAt, users, devices)
+		}
+		values := strings.TrimSuffix(strings.Repeat("(?,?,?,?),", len(batch)), ",")
+		batchCtx, stopBatch := context.WithTimeout(ctx, 5*time.Second)
+		_, err := a.db.ExecContext(batchCtx, "INSERT INTO "+a.t("imgo_agent_online_sample")+" (agent_user_id,sample_at,users,devices) VALUES "+values+" ON DUPLICATE KEY UPDATE users=GREATEST(users,VALUES(users)),devices=GREATEST(devices,VALUES(devices))", args...)
+		stopBatch()
+		if err != nil {
+			sampleErr = errors.Join(sampleErr, fmt.Errorf("agent online samples %d-%d: %w", batch[0], batch[len(batch)-1], err))
 		}
 	}
 	return sampleErr
@@ -65,11 +82,9 @@ func (a *App) StartOverviewMetrics() {
 		tick := time.NewTicker(time.Minute)
 		defer tick.Stop()
 		for {
-			job, stop := context.WithTimeout(ctx, 50*time.Second)
-			if err := a.recordOnline(job, time.Now()); err != nil && ctx.Err() == nil {
+			if err := a.recordOnline(ctx, time.Now()); err != nil && ctx.Err() == nil {
 				a.log.Error("online metrics", "error", err)
 			}
-			stop()
 			select {
 			case <-ctx.Done():
 				return
