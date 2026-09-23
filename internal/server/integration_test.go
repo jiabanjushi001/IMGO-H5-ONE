@@ -486,6 +486,131 @@ func TestMySQLIntegration(t *testing.T) {
 			t.Fatal("failed registration was not rolled back", e)
 		}
 	})
+	t.Run("registration automation follows nearest mentor with independent overrides", func(t *testing.T) {
+		oldSys, oldChat := a.config(ctx, "sysInfo"), a.config(ctx, "chatInfo")
+		setConfig := func(name string, value M) {
+			t.Helper()
+			if err := update(ctx, a.db, a.t("config"), M{"value": js(value)}, "name=?", name); err != nil {
+				t.Fatal(err)
+			}
+		}
+		defer setConfig("sysInfo", oldSys)
+		defer setConfig("chatInfo", oldChat)
+		sys := a.config(ctx, "sysInfo")
+		sys["runMode"] = 2
+		setConfig("sysInfo", sys)
+		chat := a.config(ctx, "chatInfo")
+		chat["autoAddUser"] = M{"status": 1, "user_ids": []any{2}, "welcome": "全局欢迎"}
+		chat["autoAddGroup"] = M{"status": 1, "owner_uid": 1, "userMax": 5, "name": "全局群"}
+		setConfig("chatInfo", chat)
+		roleID, err := insert(ctx, a.db, a.t("imgo_admin_role"), M{"name": "自动分配导师", "status": 1, "agent_mode": 1, "created_at": time.Now().Unix(), "updated_at": time.Now().Unix()})
+		if err != nil {
+			t.Fatal(err)
+		}
+		create := func(account string) int64 {
+			t.Helper()
+			id, err := a.createUser(ctx, a.db, M{"account": account, "password": "test-password"}, "127.0.0.1")
+			if err != nil {
+				t.Fatal(err)
+			}
+			return id
+		}
+		bind := func(child, parent int64) {
+			t.Helper()
+			tx, err := a.db.BeginTx(ctx, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback()
+			if err := a.bindInviter(ctx, tx, child, parent); err != nil {
+				t.Fatal(err)
+			}
+			if err := tx.Commit(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		mentor := create("automation-mentor")
+		if err := update(ctx, a.db, a.t("user"), M{"admin_role_id": roleID}, "user_id=?", mentor); err != nil {
+			t.Fatal(err)
+		}
+		child := create("automation-child")
+		bind(child, mentor)
+		grandchild := create("automation-grandchild")
+		bind(grandchild, child)
+		codeRow, err := one(ctx, a.db, "SELECT invite_code FROM "+a.t("imgo_referral")+" WHERE user_id=?", grandchild)
+		if err != nil {
+			t.Fatal(err)
+		}
+		grandchildCode := str(codeRow["invite_code"])
+		if number(call("/manage/agentSetting/detail", bob, M{"agent_user_id": mentor})["code"]) != 403 {
+			t.Fatal("ordinary user can read mentor settings")
+		}
+		if number(call("/manage/agentSetting/detail", admin, M{"agent_user_id": child})["code"]) != 403 {
+			t.Fatal("non mentor accepted")
+		}
+		if number(call("/manage/agentSetting/save", admin, M{"agent_user_id": mentor, "inherit_auto_user": false, "inherit_auto_group": true, "auto_add_user": M{"status": 1, "user_ids": []any{3}}})["code"]) != 403 {
+			t.Fatal("out of scope customer accepted")
+		}
+		userOverride := M{"status": 1, "user_ids": []any{mentor}, "welcome": "导师欢迎"}
+		groupOverride := M{"status": 1, "owner_uid": mentor, "userMax": 5, "name": "导师群"}
+		for i, tc := range []struct {
+			userInherited, groupInherited bool
+			wantCustomer, wantOwner       int64
+		}{
+			{true, true, 2, 1},
+			{false, true, mentor, 1},
+			{true, false, 2, mentor},
+			{false, false, mentor, mentor},
+		} {
+			config := M{"agent_user_id": mentor, "inherit_auto_user": tc.userInherited, "inherit_auto_group": tc.groupInherited, "auto_add_user": userOverride, "auto_add_group": groupOverride}
+			success("/manage/agentSetting/save", admin, config)
+			detail := obj(success("/manage/agentSetting/detail", admin, M{"agent_user_id": mentor}))
+			if detail["inherit_auto_user"] != tc.userInherited || detail["inherit_auto_group"] != tc.groupInherited {
+				t.Fatalf("case %d detail: %#v", i, detail)
+			}
+			uid, err := a.createRegisteredUser(ctx, M{"account": fmt.Sprintf("automation-new-%d", i), "password": "test-password", "inviteCode": grandchildCode}, "127.0.0.1")
+			if err != nil {
+				t.Fatal(err)
+			}
+			user, err := one(ctx, a.db, "SELECT cs_uid FROM "+a.t("user")+" WHERE user_id=?", uid)
+			if err != nil || number(user["cs_uid"]) != tc.wantCustomer {
+				t.Fatalf("case %d customer: %#v, %v", i, user, err)
+			}
+			group, err := one(ctx, a.db, "SELECT g.owner_id FROM "+a.t("group_user")+" gu JOIN "+a.t("group")+" g ON g.group_id=gu.group_id WHERE gu.user_id=?", uid)
+			if err != nil || number(group["owner_id"]) != tc.wantOwner {
+				t.Fatalf("case %d group: %#v, %v", i, group, err)
+			}
+		}
+		success("/manage/agentSetting/save", admin, M{"agent_user_id": mentor, "inherit_auto_user": false, "inherit_auto_group": true, "auto_add_user": M{"status": 0}})
+		uid, err := a.createRegisteredUser(ctx, M{"account": "automation-disabled", "password": "test-password", "inviteCode": grandchildCode}, "127.0.0.1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		user, err := one(ctx, a.db, "SELECT cs_uid FROM "+a.t("user")+" WHERE user_id=?", uid)
+		if err != nil || number(user["cs_uid"]) != 0 {
+			t.Fatalf("explicitly disabled customer still assigned: %#v, %v", user, err)
+		}
+		nested := create("automation-nested-mentor")
+		bind(nested, child)
+		if err := update(ctx, a.db, a.t("user"), M{"admin_role_id": roleID}, "user_id=?", nested); err != nil {
+			t.Fatal(err)
+		}
+		leaf := create("automation-nested-leaf")
+		bind(leaf, nested)
+		leafCode, err := one(ctx, a.db, "SELECT invite_code FROM "+a.t("imgo_referral")+" WHERE user_id=?", leaf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		success("/manage/agentSetting/save", admin, M{"agent_user_id": nested, "inherit_auto_user": false, "inherit_auto_group": false, "auto_add_user": M{"status": 1, "user_ids": []any{nested}}, "auto_add_group": M{"status": 1, "owner_uid": nested, "userMax": 5, "name": "近导师群"}})
+		uid, err = a.createRegisteredUser(ctx, M{"account": "automation-nested-new", "password": "test-password", "inviteCode": leafCode["invite_code"]}, "127.0.0.1")
+		if err != nil {
+			t.Fatal(err)
+		}
+		user, err = one(ctx, a.db, "SELECT cs_uid FROM "+a.t("user")+" WHERE user_id=?", uid)
+		if err != nil || number(user["cs_uid"]) != nested {
+			t.Fatalf("nearest mentor not selected: %#v, %v", user, err)
+		}
+	})
 
 	t.Run("persistent maintenance scheduler", func(t *testing.T) {
 		if number(call("/manage/task/startTask", alice, M{})["code"]) != 403 {
