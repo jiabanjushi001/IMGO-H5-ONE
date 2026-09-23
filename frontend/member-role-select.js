@@ -12,7 +12,7 @@ const ImgoMemberRoleSelect = {
     if (!window.__imgoRoleOptionsPromise) {
       window.__imgoRoleOptionsPromise = this.$api.roleApi.index({}).then(result => {
         if (result.code !== 0) throw Error(result.msg || '读取角色失败')
-        return Array.isArray(result.data) ? result.data : []
+        return Array.isArray(result.data) ? result.data.filter(role => !role.builtin && Number(role.role_id) > 0) : []
       }).catch(error => { window.__imgoRoleOptionsPromise = null; throw error })
     }
     window.__imgoRoleOptionsPromise.then(roles => { this.roles = roles }).catch(error => this.$message.error(error.message || '读取角色失败'))

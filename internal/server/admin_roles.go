@@ -38,7 +38,17 @@ func (a *App) manageRole(r *request) (any, error) {
 		for _, role := range list {
 			role["permissions"] = splitPermissionKeys(str(role["permissions"]))
 		}
-		return list, nil
+		counts, err := r.one("SELECT SUM(CASE WHEN user_id=1 THEN 1 ELSE 0 END) super_count," +
+			"SUM(CASE WHEN user_id<>1 AND COALESCE(admin_role_id,0)=0 THEN 1 ELSE 0 END) ordinary_count " +
+			"FROM " + a.t("user") + " WHERE delete_time=0")
+		if err != nil {
+			return nil, err
+		}
+		builtins := []M{
+			{"role_id": int64(-1), "name": "超级管理员", "remark": "拥有后台全部权限", "status": int64(1), "user_count": number(counts["super_count"]), "permissions": allAdminPermissionKeys(), "builtin": true},
+			{"role_id": int64(0), "name": "普通用户", "remark": "仅使用聊天功能", "status": int64(1), "user_count": number(counts["ordinary_count"]), "permissions": []string{}, "builtin": true},
+		}
+		return append(builtins, list...), nil
 	case "detail":
 		role, err := r.one("SELECT role_id,name,remark,status,created_at,updated_at FROM "+a.t("imgo_admin_role")+" WHERE role_id=?", r.n("role_id"))
 		if err != nil {

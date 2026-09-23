@@ -19,6 +19,33 @@ func TestManageRolePermissionsReturnsAssignableCatalog(t *testing.T) {
 	}
 }
 
+func TestManageRoleIndexIncludesBuiltInRoles(t *testing.T) {
+	a, mock := testApp(t)
+	mock.ExpectQuery("SELECT r.role_id,r.name,r.remark,r.status").
+		WillReturnRows(sqlmock.NewRows([]string{"role_id", "name", "remark", "status", "created_at", "updated_at", "user_count", "permissions"}).
+			AddRow(5, "客服", "", 1, 10, 10, 2, "manage.users"))
+	mock.ExpectQuery("SELECT SUM\\(CASE WHEN user_id=1").
+		WillReturnRows(sqlmock.NewRows([]string{"super_count", "ordinary_count"}).AddRow(1, 6))
+
+	result, err := a.manageRole(bankRequest(a, "/manage/role/index", 1, M{}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	roles := result.([]M)
+	if len(roles) != 3 || roles[0]["name"] != "超级管理员" || roles[1]["name"] != "普通用户" || roles[2]["name"] != "客服" {
+		t.Fatalf("built-in role order = %#v", roles)
+	}
+	if roles[0]["builtin"] != true || number(roles[0]["user_count"]) != 1 || len(roles[0]["permissions"].([]string)) != len(adminPermissionCatalog) {
+		t.Fatalf("super role = %#v", roles[0])
+	}
+	if roles[1]["builtin"] != true || number(roles[1]["user_count"]) != 6 || len(roles[1]["permissions"].([]string)) != 0 {
+		t.Fatalf("ordinary role = %#v", roles[1])
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestManageRoleSaveCreatesRoleWithSelectedPermissions(t *testing.T) {
 	a, mock := testApp(t)
 	mock.ExpectBegin()

@@ -14,9 +14,10 @@ function imgoBuildAdminMenu(userInfo, routes) {
   const user = userInfo || {}
   const isSuper = Number(user.user_id) === 1
   const permissions = new Set(Array.isArray(user.menu_permissions) ? user.menu_permissions : [])
+  const roleRoute = isSuper ? (routes || []).find(route => route.path === '/manage/role') : null
   const normal = (routes || []).filter(route => {
     if (route.path === '/manage/wallet' || route.path.startsWith('/manage/finance/')) return false
-    if (route.path === '/manage/role') return isSuper
+    if (route.path === '/manage/role') return false
     const permission = imgoAdminPermissionByPath[route.path]
     return isSuper || (!!permission && permissions.has(permission))
   })
@@ -31,6 +32,7 @@ function imgoBuildAdminMenu(userInfo, routes) {
     const bankIndex = normal.findIndex(route => route.path === '/manage/bank')
     normal.splice(bankIndex < 0 ? normal.length : bankIndex, 0, finance)
   }
+  if (roleRoute) normal.push(roleRoute)
   return normal
 }
 

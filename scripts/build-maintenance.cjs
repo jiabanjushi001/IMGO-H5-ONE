@@ -107,8 +107,9 @@ if (!app.includes('path:"/manage/bank",name:"bank"')) {
 if (!app.includes('path:"/manage/role",name:"role"')) {
  const nextRoute = '},{path:"/manage/setting",name:"setting"';
  if (!app.includes(nextRoute)) throw Error('Role route anchor changed');
- app = app.replace(nextRoute, '},{path:"/manage/role",name:"role",component:()=>i.e(585).then(i.bind(i,4585)),meta:{title:"角色权限",icon:"el-icon-lock"}'+nextRoute);
+ app = app.replace(nextRoute, '},{path:"/manage/role",name:"role",component:()=>i.e(585).then(i.bind(i,4585)),meta:{title:"角色",icon:"el-icon-lock"}'+nextRoute);
 }
+app = app.replace('path:"/manage/role",name:"role",component:()=>i.e(585).then(i.bind(i,4585)),meta:{title:"角色权限",icon:"el-icon-lock"}', 'path:"/manage/role",name:"role",component:()=>i.e(585).then(i.bind(i,4585)),meta:{title:"角色",icon:"el-icon-lock"}');
 const oldWalletRoute = '},{path:"/manage/wallet",name:"wallet",component:()=>i.e(585).then(i.bind(i,4585)),meta:{title:"钱包",icon:"el-icon-money"}';
 app = app.replace(oldWalletRoute, '');
 const financeRouteAnchor = '},{path:"/manage/bank",name:"bank"';
