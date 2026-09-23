@@ -10,6 +10,20 @@ import (
 
 func (a *App) manageUser(r *request) (any, error) {
 	uid := r.n("user_id")
+	scope, err := a.adminScope(r.ctx(), r.user)
+	if err != nil {
+		return nil, err
+	}
+	if !scope.Global {
+		if action(r) == "setrole" {
+			return nil, deny()
+		}
+		if action(r) != "index" && action(r) != "add" {
+			if err := a.requireScopedUser(r.ctx(), a.db, scope, uid); err != nil {
+				return nil, err
+			}
+		}
+	}
 	whereUser := "user_id=? AND delete_time=0"
 	if r.uid() != 1 && action(r) != "index" && action(r) != "detail" && action(r) != "checkinhistory" && action(r) != "add" {
 		if action(r) == "setrole" {
@@ -24,22 +38,41 @@ func (a *App) manageUser(r *request) (any, error) {
 	case "index":
 		where := "delete_time=0"
 		args := []any{}
+		from := a.t("user")
+		column := ""
 		referralScope := strings.TrimSpace(r.s("referral_scope"))
 		if referralScope != "" && referralScope != "direct" && referralScope != "all" {
 			return nil, r.fail("下级范围无效")
 		}
+		if !scope.Global {
+			from += " u"
+			column = "u."
+			predicate, scopeArgs := scope.userPredicate("u")
+			where = "u.delete_time=0 AND " + predicate
+			args = append(args, scopeArgs...)
+			if referralScope == "direct" {
+				where += " AND EXISTS (SELECT 1 FROM " + a.t("imgo_referral_path") + " scope_depth WHERE scope_depth.ancestor_user_id=? AND scope_depth.descendant_user_id=u.user_id AND scope_depth.depth=1)"
+				args = append(args, scope.AgentUserID)
+			}
+		}
 		if username := strings.TrimSpace(r.s("keywords")); username != "" {
-			match := "account=?"
-			exact, err := r.one("SELECT COUNT(*) n FROM "+a.t("user")+" WHERE delete_time=0 AND account=?", username)
+			match := column + "account=?"
+			exactWhere := "delete_time=0 AND account=?"
+			exactArgs := []any{username}
+			if !scope.Global {
+				exactWhere = where + " AND u.account=?"
+				exactArgs = append(append([]any{}, args...), username)
+			}
+			exact, err := r.one("SELECT COUNT(*) n FROM "+from+" WHERE "+exactWhere, exactArgs...)
 			if err != nil {
 				return nil, err
 			}
 			value := username
 			if number(exact["n"]) == 0 {
-				match = "account LIKE ? ESCAPE '!'"
+				match = column + "account LIKE ? ESCAPE '!'"
 				value = "%" + strings.NewReplacer("!", "!!", "%", "!%", "_", "!_").Replace(username) + "%"
 			}
-			if referralScope == "" {
+			if !scope.Global || referralScope == "" {
 				where += " AND " + match
 			} else {
 				where += " AND user_id IN (SELECT p.descendant_user_id FROM " + a.t("imgo_referral_path") + " p JOIN " + a.t("user") + " inviter ON inviter.user_id=p.ancestor_user_id WHERE inviter." + match + " AND inviter.delete_time=0"
@@ -49,10 +82,10 @@ func (a *App) manageUser(r *request) (any, error) {
 				where += ")"
 			}
 			args = append(args, value)
-		} else if referralScope != "" {
+		} else if scope.Global && referralScope != "" {
 			return nil, r.fail("请输入用户名后查询下级")
 		}
-		n, e := r.one("SELECT COUNT(*) n FROM "+a.t("user")+" WHERE "+where, args...)
+		n, e := r.one("SELECT COUNT(*) n FROM "+from+" WHERE "+where, args...)
 		if e != nil {
 			return nil, e
 		}
@@ -66,7 +99,11 @@ func (a *App) manageUser(r *request) (any, error) {
 		if r.n("order_type") == 1 {
 			direction = "ASC"
 		}
-		list, e := r.list("SELECT * FROM "+a.t("user")+" WHERE "+where+" ORDER BY "+order+" "+direction+" LIMIT ? OFFSET ?", append(args, limit, offset)...)
+		selectColumns := "*"
+		if !scope.Global {
+			selectColumns = "u.*"
+		}
+		list, e := r.list("SELECT "+selectColumns+" FROM "+from+" WHERE "+where+" ORDER BY "+column+order+" "+direction+" LIMIT ? OFFSET ?", append(args, limit, offset)...)
 		if e != nil {
 			return nil, e
 		}
@@ -135,6 +172,11 @@ func (a *App) manageUser(r *request) (any, error) {
 		id, e := a.createUser(r.ctx(), tx, r.p, a.clientIP(r.c))
 		if e != nil {
 			return nil, e
+		}
+		if !scope.Global {
+			if e = a.bindInviter(r.ctx(), tx, id, scope.AgentUserID); e != nil {
+				return nil, e
+			}
 		}
 		if len(limits) > 0 {
 			if e = update(r.ctx(), tx, a.t("user"), limits, "user_id=?", id); e != nil {
@@ -242,6 +284,11 @@ func (a *App) manageUser(r *request) (any, error) {
 			return nil, e
 		}
 		defer tx.Rollback()
+		if !scope.Global {
+			if e = a.requireScopedUser(r.ctx(), tx, scope, uid); e != nil {
+				return nil, e
+			}
+		}
 		if _, e = one(r.ctx(), tx, "SELECT user_id FROM "+a.t("user")+" WHERE "+whereUser+" FOR UPDATE", uid); e != nil {
 			return nil, deny()
 		}

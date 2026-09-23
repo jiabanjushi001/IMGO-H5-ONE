@@ -228,7 +228,8 @@ const memberRoleModule = read('frontend/member-role-select.js');
 const financeModule = read('frontend/member-finance-dialog.js');
 const referralFilterModule = read('frontend/member-referral-filter.js');
 const referralFilterSource = '/* IMGO_REFERRAL_FILTER_BEGIN */\n' + referralFilterModule + '\n/* IMGO_REFERRAL_FILTER_END */\n';
-const referralFilterControl = 't("imgo-member-referral-filter",{attrs:{scope:e.params.referral_scope,"referrer-account":e.params.referrer_account},on:{"update:scope":function(t){e.$set(e.params,"referral_scope",t)},"update:referrer-account":function(t){e.$set(e.params,"referrer_account",t)},search:function(){return e.handleChange()}}})';
+const referralFilterControl = 't("imgo-member-referral-filter",{attrs:{scope:e.params.referral_scope,"agent-mode":Number((e.$store.state.userInfo||{}).agent_mode)===1,"referrer-account":e.params.referrer_account},on:{"update:scope":function(t){e.$set(e.params,"referral_scope",t)},"update:referrer-account":function(t){e.$set(e.params,"referrer_account",t)},search:function(){return e.handleChange()}}})';
+const previousReferralFilterControl = 't("imgo-member-referral-filter",{attrs:{scope:e.params.referral_scope,"referrer-account":e.params.referrer_account},on:{"update:scope":function(t){e.$set(e.params,"referral_scope",t)},"update:referrer-account":function(t){e.$set(e.params,"referrer_account",t)},search:function(){return e.handleChange()}}})';
 const financeAction = 'Number((e.$store.state.userInfo||{}).user_id)===1?t("div",{staticClass:"imgo-member-finance-actions"},[t("el-button",{attrs:{type:"text",size:"small"},on:{click:function(){return e.$refs.memberFinance.open(s.row,"recharge")}}},[e._v("充值")]),t("el-button",{attrs:{type:"text",size:"small"},on:{click:function(){return e.$refs.memberFinance.open(s.row,"withdraw")}}},[e._v("提现")])]):e._e()';
 members = members.split(checkInModule + '\n').join('');
 members = members.split(financeModule + '\n').join('');
@@ -237,7 +238,9 @@ members = members.replace(/\/\* IMGO_REFERRAL_FILTER_BEGIN \*\/[\s\S]*?\/\* IMGO
 members = members.replace(/\/\/ Vue 2 component embedded in the existing compiled member page\.[\s\S]*?\n(?=s\.r\(t\))/, '');
 members = members.split(referralFilterControl + ',').join('');
 members = members.split(',' + referralFilterControl).join('');
-members = members.replace(/params:\{page:1,limit:20,keywords:"",order_field:"",order_type:1,referral_scope:"(?:direct)?",referrer_account:""\}/, 'params:{page:1,limit:20,keywords:"",order_field:"",order_type:1}');
+members = members.split(previousReferralFilterControl + ',').join('');
+members = members.split(',' + previousReferralFilterControl).join('');
+members = members.replace(/params:\{page:1,limit:20,keywords:"",order_field:"",order_type:1,referral_scope:(?:"(?:direct|all)?"|Number\(\(this\.\$store\.state\.userInfo\|\|\{\}\)\.agent_mode\)===1\?"all":""),referrer_account:""\}/, 'params:{page:1,limit:20,keywords:"",order_field:"",order_type:1}');
 members = members.replaceAll('dialogue:o.Z,ImgoCheckInHistory,ImgoMemberFinanceDialog,ImgoMemberReferralFilter}', 'dialogue:o.Z,ImgoCheckInHistory,ImgoMemberFinanceDialog}');
 // Remove a previously built finance component even when its source has changed.
 members = members.replace(/\n?\/\/ Vue 2 dialog attached to each row's finance buttons on the legacy member page\.[\s\S]*?\n(?=s\.r\(t\))/, '');
@@ -296,7 +299,7 @@ if (!members.includes(memberAddButton)) throw Error('Member toolbar changed; rev
 members = members.replace(memberAddButton, memberAddButton + ',' + referralFilterControl);
 const memberParams = 'params:{page:1,limit:20,keywords:"",order_field:"",order_type:1}';
 if (!members.includes(memberParams)) throw Error('Member filter state changed; review referral filter adapter');
-members = members.replace(memberParams, 'params:{page:1,limit:20,keywords:"",order_field:"",order_type:1,referral_scope:"",referrer_account:""}');
+members = members.replace(memberParams, 'params:{page:1,limit:20,keywords:"",order_field:"",order_type:1,referral_scope:Number((this.$store.state.userInfo||{}).agent_mode)===1?"all":"",referrer_account:""}');
 members = members.replace('dialogue:o.Z,ImgoCheckInHistory,ImgoMemberFinanceDialog}', 'dialogue:o.Z,ImgoCheckInHistory,ImgoMemberFinanceDialog,ImgoMemberReferralFilter}');
 members = members.replace('4368:function(e,t,s){' + checkInModule + '\n' + financeModule + '\n', '4368:function(e,t,s){' + checkInModule + '\n' + financeModule + '\n' + referralFilterSource);
 members = members.replaceAll('attrs:{min:0,max:1e3}', 'attrs:{min:-1,max:1e3}');

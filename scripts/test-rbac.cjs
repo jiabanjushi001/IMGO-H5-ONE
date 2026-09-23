@@ -9,6 +9,7 @@ const read = file => fs.readFileSync(path.join(root, file), 'utf8')
 const rolePanel = read('frontend/role-panel.js')
 const menu = read('frontend/rbac-menu.js')
 const memberRole = read('frontend/member-role-select.js')
+const memberFilter = read('frontend/member-referral-filter.js')
 const build = read('scripts/build-maintenance.cjs')
 const builtMembers = read('public/assets/js/687.70d7eca3.js')
 
@@ -61,6 +62,24 @@ assert.equal(deleteConfirmed, false, 'mentor preset deletion must be guarded in 
 const memberContext = { window: {} }
 vm.runInNewContext(memberRole + '\nthis.component = ImgoMemberRoleSelect', memberContext)
 const memberComponent = memberContext.component
+const filterContext = {}
+vm.runInNewContext(memberFilter + '\nthis.component = ImgoMemberReferralFilter', filterContext)
+const filterComponent = filterContext.component
+for (const [agentMode, expectedClearable] of [[true, false], [false, true]]) {
+  const tree = filterComponent.render.call({ scope: agentMode ? 'all' : '', agentMode, $emit() {} }, h)
+  const select = flatten(tree).find(node => node.tag === 'el-select')
+  assert.equal(select.data.props.clearable, expectedClearable, 'agent filter must keep a selected scope')
+}
+const chunks = []
+vm.runInNewContext(builtMembers, { self: { webpackChunkRaingad_IM: { push: chunk => chunks.push(chunk) } } })
+const memberExports = {}
+const memberRequire = id => id === 1001 ? { Z: component => ({ exports: component }) } : id === 3822 ? { rn: () => ({}) } : {}
+memberRequire.r = () => {}
+memberRequire.d = (target, definitions) => { for (const [key, getter] of Object.entries(definitions)) Object.defineProperty(target, key, { get: getter }) }
+chunks[0][1][4368]({}, memberExports, memberRequire)
+const page = memberExports.default
+assert.equal(page.data.call({ $store: { state: { userInfo: { user_id: 7, agent_mode: 1 } } } }).params.referral_scope, 'all', 'agent member page must start with all descendants')
+assert.equal(page.data.call({ $store: { state: { userInfo: { user_id: 1, agent_mode: 0 } } } }).params.referral_scope, '', 'global member page must keep blank scope')
 const memberRow = { user_id: 7, admin_role_id: 0, admin_role_name: '普通用户', admin_role_agent_mode: 0 }
 const memberState = {
   row: memberRow, roles: [{ role_id: 5, name: '导师专员', agent_mode: 1 }], saving: false,

@@ -4,13 +4,14 @@ const ImgoMemberReferralFilter = {
   name: 'ImgoMemberReferralFilter',
   props: {
     scope: { type: String, default: '' },
+    agentMode: { type: Boolean, default: false },
     referrerAccount: { type: String, default: '' }
   },
   render(h) {
     return h('div', { class: 'imgo-member-referral-filter' }, [
       h('span', { class: 'imgo-member-referral-label' }, '层级'),
       h('el-select', {
-        props: { value: this.scope, clearable: true, placeholder: '不选则查用户本人' },
+        props: { value: this.scope, clearable: !this.agentMode, placeholder: this.agentMode ? '全部下级' : '不选则查用户本人' },
         on: {
           input: value => this.$emit('update:scope', value),
           change: () => this.$emit('search')
