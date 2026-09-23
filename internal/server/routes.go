@@ -39,7 +39,7 @@ func (a *App) register() {
 	addManage("/manage/message", "manage.messages", "index getContacts dealMsg", a.manageMessage)
 	addManage("/manage/task", "manage.settings", "getTaskList startTask stopTask setTaskConfig getTaskLog clearTaskLog", a.task)
 	add("/manage/role", false, true, "index detail save setStatus del permissions", a.manageRole)
-	add("/manage/agentSetting", false, true, "detail save", a.manageAgentSetting)
+	addManage("/manage/agentSetting", "manage.users", "detail save", a.manageAgentSetting)
 	add("/index/install", true, false, "index getEnv version checkDatabase install progress", func(r *request) (any, error) {
 		return nil, clientError{"Go 服务使用命令行部署，已关闭网页安装器", 410}
 	})

@@ -16,14 +16,48 @@ func settingRequest(a *App, path string, p M) *request {
 	return &request{app: a, c: c, p: p, user: M{"user_id": int64(1)}}
 }
 
-func TestAgentSettingRoutesRequireSuperAdministrator(t *testing.T) {
+func TestAgentSettingRoutesRequireMemberPermissionAndHandlerScope(t *testing.T) {
 	a, _ := testApp(t)
 	for _, path := range []string{"/manage/agentsetting/detail", "/manage/agentsetting/save"} {
 		route, ok := a.routes[path]
-		if !ok || !route.super {
-			t.Fatalf("%s must be a super administrator route", path)
+		if !ok || route.super || route.permission != "manage.users" {
+			t.Fatalf("%s must use manage.users and handler scope: %#v", path, route)
 		}
 	}
+}
+
+func TestAgentSettingMentorCanOnlyManageSelf(t *testing.T) {
+	t.Run("self", func(t *testing.T) {
+		a, mock := testApp(t)
+		r := settingRequest(a, "/manage/agentSetting/detail", M{"agent_user_id": 7})
+		r.user = M{"user_id": int64(7), "admin_role_id": int64(3)}
+		mock.ExpectQuery("SELECT agent_mode FROM `yu_imgo_admin_role`").WithArgs(int64(3)).
+			WillReturnRows(sqlmock.NewRows([]string{"agent_mode"}).AddRow(1))
+		mock.ExpectQuery("SELECT .* FROM `yu_user`.*`yu_imgo_admin_role`").WithArgs(int64(7)).
+			WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(7))
+		mock.ExpectQuery("SELECT auto_add_user,auto_add_group FROM `yu_imgo_agent_setting`").WithArgs(int64(7)).
+			WillReturnRows(sqlmock.NewRows([]string{"auto_add_user", "auto_add_group"}))
+		mock.ExpectQuery("SELECT value FROM `yu_config`").WithArgs("chatInfo").WillReturnRows(sqlmock.NewRows([]string{"value"}))
+		if _, err := a.manageAgentSetting(r); err != nil {
+			t.Fatal(err)
+		}
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("other mentor", func(t *testing.T) {
+		a, mock := testApp(t)
+		r := settingRequest(a, "/manage/agentSetting/detail", M{"agent_user_id": 8})
+		r.user = M{"user_id": int64(7), "admin_role_id": int64(3)}
+		mock.ExpectQuery("SELECT agent_mode FROM `yu_imgo_admin_role`").WithArgs(int64(3)).
+			WillReturnRows(sqlmock.NewRows([]string{"agent_mode"}).AddRow(1))
+		_, err := a.manageAgentSetting(r)
+		assertDenied(t, err)
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 func TestAgentSettingDetailReturnsIndependentInheritance(t *testing.T) {

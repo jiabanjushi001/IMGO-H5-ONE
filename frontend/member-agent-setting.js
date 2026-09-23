@@ -14,8 +14,12 @@ const ImgoMemberAgentSettingDialog = {
     isSuperOperator() { return Number((this.$store.state.userInfo || {}).user_id) === 1 }
   },
   methods: {
+    canManageRow(row) {
+      const user = this.$store.state.userInfo || {}
+      return !!row && Number(row.admin_role_agent_mode) === 1 && (Number(user.user_id) === 1 || (Number(user.agent_mode) === 1 && Number(user.user_id) === Number(row.user_id) && Number(row.is_self) === 1))
+    },
     async open(row) {
-      if (!this.isSuperOperator || !row || Number(row.admin_role_agent_mode) !== 1 || this.saving) return
+      if (!this.canManageRow(row) || this.saving) return
       if (this.visible && this.row && Number(this.row.user_id) === Number(row.user_id) && !this.error) return
       const serial = ++this.serial
       this.row = row
@@ -43,7 +47,7 @@ const ImgoMemberAgentSettingDialog = {
       const options = Number(row.status) === 1 ? [{ user_id: Number(row.user_id), account: row.account || String(row.user_id), status: row.status }] : []
       let page = 1, fetched = 0
       while (true) {
-        const response = await this.$api.userApi.getUserList({ keywords: row.account, referral_scope: 'all', page, limit: 200 })
+        const response = await this.$api.userApi.getUserList({ keywords: this.isSuperOperator ? row.account : '', referral_scope: 'all', page, limit: 200 })
         if (Number(response.code) !== 0) throw Error(response.msg || '读取下级账号失败')
         if (!Array.isArray(response.data)) throw Error('下级账号数据无效')
         fetched += response.data.length
@@ -79,7 +83,7 @@ const ImgoMemberAgentSettingDialog = {
       this.serial++
     },
     async submit() {
-      if (!this.row || this.loading || this.saving || this.error || !this.isSuperOperator) return
+      if (!this.row || this.loading || this.saving || this.error || !this.canManageRow(this.row)) return
       if (!this.inheritAutoUser && this.autoAddUser.status === 1 && !this.autoAddUser.user_ids.length) {
         this.$message.error('请选择至少一位自动添加的客服账号')
         return

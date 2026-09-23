@@ -19,6 +19,22 @@ func expectAgentMemberScope(mock sqlmock.Sqlmock) {
 		WillReturnRows(sqlmock.NewRows([]string{"agent_mode"}).AddRow(1))
 }
 
+func expectMemberDecorators(mock sqlmock.Sqlmock, userIDs []int64) {
+	args := make([]driver.Value, len(userIDs))
+	for i, id := range userIDs {
+		args[i] = id
+	}
+	checkInArgs := append([]driver.Value{sqlmock.AnyArg()}, args...)
+	mock.ExpectQuery("SELECT user_id,COUNT\\(\\*\\) total_days").WithArgs(checkInArgs...).
+		WillReturnRows(sqlmock.NewRows([]string{"user_id", "total_days", "last_date", "signed_today"}))
+	mock.ExpectQuery("SELECT user_id,invite_code FROM `yu_imgo_referral`").WithArgs(args...).
+		WillReturnRows(sqlmock.NewRows([]string{"user_id", "invite_code"}))
+	mock.ExpectQuery("SELECT p.ancestor_user_id,COUNT\\(\\*\\) team_count").WithArgs(args...).
+		WillReturnRows(sqlmock.NewRows([]string{"ancestor_user_id", "team_count", "direct_count"}))
+	mock.ExpectQuery("SELECT role_id,name,agent_mode FROM `yu_imgo_admin_role`").WithArgs(int64(3)).
+		WillReturnRows(sqlmock.NewRows([]string{"role_id", "name", "agent_mode"}).AddRow(3, "导师专员", 1))
+}
+
 func TestAgentManageUserListScopesEmptyDirectAndAll(t *testing.T) {
 	for _, tc := range []struct{ name, scope, suffix string }{
 		{"empty", "", ""}, {"all", "all", ""}, {"direct", "direct", " AND scope_depth.depth=1"},
@@ -26,18 +42,18 @@ func TestAgentManageUserListScopesEmptyDirectAndAll(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			a, mock := testApp(t)
 			expectAgentMemberScope(mock)
-			where := "u.delete_time=0 AND (u.user_id<>? AND EXISTS (SELECT 1 FROM `yu_imgo_referral_path` scope_path WHERE scope_path.ancestor_user_id=? AND scope_path.descendant_user_id=u.user_id))"
+			where := "u.delete_time=0 AND (u.user_id=? OR (u.user_id<>? AND EXISTS (SELECT 1 FROM `yu_imgo_referral_path` scope_path WHERE scope_path.ancestor_user_id=? AND scope_path.descendant_user_id=u.user_id)))"
 			if tc.scope == "direct" {
-				where += " AND EXISTS (SELECT 1 FROM `yu_imgo_referral_path` scope_depth WHERE scope_depth.ancestor_user_id=? AND scope_depth.descendant_user_id=u.user_id" + tc.suffix + ")"
+				where = "u.delete_time=0 AND (u.user_id=? OR (u.user_id<>? AND EXISTS (SELECT 1 FROM `yu_imgo_referral_path` scope_path WHERE scope_path.ancestor_user_id=? AND scope_path.descendant_user_id=u.user_id) AND EXISTS (SELECT 1 FROM `yu_imgo_referral_path` scope_depth WHERE scope_depth.ancestor_user_id=? AND scope_depth.descendant_user_id=u.user_id" + tc.suffix + ")))"
 			}
-			args := []driver.Value{int64(7), int64(7)}
+			args := []driver.Value{int64(7), int64(7), int64(7)}
 			if tc.scope == "direct" {
 				args = append(args, int64(7))
 			}
 			mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*) n FROM `yu_user` u WHERE " + where)).WithArgs(args...).
 				WillReturnRows(sqlmock.NewRows([]string{"n"}).AddRow(0))
-			mock.ExpectQuery(regexp.QuoteMeta("SELECT u.* FROM `yu_user` u WHERE " + where + " ORDER BY u.user_id DESC LIMIT ? OFFSET ?")).
-				WithArgs(append(args, int64(20), int64(0))...).WillReturnRows(sqlmock.NewRows([]string{"user_id"}))
+			mock.ExpectQuery(regexp.QuoteMeta("SELECT u.* FROM `yu_user` u WHERE " + where + " ORDER BY (u.user_id=?) DESC,u.user_id DESC LIMIT ? OFFSET ?")).
+				WithArgs(append(args, int64(7), int64(20), int64(0))...).WillReturnRows(sqlmock.NewRows([]string{"user_id"}))
 			r := agentMemberRequest(a, "/manage/user/index", M{"referral_scope": tc.scope})
 			result, err := a.manageUser(r)
 			if err != nil || len(result.([]M)) != 0 {
@@ -47,6 +63,30 @@ func TestAgentManageUserListScopesEmptyDirectAndAll(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func TestAgentManageUserListMarksSelfAndReturnsItFirst(t *testing.T) {
+	a, mock := testApp(t)
+	expectAgentMemberScope(mock)
+	where := "u.delete_time=0 AND (u.user_id=? OR (u.user_id<>? AND EXISTS (SELECT 1 FROM `yu_imgo_referral_path` scope_path WHERE scope_path.ancestor_user_id=? AND scope_path.descendant_user_id=u.user_id)))"
+	args := []driver.Value{int64(7), int64(7), int64(7)}
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*) n FROM `yu_user` u WHERE " + where)).WithArgs(args...).
+		WillReturnRows(sqlmock.NewRows([]string{"n"}).AddRow(2))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT u.* FROM `yu_user` u WHERE " + where + " ORDER BY (u.user_id=?) DESC,u.user_id DESC LIMIT ? OFFSET ?")).
+		WithArgs(append(args, int64(7), int64(20), int64(0))...).
+		WillReturnRows(sqlmock.NewRows([]string{"user_id", "account", "admin_role_id"}).AddRow(7, "mentor", 3).AddRow(8, "child", 0))
+	expectMemberDecorators(mock, []int64{7, 8})
+	got, err := a.manageUser(agentMemberRequest(a, "/manage/user/index", M{"referral_scope": "all"}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	list := got.([]M)
+	if len(list) != 2 || number(list[0]["user_id"]) != 7 || number(list[0]["is_self"]) != 1 || number(list[1]["is_self"]) != 0 {
+		t.Fatalf("self row not first/marked: %#v", list)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
 	}
 }
 
@@ -62,14 +102,14 @@ func TestAgentManageUserSearchKeepsExactAndFuzzyInsideScope(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			a, mock := testApp(t)
 			expectAgentMemberScope(mock)
-			base := "u.delete_time=0 AND (u.user_id<>? AND EXISTS (SELECT 1 FROM `yu_imgo_referral_path` scope_path WHERE scope_path.ancestor_user_id=? AND scope_path.descendant_user_id=u.user_id))"
+			base := "u.delete_time=0 AND (u.user_id=? OR (u.user_id<>? AND EXISTS (SELECT 1 FROM `yu_imgo_referral_path` scope_path WHERE scope_path.ancestor_user_id=? AND scope_path.descendant_user_id=u.user_id)))"
 			mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*) n FROM `yu_user` u WHERE "+base+" AND u.account=?")).
-				WithArgs(int64(7), int64(7), "alice").WillReturnRows(sqlmock.NewRows([]string{"n"}).AddRow(tc.exact))
+				WithArgs(int64(7), int64(7), int64(7), "alice").WillReturnRows(sqlmock.NewRows([]string{"n"}).AddRow(tc.exact))
 			where := base + " AND " + tc.match
 			mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*) n FROM `yu_user` u WHERE "+where)).
-				WithArgs(int64(7), int64(7), tc.value).WillReturnRows(sqlmock.NewRows([]string{"n"}).AddRow(0))
-			mock.ExpectQuery(regexp.QuoteMeta("SELECT u.* FROM `yu_user` u WHERE "+where+" ORDER BY u.user_id DESC LIMIT ? OFFSET ?")).
-				WithArgs(int64(7), int64(7), tc.value, int64(20), int64(0)).WillReturnRows(sqlmock.NewRows([]string{"user_id"}))
+				WithArgs(int64(7), int64(7), int64(7), tc.value).WillReturnRows(sqlmock.NewRows([]string{"n"}).AddRow(0))
+			mock.ExpectQuery(regexp.QuoteMeta("SELECT u.* FROM `yu_user` u WHERE "+where+" ORDER BY (u.user_id=?) DESC,u.user_id DESC LIMIT ? OFFSET ?")).
+				WithArgs(int64(7), int64(7), int64(7), tc.value, int64(7), int64(20), int64(0)).WillReturnRows(sqlmock.NewRows([]string{"user_id"}))
 			_, err := a.manageUser(agentMemberRequest(a, "/manage/user/index", M{"keywords": " alice "}))
 			if err != nil {
 				t.Fatal(err)

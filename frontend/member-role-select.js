@@ -42,7 +42,9 @@ const ImgoMemberRoleSelect = {
   },
   render(h) {
     if (!this.isSuperOperator || Number(this.row.user_id) === 1) {
-      return h('el-tag', { props: { size: 'mini', type: Number(this.row.user_id) === 1 ? 'danger' : 'info' } }, this.roleLabel)
+      const tags = [h('el-tag', { props: { size: 'mini', type: Number(this.row.user_id) === 1 ? 'danger' : 'info' } }, this.roleLabel)]
+      if (Number(this.row.is_self) === 1) tags.push(h('el-tag', { class: 'imgo-member-self-tag', props: { size: 'mini', type: 'success' } }, '我自己'))
+      return h('div', { class: 'imgo-member-role-labels' }, tags)
     }
     const options = [h('el-option', { key: 0, props: { label: '普通用户', value: 0 } })]
     for (const role of this.roles) {

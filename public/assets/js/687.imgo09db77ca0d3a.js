@@ -14,8 +14,12 @@ const ImgoMemberAgentSettingDialog = {
     isSuperOperator() { return Number((this.$store.state.userInfo || {}).user_id) === 1 }
   },
   methods: {
+    canManageRow(row) {
+      const user = this.$store.state.userInfo || {}
+      return !!row && Number(row.admin_role_agent_mode) === 1 && (Number(user.user_id) === 1 || (Number(user.agent_mode) === 1 && Number(user.user_id) === Number(row.user_id) && Number(row.is_self) === 1))
+    },
     async open(row) {
-      if (!this.isSuperOperator || !row || Number(row.admin_role_agent_mode) !== 1 || this.saving) return
+      if (!this.canManageRow(row) || this.saving) return
       if (this.visible && this.row && Number(this.row.user_id) === Number(row.user_id) && !this.error) return
       const serial = ++this.serial
       this.row = row
@@ -43,7 +47,7 @@ const ImgoMemberAgentSettingDialog = {
       const options = Number(row.status) === 1 ? [{ user_id: Number(row.user_id), account: row.account || String(row.user_id), status: row.status }] : []
       let page = 1, fetched = 0
       while (true) {
-        const response = await this.$api.userApi.getUserList({ keywords: row.account, referral_scope: 'all', page, limit: 200 })
+        const response = await this.$api.userApi.getUserList({ keywords: this.isSuperOperator ? row.account : '', referral_scope: 'all', page, limit: 200 })
         if (Number(response.code) !== 0) throw Error(response.msg || '读取下级账号失败')
         if (!Array.isArray(response.data)) throw Error('下级账号数据无效')
         fetched += response.data.length
@@ -79,7 +83,7 @@ const ImgoMemberAgentSettingDialog = {
       this.serial++
     },
     async submit() {
-      if (!this.row || this.loading || this.saving || this.error || !this.isSuperOperator) return
+      if (!this.row || this.loading || this.saving || this.error || !this.canManageRow(this.row)) return
       if (!this.inheritAutoUser && this.autoAddUser.status === 1 && !this.autoAddUser.user_ids.length) {
         this.$message.error('请选择至少一位自动添加的客服账号')
         return
@@ -219,7 +223,9 @@ const ImgoMemberAgentSettingDialog = {
   },
   render(h) {
     if (!this.isSuperOperator || Number(this.row.user_id) === 1) {
-      return h('el-tag', { props: { size: 'mini', type: Number(this.row.user_id) === 1 ? 'danger' : 'info' } }, this.roleLabel)
+      const tags = [h('el-tag', { props: { size: 'mini', type: Number(this.row.user_id) === 1 ? 'danger' : 'info' } }, this.roleLabel)]
+      if (Number(this.row.is_self) === 1) tags.push(h('el-tag', { class: 'imgo-member-self-tag', props: { size: 'mini', type: 'success' } }, '我自己'))
+      return h('div', { class: 'imgo-member-role-labels' }, tags)
     }
     const options = [h('el-option', { key: 0, props: { label: '普通用户', value: 0 } })]
     for (const role of this.roles) {
@@ -663,21 +669,25 @@ s.r(t),s.d(t,{default:function(){return u}});var a=function(){var e=this,t=e._se
   Number((e.$store.state.userInfo||{}).user_id)===1?t("el-button",{attrs:{type:"text",size:"small"},on:{click:function(){return e.$refs.memberFinance.open(s.row,"recharge")}}},[e._v("充值")]):e._e(),
   Number((e.$store.state.userInfo||{}).user_id)===1?t("el-button",{attrs:{type:"text",size:"small"},on:{click:function(){return e.$refs.memberFinance.open(s.row,"withdraw")}}},[e._v("提现")]):e._e(),
   t("el-dropdown",{attrs:{trigger:"click",placement:"bottom-end"},on:{command:function(command){
+   if(Number(s.row.is_self)===1&&Number((e.$store.state.userInfo||{}).user_id)===Number(s.row.user_id)){
+    if(command==="agentSetting"&&Number((e.$store.state.userInfo||{}).agent_mode)===1&&Number(s.row.admin_role_agent_mode)===1)return e.$refs.memberAgentSetting.open(s.row);
+    return;
+   }
    if(command==="dialogue")return e.openDialogue(s.row);
    if(command==="view")return e.handleClick(s.row);
    if(command==="edit")return e.editUser(s.row);
    if(command==="password")return e.editPass(s.row);
    if(command==="inviteCode")return e.$refs.memberInviteCode.open(s.row);
-   if(command==="agentSetting"&&Number((e.$store.state.userInfo||{}).user_id)===1&&Number(s.row.admin_role_agent_mode)===1)return e.$refs.memberAgentSetting.open(s.row);
+   if(command==="agentSetting"&&Number(s.row.admin_role_agent_mode)===1&&(Number((e.$store.state.userInfo||{}).user_id)===1||(Number((e.$store.state.userInfo||{}).agent_mode)===1&&Number((e.$store.state.userInfo||{}).user_id)===Number(s.row.user_id)&&Number(s.row.is_self)===1)))return e.$refs.memberAgentSetting.open(s.row);
   }}},[
    t("el-button",{attrs:{type:"text",size:"small"}},[e._v("更多"),t("i",{staticClass:"el-icon-arrow-down"})]),
    t("el-dropdown-menu",{slot:"dropdown"},[
-    t("el-dropdown-item",{attrs:{command:"dialogue"}},[e._v("会话列表")]),
-    t("el-dropdown-item",{attrs:{command:"view"}},[e._v("查看")]),
-    s.row.user_id>1?t("el-dropdown-item",{attrs:{command:"edit"}},[e._v("编辑")]):e._e(),
-    t("el-dropdown-item",{attrs:{command:"password"}},[e._v("改密")]),
-    t("el-dropdown-item",{attrs:{command:"inviteCode"}},[e._v("修改邀请码")]),
-    Number((e.$store.state.userInfo||{}).user_id)===1&&Number(s.row.admin_role_agent_mode)===1?t("el-dropdown-item",{attrs:{command:"agentSetting"}},[e._v("导师设置")]):e._e()
+    Number(s.row.is_self)===1&&Number((e.$store.state.userInfo||{}).user_id)===Number(s.row.user_id)?e._e():t("el-dropdown-item",{attrs:{command:"dialogue"}},[e._v("会话列表")]),
+    Number(s.row.is_self)===1&&Number((e.$store.state.userInfo||{}).user_id)===Number(s.row.user_id)?e._e():t("el-dropdown-item",{attrs:{command:"view"}},[e._v("查看")]),
+    Number(s.row.is_self)!==1&&s.row.user_id>1?t("el-dropdown-item",{attrs:{command:"edit"}},[e._v("编辑")]):e._e(),
+    Number(s.row.is_self)===1&&Number((e.$store.state.userInfo||{}).user_id)===Number(s.row.user_id)?e._e():t("el-dropdown-item",{attrs:{command:"password"}},[e._v("改密")]),
+    Number(s.row.is_self)===1&&Number((e.$store.state.userInfo||{}).user_id)===Number(s.row.user_id)?e._e():t("el-dropdown-item",{attrs:{command:"inviteCode"}},[e._v("修改邀请码")]),
+    Number(s.row.admin_role_agent_mode)===1&&(Number((e.$store.state.userInfo||{}).user_id)===1||(Number((e.$store.state.userInfo||{}).agent_mode)===1&&Number((e.$store.state.userInfo||{}).user_id)===Number(s.row.user_id)&&Number(s.row.is_self)===1))?t("el-dropdown-item",{attrs:{command:"agentSetting"}},[e._v("导师设置")]):e._e()
    ],1)
   ],1)
  ],1)

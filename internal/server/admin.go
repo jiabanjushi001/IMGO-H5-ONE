@@ -48,12 +48,15 @@ func (a *App) manageUser(r *request) (any, error) {
 			from += " u"
 			column = "u."
 			predicate, scopeArgs := scope.userPredicate("u")
-			where = "u.delete_time=0 AND " + predicate
+			descendant := strings.TrimSuffix(strings.TrimPrefix(predicate, "("), ")")
+			where = "u.delete_time=0 AND (u.user_id=? OR (" + descendant
+			args = append(args, scope.AgentUserID)
 			args = append(args, scopeArgs...)
 			if referralScope == "direct" {
 				where += " AND EXISTS (SELECT 1 FROM " + a.t("imgo_referral_path") + " scope_depth WHERE scope_depth.ancestor_user_id=? AND scope_depth.descendant_user_id=u.user_id AND scope_depth.depth=1)"
 				args = append(args, scope.AgentUserID)
 			}
+			where += "))"
 		}
 		if username := strings.TrimSpace(r.s("keywords")); username != "" {
 			match := column + "account=?"
@@ -103,7 +106,13 @@ func (a *App) manageUser(r *request) (any, error) {
 		if !scope.Global {
 			selectColumns = "u.*"
 		}
-		list, e := r.list("SELECT "+selectColumns+" FROM "+from+" WHERE "+where+" ORDER BY "+column+order+" "+direction+" LIMIT ? OFFSET ?", append(args, limit, offset)...)
+		orderBy := column + order + " " + direction
+		listArgs := append([]any{}, args...)
+		if !scope.Global {
+			orderBy = "(u.user_id=?) DESC," + orderBy
+			listArgs = append(listArgs, scope.AgentUserID)
+		}
+		list, e := r.list("SELECT "+selectColumns+" FROM "+from+" WHERE "+where+" ORDER BY "+orderBy+" LIMIT ? OFFSET ?", append(listArgs, limit, offset)...)
 		if e != nil {
 			return nil, e
 		}
@@ -117,6 +126,10 @@ func (a *App) manageUser(r *request) (any, error) {
 			return nil, e
 		}
 		for _, u := range list {
+			u["is_self"] = int64(0)
+			if !scope.Global && number(u["user_id"]) == r.uid() {
+				u["is_self"] = int64(1)
+			}
 			delete(u, "password")
 			delete(u, "salt")
 			u["avatar"] = a.userAvatar(u)

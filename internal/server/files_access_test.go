@@ -46,3 +46,16 @@ func TestEnterpriseFilesAllRequiresManageFilesPermission(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestAgentCanReadOwnUploadedMedia(t *testing.T) {
+	a, mock := testApp(t)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("GET", "/storage/image/avatar.png", nil)
+	c.Set("mediaUser", M{"user_id": int64(7), "admin_role_id": int64(3)})
+	if !a.scopedMediaAccess(c, M{"user_id": int64(7)}) {
+		t.Fatal("mentor must be able to read their own uploaded avatar")
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}

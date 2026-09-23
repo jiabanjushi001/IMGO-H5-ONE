@@ -162,6 +162,15 @@ func (a *App) manageAgentSetting(r *request) (any, error) {
 	if agentID < 1 {
 		return nil, deny()
 	}
+	if r.uid() != 1 {
+		scope, err := a.adminScope(r.ctx(), r.user)
+		if err != nil {
+			return nil, err
+		}
+		if scope.Global || scope.AgentUserID != agentID {
+			return nil, deny()
+		}
+	}
 	enabled, err := a.mentorEnabled(r.ctx(), a.db, agentID)
 	if err != nil {
 		return nil, err

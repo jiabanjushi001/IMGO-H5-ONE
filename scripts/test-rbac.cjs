@@ -70,6 +70,12 @@ assert.equal(deleteConfirmed, false, 'mentor preset deletion must be guarded in 
 const memberContext = { window: {} }
 vm.runInNewContext(memberRole + '\nthis.component = ImgoMemberRoleSelect', memberContext)
 const memberComponent = memberContext.component
+const selfRoleTree = memberComponent.render.call({
+  isSuperOperator: false,
+  row: { user_id: 7, is_self: 1 },
+  roleLabel: '导师专员'
+}, h)
+assert.ok(JSON.stringify(selfRoleTree).includes('我自己'), 'mentor own row must be visibly marked')
 const filterContext = {}
 vm.runInNewContext(memberFilter + '\nthis.component = ImgoMemberReferralFilter', filterContext)
 const filterComponent = filterContext.component
@@ -101,20 +107,25 @@ async function checkMemberRoleMode() {
   assert.equal(memberRow.admin_role_agent_mode, 1, 'member role change must update agent mode')
 }
 
-function actionNodes(operatorID, agentMode) {
+function actionNodes(operatorID, operatorAgentMode, rowUserID, rowAgentMode, isSelf) {
   const e = {
-    $store: { state: { userInfo: { user_id: operatorID } } }, $refs: {},
+    $store: { state: { userInfo: { user_id: operatorID, agent_mode: operatorAgentMode } } }, $refs: { memberAgentSetting: { open() {} } },
     _u: value => value, _v: value => value, _e: () => null,
     openDialogue() {}, handleClick() {}, editUser() {}, editPass() {}
   }
-  const s = { row: { user_id: 7, admin_role_agent_mode: agentMode } }
+  const s = { row: { user_id: rowUserID, admin_role_agent_mode: rowAgentMode, is_self: isSelf } }
   const t = (tag, data, children) => ({ tag, data: Array.isArray(data) ? undefined : data, children: Array.isArray(data) ? data : children })
   const table = vm.runInNewContext(memberActions, { t, e, s })
   return flatten(table.data.scopedSlots[0].fn(s))
 }
-assert.ok(actionNodes(1, 1).some(node => node.tag === 'el-dropdown-item' && node.children?.includes('导师设置')), 'super administrator must see mentor settings for mentor rows')
-assert.ok(!actionNodes(1, 0).some(node => node.tag === 'el-dropdown-item' && node.children?.includes('导师设置')), 'ordinary rows must hide mentor settings')
-assert.ok(!actionNodes(7, 1).some(node => node.tag === 'el-dropdown-item' && node.children?.includes('导师设置')), 'non super administrators must hide mentor settings')
+assert.ok(actionNodes(1, 0, 7, 1, 0).some(node => node.tag === 'el-dropdown-item' && node.children?.includes('导师设置')), 'super administrator must see mentor settings for mentor rows')
+assert.ok(!actionNodes(1, 0, 7, 0, 0).some(node => node.tag === 'el-dropdown-item' && node.children?.includes('导师设置')), 'ordinary rows must hide mentor settings')
+const mentorSelfActions = actionNodes(7, 1, 7, 1, 1).filter(node => node.tag === 'el-dropdown-item')
+assert.ok(mentorSelfActions.some(node => node.children?.includes('导师设置')), 'mentor must see settings on own row')
+for (const label of ['会话列表', '查看', '编辑', '改密', '修改邀请码']) {
+  assert.ok(!mentorSelfActions.some(node => node.children?.includes(label)), `mentor own row must hide ${label}`)
+}
+assert.ok(!actionNodes(7, 1, 8, 1, 0).some(node => node.tag === 'el-dropdown-item' && node.children?.includes('导师设置')), 'mentor must not edit another mentor settings')
 
 const agentContext = {}
 vm.runInNewContext(agentDialog + '\nthis.component = ImgoMemberAgentSettingDialog', agentContext)
@@ -144,6 +155,19 @@ async function checkAgentDialog() {
   await agentState.open(row)
   assert.equal(agentState.visible, true, 'mentor dialog must open')
   assert.deepEqual(Array.from(agentState.options, option => Number(option.user_id)), [7, 8, 10], 'only enabled mentor and descendants may be selected')
+
+  agentState.close()
+  const listPayloads = []
+  const originalGetUserList = agentState.$api.userApi.getUserList
+  agentState.$api.userApi.getUserList = async payload => { listPayloads.push(payload); return originalGetUserList(payload) }
+  agentState.$store.state.userInfo = { user_id: 7, agent_mode: 1 }
+  await agentState.open({ ...row, is_self: 1 })
+  assert.equal(agentState.visible, true, 'mentor must open own settings')
+  assert.equal(listPayloads[0].keywords, '', 'mentor own options must load self and all descendants without account filtering')
+  agentState.close()
+  agentState.$store.state.userInfo = { user_id: 1, agent_mode: 0 }
+  agentState.$api.userApi.getUserList = originalGetUserList
+  await agentState.open(row)
   assert.deepEqual(Array.from(await agentState.loadOptions({ user_id: 7, account: 'mentor', status: '0' }), option => Number(option.user_id)), [8, 10], 'disabled mentor must not be selectable')
   agentState.applyDetail({ inherit_auto_user: false, inherit_auto_group: false, auto_add_user: { status: 1, user_ids: [8, 9] }, auto_add_group: { status: 1, owner_uid: 9, userMax: 5, name: '导师群' } })
   assert.deepEqual(Array.from(agentState.autoAddUser.user_ids), [8], 'disabled saved customer must be removed from editable override')

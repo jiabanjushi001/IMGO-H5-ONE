@@ -55,6 +55,11 @@ func (a *App) scopedMediaAccess(c *gin.Context, f M) bool {
 	if number(user["user_id"]) == 1 || number(user["admin_role_id"]) == 0 {
 		return true
 	}
+	// Agent scope excludes the agent account itself for management writes. Media
+	// uploaded by that same account (including its profile avatar) remains theirs.
+	if number(f["user_id"]) == number(user["user_id"]) {
+		return true
+	}
 	scope, err := a.adminScope(c.Request.Context(), user)
 	if err == nil && !scope.Global {
 		err = a.requireScopedUser(c.Request.Context(), a.db, scope, number(f["user_id"]))
