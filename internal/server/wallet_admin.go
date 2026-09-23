@@ -62,6 +62,11 @@ func (a *App) manageWalletCredit(r *request, scope adminScope) (any, error) {
 		return nil, err
 	}
 	defer tx.Rollback()
+	if !scope.Global {
+		if err := a.requireScopedUser(ctx, tx, scope, uid); err != nil {
+			return nil, err
+		}
+	}
 	now := time.Now().Unix()
 	if _, err = tx.ExecContext(ctx, "INSERT IGNORE INTO "+a.t("imgo_wallet")+" (user_id,available_cents,pending_cents,updated_at) VALUES (?,0,0,?)", uid, now); err != nil {
 		return nil, err
@@ -100,7 +105,7 @@ func (a *App) manageWalletCredit(r *request, scope adminScope) (any, error) {
 	return M{"credited": true, "entry_id": id}, nil
 }
 
-func (a *App) manageWalletReview(r *request, scope adminScope) (any, error) {
+func (a *App) manageWalletReview(r *request, scope adminScope, expectedUserID int64) (any, error) {
 	id := r.n("withdrawal_id")
 	status, valid := bankStatus(r.p["status"])
 	remark := strings.TrimSpace(r.s("remark"))
@@ -113,14 +118,19 @@ func (a *App) manageWalletReview(r *request, scope adminScope) (any, error) {
 		return nil, err
 	}
 	defer tx.Rollback()
+	// Every agent financial transaction locks its authorized user before the
+	// existing order (when reviewing), and then the wallet.
+	if !scope.Global {
+		if err := a.requireScopedUser(ctx, tx, scope, expectedUserID); err != nil {
+			return nil, err
+		}
+	}
 	withdrawal, err := one(ctx, tx, "SELECT user_id,amount_cents,status FROM "+a.t("imgo_withdrawal")+" WHERE withdrawal_id=? FOR UPDATE", id)
 	if err != nil {
 		return nil, err
 	}
-	if !scope.Global {
-		if err := a.requireScopedUser(ctx, tx, scope, number(withdrawal["user_id"])); err != nil {
-			return nil, err
-		}
+	if !scope.Global && number(withdrawal["user_id"]) != expectedUserID {
+		return nil, deny()
 	}
 	if current := number(withdrawal["status"]); current != 0 {
 		if current == status {
@@ -132,6 +142,11 @@ func (a *App) manageWalletReview(r *request, scope adminScope) (any, error) {
 	wallet, err := one(ctx, tx, "SELECT available_cents,pending_cents FROM "+a.t("imgo_wallet")+" WHERE user_id=? FOR UPDATE", uid)
 	if err != nil {
 		return nil, err
+	}
+	if !scope.Global {
+		if err := a.requireScopedUser(ctx, tx, scope, uid); err != nil {
+			return nil, err
+		}
 	}
 	if number(wallet["pending_cents"]) < cents {
 		return nil, clientError{"待处理余额异常，已阻止操作", 409}
@@ -170,6 +185,7 @@ func (a *App) manageWallet(r *request) (any, error) {
 	if err != nil {
 		return nil, err
 	}
+	var reviewUserID int64
 	if !scope.Global {
 		switch action(r) {
 		case "account", "entries", "credit", "recharge", "withdraw":
@@ -184,6 +200,7 @@ func (a *App) manageWallet(r *request) (any, error) {
 			if err != nil {
 				return nil, err
 			}
+			reviewUserID = number(item["user_id"])
 			if err := a.requireScopedUser(r.ctx(), a.db, scope, number(item["user_id"])); err != nil {
 				return nil, err
 			}
@@ -228,7 +245,7 @@ func (a *App) manageWallet(r *request) (any, error) {
 	case "credit":
 		return a.manageWalletCredit(r, scope)
 	case "review":
-		return a.manageWalletReview(r, scope)
+		return a.manageWalletReview(r, scope, reviewUserID)
 	case "index":
 		where, args := "u.delete_time=0", []any{}
 		if !scope.Global {

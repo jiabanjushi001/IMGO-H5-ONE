@@ -237,7 +237,7 @@ func (a *App) emoji(r *request) (any, error) {
 	return nil, r.fail("未知操作")
 }
 func (a *App) files(r *request) (any, error) {
-	manageAll := r.n("is_all") == 1 || strings.HasPrefix(normalizedPath(r.c.Request.URL.Path), "/manage/files/")
+	manageAll := r.n("is_all") == 1 || strings.HasPrefix(effectivePath(r.c), "/manage/files/")
 	if r.n("is_all") == 1 {
 		if err := a.authorizeManage(r.ctx(), r.user, "manage.files"); err != nil {
 			return nil, err

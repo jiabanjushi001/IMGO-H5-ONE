@@ -26,30 +26,28 @@ func (a *App) groupAvatar(c *gin.Context, gid int64) {
 		c.Status(401)
 		return
 	}
-	scopedAdmin := false
-	if value, ok := c.Get("mediaUser"); ok {
-		user := value.(M)
-		if uid != 1 && number(user["admin_role_id"]) > 0 {
-			scope, err := a.adminScope(c.Request.Context(), user)
-			if err == nil {
-				err = a.requireScopedGroup(c.Request.Context(), a.db, scope, gid)
-			}
-			if err == nil {
-				err = a.authorizeManage(c.Request.Context(), user, "manage.groups")
-			}
-			if err != nil {
-				c.Status(403)
-				return
-			}
-			scopedAdmin = true
-		}
-	}
-	if uid != 1 && !scopedAdmin {
-		if _, e = a.member(c.Request.Context(), a.db, gid, uid); e != nil {
-			admin, err := one(c.Request.Context(), a.db, "SELECT role FROM "+a.t("user")+" WHERE user_id=? AND status=1 AND COALESCE(delete_time,0)=0", uid)
-			if err != nil || number(admin["role"]) <= 0 {
-				c.Status(403)
-				return
+	if uid != 1 {
+		if _, err := a.member(c.Request.Context(), a.db, gid, uid); err != nil {
+			user, _ := c.Get("mediaUser")
+			principal, _ := user.(M)
+			if number(principal["admin_role_id"]) > 0 {
+				scope, err := a.adminScope(c.Request.Context(), principal)
+				if err == nil {
+					err = a.requireScopedGroup(c.Request.Context(), a.db, scope, gid)
+				}
+				if err == nil {
+					err = a.authorizeManage(c.Request.Context(), principal, "manage.groups")
+				}
+				if err != nil {
+					c.Status(403)
+					return
+				}
+			} else {
+				admin, err := one(c.Request.Context(), a.db, "SELECT role FROM "+a.t("user")+" WHERE user_id=? AND status=1 AND COALESCE(delete_time,0)=0", uid)
+				if err != nil || number(admin["role"]) <= 0 {
+					c.Status(403)
+					return
+				}
 			}
 		}
 	}

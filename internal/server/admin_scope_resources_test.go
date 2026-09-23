@@ -141,8 +141,8 @@ func TestAgentScopeWalletReviewRechecksOwnerAfterLock(t *testing.T) {
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT user_id FROM `yu_imgo_withdrawal` WHERE withdrawal_id=?")).WithArgs(int64(51)).WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(12))
 	expectResourceUser(mock, 12, true)
 	mock.ExpectBegin()
+	expectLockedResourceUser(mock, 12, true)
 	mock.ExpectQuery("SELECT user_id,amount_cents,status FROM `yu_imgo_withdrawal` WHERE withdrawal_id=.*FOR UPDATE").WithArgs(int64(51)).WillReturnRows(sqlmock.NewRows([]string{"user_id", "amount_cents", "status"}).AddRow(99, 100, 1))
-	expectResourceUser(mock, 99, false)
 	mock.ExpectRollback()
 	_, err := a.manageWallet(agentMemberRequest(a, "/manage/wallet/review", M{"withdrawal_id": 51, "status": 1}))
 	assertDenied(t, err)
@@ -162,12 +162,10 @@ func TestAgentScopeWalletWritesRecheckAfterWalletLock(t *testing.T) {
 				mock.ExpectQuery("SELECT user_id FROM `yu_user`").WithArgs(int64(12)).WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(12))
 			}
 			mock.ExpectBegin()
-			if act != "credit" {
-				mock.ExpectQuery("SELECT user_id FROM `yu_user` WHERE user_id=.*FOR SHARE").WithArgs(int64(12)).WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(12))
-			}
+			expectLockedResourceUser(mock, 12, true)
 			mock.ExpectExec("INSERT IGNORE INTO `yu_imgo_wallet`").WillReturnResult(sqlmock.NewResult(0, 0))
 			mock.ExpectQuery("SELECT available_cents.*FROM `yu_imgo_wallet` WHERE user_id=.*FOR UPDATE").WithArgs(int64(12)).WillReturnRows(sqlmock.NewRows([]string{"available_cents", "pending_cents"}).AddRow(100000, 0))
-			expectResourceUser(mock, 12, false)
+			expectLockedResourceUser(mock, 12, false)
 			mock.ExpectRollback()
 			_, err := a.manageWallet(agentMemberRequest(a, "/manage/wallet/"+act, M{"user_id": 12, "amount": "12.00", "request_id": "request-12345678", "note": "测试入账", "bonus_mode": "none"}))
 			assertDenied(t, err)
@@ -183,6 +181,7 @@ func TestAgentScopeGroupSharedAdminReadsAndAvatarRejectForeignOwner(t *testing.T
 		t.Run(act, func(t *testing.T) {
 			a, mock := testApp(t)
 			mock.ExpectQuery("SELECT \\* FROM `yu_group` WHERE group_id=").WithArgs(int64(9)).WillReturnRows(sqlmock.NewRows([]string{"group_id", "owner_id", "status"}).AddRow(9, 99, 1))
+			mock.ExpectQuery("SELECT gu.*").WithArgs(int64(9), int64(7)).WillReturnRows(sqlmock.NewRows([]string{"role"}))
 			expectAgentMemberScope(mock)
 			expectResourceUser(mock, 99, false)
 			_, err := a.group(agentMemberRequest(a, "/enterprise/group/"+act, M{"group_id": 9}))
@@ -200,14 +199,19 @@ func TestAgentScopeMessageContactsConstrainGroupAndLatestQueries(t *testing.T) {
 	expectResourceUser(mock, 12, true)
 	mock.ExpectQuery("SELECT \\* FROM `yu_user` WHERE user_id=").WithArgs(int64(12)).WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(12))
 	mock.ExpectQuery("SELECT value FROM `yu_config`").WillReturnRows(sqlmock.NewRows([]string{"value"}).AddRow(`{}`))
-	mock.ExpectQuery("SELECT u.user_id,u.realname.*FROM `yu_user`").WithArgs(int64(12), int64(12)).WillReturnRows(sqlmock.NewRows([]string{"user_id"}))
+	mock.ExpectQuery("SELECT u.user_id,u.realname.*FROM `yu_user`.*scope_path.descendant_user_id=u.user_id.*scope_contact.*is_group=0").WithArgs(int64(12), int64(12), int64(7), int64(7), int64(12), int64(12)).WillReturnRows(sqlmock.NewRows([]string{"user_id", "realname"}).AddRow(13, "范围内已有会话用户"))
 	mock.ExpectQuery("SELECT from_user,COUNT").WithArgs(int64(12)).WillReturnRows(sqlmock.NewRows([]string{"from_user", "n"}))
 	mock.ExpectQuery("SELECT g.*scope_owner.user_id=g.owner_id.*scope_path").WithArgs(int64(12), int64(7), int64(7)).WillReturnRows(sqlmock.NewRows([]string{"group_id"}))
 	mock.ExpectQuery("SELECT m.*scope_group.group_id=.*to_user.*scope_path").WithArgs(int64(12), int64(12), int64(12), int64(12), int64(12), int64(7), int64(7), int64(7), int64(7), int64(7), int64(7)).WillReturnRows(sqlmock.NewRows([]string{"msg_id"}))
 	mock.ExpectQuery("SELECT COUNT.*FROM `yu_friend`").WithArgs(int64(12)).WillReturnRows(sqlmock.NewRows([]string{"n"}).AddRow(0))
-	_, err := a.manageMessage(agentMemberRequest(a, "/manage/message/getContacts", M{"user_id": 12}))
+	result, err := a.manageMessage(agentMemberRequest(a, "/manage/message/getContacts", M{"user_id": 12}))
 	if err != nil {
 		t.Fatal(err)
+	}
+	for _, contact := range result.([]M) {
+		if number(contact["user_id"]) == 99 {
+			t.Fatal("unrelated foreign user disclosed")
+		}
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
@@ -314,7 +318,9 @@ func TestAgentScopeGroupMemberWritesIncludeOwnerAndTargetPredicates(t *testing.T
 				query = "DELETE FROM `yu_group_user`.*scope_path.*scope_path"
 				args = args[1:]
 			}
+			mock.ExpectBegin()
 			mock.ExpectExec(query).WithArgs(args...).WillReturnResult(sqlmock.NewResult(0, 1))
+			mock.ExpectCommit()
 			_, err := a.manageGroup(agentMemberRequest(a, "/manage/group/"+act, M{"group_id": 9, "user_id": 13, "role": 2}))
 			if err != nil {
 				t.Fatal(err)
@@ -414,7 +420,9 @@ func TestAgentScopeMessageAllowsDescendantAndScopesUpdate(t *testing.T) {
 	pattern := ".*is_group=0.*scope_from.user_id=`yu_message`.from_user.* OR EXISTS.*scope_to.user_id=`yu_message`.to_user.*is_group=1.*scope_group.group_id=`yu_message`.to_user"
 	args := []driver.Value{"scoped-message", int64(7), int64(7), int64(7), int64(7), int64(7), int64(7)}
 	mock.ExpectQuery("SELECT \\* FROM `yu_message` WHERE id=" + pattern).WithArgs(args...).WillReturnRows(sqlmock.NewRows([]string{"id", "msg_id", "is_group", "from_user", "to_user"}).AddRow("scoped-message", 42, 0, 12, 99))
+	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE `yu_message` SET `status`=\\? WHERE id=" + pattern).WithArgs(append([]driver.Value{int64(0)}, args...)...).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
 	_, err := a.manageMessage(agentMemberRequest(a, "/manage/message/dealMsg", M{"id": "scoped-message", "dealType": 1}))
 	if err != nil {
 		t.Fatal(err)
@@ -460,6 +468,7 @@ func TestAgentScopeGroupAvatarRejectsForeignOwner(t *testing.T) {
 	c.Request.Header.Set("Authorization", signToken(a.cfg.JWTKey, 7, "scope-avatar", time.Now().Add(time.Hour)))
 	mock.ExpectQuery("SELECT user_id FROM `yu_imgo_session`").WithArgs("scope-avatar", int64(7), sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(7))
 	mock.ExpectQuery("SELECT \\* FROM `yu_user`").WithArgs(int64(7)).WillReturnRows(sqlmock.NewRows([]string{"user_id", "admin_role_id"}).AddRow(7, 3))
+	mock.ExpectQuery("SELECT gu.*").WithArgs(int64(9), int64(7)).WillReturnRows(sqlmock.NewRows([]string{"role"}))
 	expectAgentMemberScope(mock)
 	mock.ExpectQuery("SELECT owner_id FROM `yu_group`").WithArgs(int64(9)).WillReturnRows(sqlmock.NewRows([]string{"owner_id"}).AddRow(99))
 	expectResourceUser(mock, 99, false)
@@ -476,12 +485,14 @@ func TestAgentScopeGroupAvatarRejectsForeignOwner(t *testing.T) {
 func TestAgentScopeGroupAvatarUpdateHasOwnerPredicate(t *testing.T) {
 	a, mock := testApp(t)
 	mock.ExpectQuery("SELECT \\* FROM `yu_group`").WithArgs(int64(9)).WillReturnRows(sqlmock.NewRows([]string{"group_id", "owner_id", "status"}).AddRow(9, 12, 1))
+	mock.ExpectQuery("SELECT gu.*").WithArgs(int64(9), int64(7)).WillReturnRows(sqlmock.NewRows([]string{"role"}))
 	expectAgentMemberScope(mock)
 	expectResourceUser(mock, 12, true)
 	mock.ExpectQuery("SELECT p.permission_key FROM `yu_imgo_admin_role`").WithArgs(int64(3)).WillReturnRows(sqlmock.NewRows([]string{"permission_key"}).AddRow("manage.groups"))
-	mock.ExpectQuery("SELECT gu.*").WithArgs(int64(9), int64(7)).WillReturnRows(sqlmock.NewRows([]string{"role"}))
 	mock.ExpectQuery("SELECT \\* FROM `yu_file`").WithArgs(int64(5), int64(7)).WillReturnRows(sqlmock.NewRows([]string{"file_id", "user_id", "cate", "size", "src"}).AddRow(5, 7, 2, 100, "/storage/image/avatar.png"))
+	mock.ExpectBegin()
 	mock.ExpectExec("UPDATE `yu_group` SET `avatar`=.*scope_owner.user_id=`yu_group`.owner_id.*scope_path").WithArgs("/storage/image/avatar.png", int64(9), int64(7), int64(7)).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
 	mock.ExpectQuery("SELECT user_id FROM `yu_group_user`").WithArgs(int64(9)).WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(12))
 	_, err := a.group(agentMemberRequest(a, "/enterprise/group/editGroupAvatar", M{"group_id": 9, "file_id": 5}))
 	if err != nil {

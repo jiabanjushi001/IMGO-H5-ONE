@@ -35,6 +35,9 @@ func (a *App) adminScope(ctx context.Context, user M) (adminScope, error) {
 }
 
 func (s adminScope) userPredicate(alias string) (string, []any) {
+	return s.userPredicateWithLock(alias, false)
+}
+func (s adminScope) userPredicateWithLock(alias string, lock bool) (string, []any) {
 	if s.Global {
 		return "1=1", nil
 	}
@@ -44,7 +47,11 @@ func (s adminScope) userPredicate(alias string) (string, []any) {
 	if s.referralTable == "" {
 		panic("missing referral table for admin scope")
 	}
-	return "(" + alias + ".user_id<>? AND EXISTS (SELECT 1 FROM " + s.referralTable + " scope_path WHERE scope_path.ancestor_user_id=? AND scope_path.descendant_user_id=" + alias + ".user_id))", []any{s.AgentUserID, s.AgentUserID}
+	locking := ""
+	if lock {
+		locking = " FOR SHARE"
+	}
+	return "(" + alias + ".user_id<>? AND EXISTS (SELECT 1 FROM " + s.referralTable + " scope_path WHERE scope_path.ancestor_user_id=? AND scope_path.descendant_user_id=" + alias + ".user_id" + locking + "))", []any{s.AgentUserID, s.AgentUserID}
 }
 
 func safeSQLAlias(alias string) bool {
@@ -67,9 +74,16 @@ func (a *App) requireScopedUser(ctx context.Context, db DB, scope adminScope, us
 	if scope.referralTable == "" {
 		scope.referralTable = a.t("imgo_referral_path")
 	}
-	predicate, args := scope.userPredicate("u")
+	// Transactions use current reads and hold both the user and referral row
+	// through commit, so deletion/reparenting cannot invalidate authorization.
+	_, locking := db.(*sql.Tx)
+	predicate, args := scope.userPredicateWithLock("u", locking)
 	params := append([]any{userID}, args...)
-	_, err := one(ctx, db, "SELECT 1 FROM "+a.t("user")+" u WHERE u.user_id=? AND u.delete_time=0 AND "+predicate, params...)
+	query := "SELECT 1 FROM " + a.t("user") + " u WHERE u.user_id=? AND u.delete_time=0 AND " + predicate
+	if locking {
+		query += " FOR SHARE"
+	}
+	_, err := one(ctx, db, query, params...)
 	if errors.Is(err, sql.ErrNoRows) {
 		return deny()
 	}
@@ -133,7 +147,11 @@ func (a *App) requireScopedGroup(ctx context.Context, db DB, scope adminScope, g
 	if scope.Global {
 		return nil
 	}
-	group, err := one(ctx, db, "SELECT owner_id FROM "+a.t("group")+" WHERE group_id=? AND status=1 AND COALESCE(delete_time,0)=0", gid)
+	query := "SELECT owner_id FROM " + a.t("group") + " WHERE group_id=? AND status=1 AND COALESCE(delete_time,0)=0"
+	if _, locking := db.(*sql.Tx); locking {
+		query += " FOR UPDATE"
+	}
+	group, err := one(ctx, db, query, gid)
 	if errors.Is(err, sql.ErrNoRows) {
 		return deny()
 	}
@@ -163,4 +181,72 @@ func (a *App) groupMemberScopeWhere(scope adminScope, gid, uid int64) (string, [
 	member, memberArgs := scope.userPredicate("scope_member")
 	where += " AND EXISTS (SELECT 1 FROM " + a.t("group") + " scope_group WHERE scope_group.group_id=" + a.t("group_user") + ".group_id AND " + group + ") AND EXISTS (SELECT 1 FROM " + a.t("user") + " scope_member WHERE scope_member.user_id=" + a.t("group_user") + ".user_id AND " + member + ")"
 	return where, append(append(args, groupArgs...), memberArgs...)
+}
+
+// A zero-row scoped write can mean either an idempotent request or lost access.
+// Recheck with current, locking reads before acknowledging it; only changes
+// committed by this call may produce a client event.
+func (a *App) scopedResourceWrite(r *request, scope adminScope, write func(DB) (sql.Result, error), verify func(DB) error) (bool, error) {
+	var db DB = a.db
+	var tx *sql.Tx
+	if !scope.Global {
+		var err error
+		tx, err = a.db.BeginTx(r.ctx(), nil)
+		if err != nil {
+			return false, err
+		}
+		defer tx.Rollback()
+		db = tx
+	}
+	result, err := write(db)
+	if err != nil {
+		return false, err
+	}
+	affected, err := result.RowsAffected()
+	if err != nil {
+		return false, err
+	}
+	if affected == 0 && !scope.Global {
+		if err := verify(db); err != nil {
+			return false, err
+		}
+	}
+	if tx != nil {
+		if err := tx.Commit(); err != nil {
+			return false, err
+		}
+	}
+	return affected > 0, nil
+}
+
+func (a *App) requireCurrentScopedMessage(ctx context.Context, db DB, scope adminScope, id string) error {
+	msg, err := one(ctx, db, "SELECT from_user,to_user,is_group FROM "+a.t("message")+" WHERE id=? FOR UPDATE", id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return deny()
+	}
+	if err != nil {
+		return err
+	}
+	switch number(msg["is_group"]) {
+	case 1:
+		return a.requireScopedGroup(ctx, db, scope, number(msg["to_user"]))
+	case 0:
+		err = a.requireScopedUser(ctx, db, scope, number(msg["from_user"]))
+		if err == nil {
+			return nil
+		}
+		var denied clientError
+		if !errors.As(err, &denied) || denied.code != 403 {
+			return err
+		}
+		return a.requireScopedUser(ctx, db, scope, number(msg["to_user"]))
+	default:
+		return deny()
+	}
+}
+func (a *App) requireScopedGroupTarget(ctx context.Context, db DB, scope adminScope, gid, uid int64) error {
+	if err := a.requireScopedGroup(ctx, db, scope, gid); err != nil {
+		return err
+	}
+	return a.requireScopedUser(ctx, db, scope, uid)
 }

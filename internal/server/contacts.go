@@ -136,6 +136,12 @@ func (a *App) contacts(r *request, uid int64, scopes ...adminScope) (any, error)
 		where += " AND (f.status=1 OR u.user_id=?)"
 		args = append(args, r.user["cs_uid"])
 	}
+	if len(scopes) > 0 && !scopes[0].Global {
+		predicate, params := scopes[0].userPredicate("u")
+		where += " AND " + predicate + " AND EXISTS (SELECT 1 FROM " + a.t("message") + " scope_contact WHERE scope_contact.is_group=0 AND scope_contact.status=1 AND ((scope_contact.from_user=? AND scope_contact.to_user=u.user_id) OR (scope_contact.to_user=? AND scope_contact.from_user=u.user_id)))"
+		args = append(args, params...)
+		args = append(args, uid, uid)
+	}
 	users, e := r.list("SELECT u.user_id,u.realname,u.avatar,u.name_py,u.last_login_ip,f.nickname,f.is_notice,f.is_top FROM "+a.t("user")+" u LEFT JOIN "+a.t("friend")+" f ON f.friend_user_id=u.user_id AND f.create_user=? WHERE "+where+" ORDER BY u.user_id", args...)
 	if e != nil {
 		return nil, e

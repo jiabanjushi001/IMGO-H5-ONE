@@ -294,11 +294,15 @@ func parseParams(c *gin.Context) (M, error) {
 	}
 	return m, nil
 }
-func (a *App) dispatch(c *gin.Context) {
-	p := normalizedPath(c.Request.URL.Path)
-	if p == "/index.php" && c.Query("s") != "" {
-		p = normalizedPath(c.Query("s"))
+func effectivePath(c *gin.Context) string {
+	path := normalizedPath(c.Request.URL.Path)
+	if path == "/index.php" && c.Query("s") != "" {
+		return normalizedPath(c.Query("s"))
 	}
+	return path
+}
+func (a *App) dispatch(c *gin.Context) {
+	p := effectivePath(c)
 	if strings.HasPrefix(p, "/downloadapp/") {
 		c.Request.URL.RawQuery = "platform=" + strings.TrimPrefix(p, "/downloadapp/")
 		p = "/index/index/downloadapp"

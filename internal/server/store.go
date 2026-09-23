@@ -186,8 +186,12 @@ func insert(ctx context.Context, db DB, table string, m M) (int64, error) {
 	return r.LastInsertId()
 }
 func update(ctx context.Context, db DB, table string, m M, where string, args ...any) error {
+	_, err := updateResult(ctx, db, table, m, where, args...)
+	return err
+}
+func updateResult(ctx context.Context, db DB, table string, m M, where string, args ...any) (sql.Result, error) {
 	if len(m) == 0 {
-		return errors.New("没有可更新的字段")
+		return nil, errors.New("没有可更新的字段")
 	}
 	keys := make([]string, 0, len(m))
 	for k := range m {
@@ -200,8 +204,7 @@ func update(ctx context.Context, db DB, table string, m M, where string, args ..
 		set = append(set, "`"+k+"`=?")
 		vs = append(vs, m[k])
 	}
-	_, e := db.ExecContext(ctx, "UPDATE "+table+" SET "+strings.Join(set, ",")+" WHERE "+where, append(vs, args...)...)
-	return e
+	return db.ExecContext(ctx, "UPDATE "+table+" SET "+strings.Join(set, ",")+" WHERE "+where, append(vs, args...)...)
 }
 func pick(m M, keys ...string) M {
 	r := M{}

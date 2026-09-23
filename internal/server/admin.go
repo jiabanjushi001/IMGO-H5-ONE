@@ -386,8 +386,10 @@ func (a *App) manageGroup(r *request) (any, error) {
 			return nil, r.fail("请先转让群主")
 		}
 		where, args := a.groupMemberScopeWhere(scope, gid, uid)
-		e = r.exec("DELETE FROM "+a.t("group_user")+" WHERE "+where, args...)
-		if e == nil {
+		changed, e := a.scopedResourceWrite(r, scope, func(db DB) (sql.Result, error) {
+			return db.ExecContext(r.ctx(), "DELETE FROM "+a.t("group_user")+" WHERE "+where, args...)
+		}, func(db DB) error { return a.requireScopedGroupTarget(r.ctx(), db, scope, gid, uid) })
+		if e == nil && changed {
 			a.hub.send([]int64{uid}, "removeUser", M{"group_id": "group-" + fmt.Sprint(gid), "user_id": uid})
 		}
 		return nil, e
@@ -397,11 +399,20 @@ func (a *App) manageGroup(r *request) (any, error) {
 			return nil, r.fail("角色无效")
 		}
 		where, args := a.groupMemberScopeWhere(scope, gid, r.n("user_id"))
-		return nil, update(r.ctx(), a.db, a.t("group_user"), M{"role": role}, where+" AND role<>1", args...)
+		_, err := a.scopedResourceWrite(r, scope, func(db DB) (sql.Result, error) {
+			return updateResult(r.ctx(), db, a.t("group_user"), M{"role": role}, where+" AND role<>1", args...)
+		}, func(db DB) error { return a.requireScopedGroupTarget(r.ctx(), db, scope, gid, r.n("user_id")) })
+		return nil, err
 	}
 	return nil, r.fail("未知操作")
 }
 func (a *App) manageConfig(r *request) (any, error) {
+	switch action(r) {
+	case "setconfig", "sendtestemail", "getinvitelink":
+		if err := a.requireGlobalAdminScope(r); err != nil {
+			return nil, err
+		}
+	}
 	name := r.s("name")
 	switch action(r) {
 	case "getinfo", "getconfig":
@@ -562,16 +573,21 @@ func (a *App) manageMessage(r *request) (any, error) {
 		if e != nil {
 			return nil, e
 		}
-		event := "updateMessage"
-		content := "此消息已被管理员屏蔽"
+		event, content := "updateMessage", "此消息已被管理员屏蔽"
+		changes := M{"status": 0}
 		if r.n("dealType") == 1 {
 			event = "delMessage"
-			e = update(r.ctx(), a.db, a.t("message"), M{"status": 0}, where, args...)
 		} else {
-			encrypted, _ := encryptContent(a.cfg.ChatKey, content)
-			e = update(r.ctx(), a.db, a.t("message"), M{"content": encrypted, "type": "text"}, where, args...)
+			encrypted, err := encryptContent(a.cfg.ChatKey, content)
+			if err != nil {
+				return nil, err
+			}
+			changes = M{"content": encrypted, "type": "text"}
 		}
-		if e == nil {
+		changed, e := a.scopedResourceWrite(r, scope, func(db DB) (sql.Result, error) {
+			return updateResult(r.ctx(), db, a.t("message"), changes, where, args...)
+		}, func(db DB) error { return a.requireCurrentScopedMessage(r.ctx(), db, scope, r.s("id")) })
+		if e == nil && changed {
 			a.messageEvent(r.ctx(), m, event, M{"id": m["id"], "content": content})
 		}
 		return nil, e

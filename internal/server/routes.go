@@ -48,10 +48,7 @@ func (a *App) register() {
 	a.routes["/downapp"] = endpoint{handler: a.index, public: true}
 }
 func action(r *request) string {
-	p := r.c.Request.URL.Path
-	if strings.EqualFold(p, "/index.php") && r.c.Query("s") != "" {
-		p = r.c.Query("s")
-	}
+	p := effectivePath(r.c)
 	parts := strings.Split(strings.Trim(p, "/"), "/")
 	return strings.ToLower(parts[len(parts)-1])
 }

@@ -54,6 +54,15 @@ func (a *App) group(r *request) (any, error) {
 	}
 	g, e := r.one("SELECT * FROM "+a.t("group")+" WHERE group_id=? AND status=1 AND COALESCE(delete_time,0)=0", gid)
 	if e != nil {
+		if e == sql.ErrNoRows && number(r.user["admin_role_id"]) > 0 && (act == "groupinfo" || act == "groupuserlist" || act == "editgroupavatar") {
+			scope, err := a.adminScope(r.ctx(), r.user)
+			if err != nil {
+				return nil, err
+			}
+			if !scope.Global {
+				return nil, deny()
+			}
+		}
 		return nil, e
 	}
 	if act == "joingroup" {
@@ -66,8 +75,14 @@ func (a *App) group(r *request) (any, error) {
 		}
 		return nil, a.addMembers(r, g, []int64{r.uid()})
 	}
+	member, e := a.member(r.ctx(), a.db, gid, r.uid())
+	role := number(member["role"])
 	resourceScope := adminScope{Global: true}
-	if number(r.user["admin_role_id"]) > 0 && (act == "groupinfo" || act == "groupuserlist" || act == "editgroupavatar") {
+	// Membership is sufficient for normal chat access. Resolve administrative
+	// permissions only when this action needs to bypass the member's authority.
+	needsAdmin := (e != nil && (act == "groupinfo" || act == "groupuserlist")) || (act == "editgroupavatar" && role != 1 && role != 2)
+	systemAdmin := r.uid() == 1 || number(r.user["role"]) > 0
+	if needsAdmin && number(r.user["admin_role_id"]) > 0 {
 		scope, err := a.adminScope(r.ctx(), r.user)
 		if err != nil {
 			return nil, err
@@ -81,18 +96,14 @@ func (a *App) group(r *request) (any, error) {
 			return nil, err
 		}
 		resourceScope = scope
+		systemAdmin = true
 	}
-	member, e := a.member(r.ctx(), a.db, gid, r.uid())
-	// The admin console shares these read endpoints with the chat client.
-	// Admin avatar editing is an explicit exception; other mutations still require membership.
-	systemAdmin := r.uid() == 1 || number(r.user["role"]) > 0 || number(r.user["admin_role_id"]) > 0
 	adminAvatar := systemAdmin && act == "editgroupavatar"
 	adminRead := systemAdmin && (act == "groupinfo" || act == "groupuserlist")
 	inviteRead := act == "groupinfo" && a.validGroupToken(r.s("token")) && number(strings.Split(r.s("token"), ".")[0]) == gid
 	if e != nil && !adminRead && !inviteRead && !adminAvatar {
 		return nil, e
 	}
-	role := number(member["role"])
 	switch act {
 	case "groupinfo":
 		v := M{}
@@ -182,12 +193,16 @@ func (a *App) group(r *request) (any, error) {
 			where += " AND " + predicate
 			args = append(args, params...)
 		}
-		e = update(r.ctx(), a.db, a.t("group"), M{"avatar": src}, where, args...)
+		changed, e := a.scopedResourceWrite(r, resourceScope, func(db DB) (sql.Result, error) {
+			return updateResult(r.ctx(), db, a.t("group"), M{"avatar": src}, where, args...)
+		}, func(db DB) error { return a.requireScopedGroup(r.ctx(), db, resourceScope, gid) })
 		if e != nil {
 			return nil, e
 		}
 		avatar := a.groupAvatarURL(gid) + "?v=" + fmt.Sprint(time.Now().UnixNano())
-		a.groupEvent(r.ctx(), gid, "editGroupAvatar", M{"group_id": "group-" + fmt.Sprint(gid), "avatar": avatar})
+		if changed {
+			a.groupEvent(r.ctx(), gid, "editGroupAvatar", M{"group_id": "group-" + fmt.Sprint(gid), "avatar": avatar})
+		}
 		return M{"avatar": avatar}, nil
 	case "setmanager":
 		if role != 1 {

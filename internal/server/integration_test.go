@@ -736,6 +736,7 @@ func TestMySQLIntegration(t *testing.T) {
 			t.Fatalf("failed referral registration was not rolled back: %v", err)
 		}
 	})
+	t.Run("agent resource scope and financial authorization locks", func(t *testing.T) { testAgentScopeResourcesMySQL(t, a) })
 	if !t.Failed() {
 		t.Log(fmt.Sprintf("MySQL migration, authentication, DM, groups, uploads, file authorization, WebSocket and logout passed (%s)", schema))
 	}
