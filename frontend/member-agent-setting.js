@@ -16,7 +16,7 @@ const ImgoMemberAgentSettingDialog = {
   methods: {
     canManageRow(row) {
       const user = this.$store.state.userInfo || {}
-      return !!row && Number(row.admin_role_agent_mode) === 1 && (Number(user.user_id) === 1 || (Number(user.agent_mode) === 1 && Number(user.user_id) === Number(row.user_id) && Number(row.is_self) === 1))
+      return !!row && Number(row.admin_role_agent_mode) === 1 && (Number(user.user_id) === 1 || (Number(user.user_id) === Number(row.user_id) && Number(row.is_self) === 1))
     },
     async open(row) {
       if (!this.canManageRow(row) || this.saving) return

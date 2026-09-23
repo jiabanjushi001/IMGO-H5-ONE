@@ -120,7 +120,7 @@ function actionNodes(operatorID, operatorAgentMode, rowUserID, rowAgentMode, isS
 }
 assert.ok(actionNodes(1, 0, 7, 1, 0).some(node => node.tag === 'el-dropdown-item' && node.children?.includes('导师设置')), 'super administrator must see mentor settings for mentor rows')
 assert.ok(!actionNodes(1, 0, 7, 0, 0).some(node => node.tag === 'el-dropdown-item' && node.children?.includes('导师设置')), 'ordinary rows must hide mentor settings')
-const mentorSelfActions = actionNodes(7, 1, 7, 1, 1).filter(node => node.tag === 'el-dropdown-item')
+const mentorSelfActions = actionNodes(7, undefined, 7, 1, 1).filter(node => node.tag === 'el-dropdown-item')
 assert.ok(mentorSelfActions.some(node => node.children?.includes('导师设置')), 'mentor must see settings on own row')
 for (const label of ['会话列表', '查看', '编辑', '改密', '修改邀请码']) {
   assert.ok(!mentorSelfActions.some(node => node.children?.includes(label)), `mentor own row must hide ${label}`)
@@ -160,7 +160,7 @@ async function checkAgentDialog() {
   const listPayloads = []
   const originalGetUserList = agentState.$api.userApi.getUserList
   agentState.$api.userApi.getUserList = async payload => { listPayloads.push(payload); return originalGetUserList(payload) }
-  agentState.$store.state.userInfo = { user_id: 7, agent_mode: 1 }
+  agentState.$store.state.userInfo = { user_id: 7 }
   await agentState.open({ ...row, is_self: 1 })
   assert.equal(agentState.visible, true, 'mentor must open own settings')
   assert.equal(listPayloads[0].keywords, '', 'mentor own options must load self and all descendants without account filtering')
