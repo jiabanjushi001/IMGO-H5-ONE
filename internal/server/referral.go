@@ -91,7 +91,7 @@ func (a *App) ensureInviteCode(ctx context.Context, db DB, userID int64) (string
 }
 
 // Check first for a useful error message; the unique index also closes races.
-func (a *App) setMemberInviteCode(r *request, userID int64, whereUser string) (any, error) {
+func (a *App) setMemberInviteCode(r *request, userID int64, whereUser string, scope adminScope) (any, error) {
 	code := strings.TrimSpace(r.s("invite_code"))
 	if !validInviteCode(code) {
 		return nil, clientError{"邀请码必须是 6 位纯数字", 400}
@@ -99,10 +99,23 @@ func (a *App) setMemberInviteCode(r *request, userID int64, whereUser string) (a
 	if userID < 1 {
 		return nil, clientError{"成员ID无效", 400}
 	}
-	if _, err := r.one("SELECT user_id FROM "+a.t("user")+" WHERE "+whereUser, userID); err != nil {
+	tx, err := a.db.BeginTx(r.ctx(), nil)
+	if err != nil {
 		return nil, err
 	}
-	current, err := r.one("SELECT invite_code FROM "+a.t("imgo_referral")+" WHERE user_id=?", userID)
+	defer tx.Rollback()
+	if _, err := one(r.ctx(), tx, "SELECT user_id FROM "+a.t("user")+" WHERE "+whereUser+" FOR UPDATE", userID); err != nil {
+		if err == sql.ErrNoRows {
+			return nil, deny()
+		}
+		return nil, err
+	}
+	if !scope.Global {
+		if err := a.requireScopedUser(r.ctx(), tx, scope, userID); err != nil {
+			return nil, err
+		}
+	}
+	current, err := one(r.ctx(), tx, "SELECT invite_code FROM "+a.t("imgo_referral")+" WHERE user_id=?", userID)
 	if err == sql.ErrNoRows {
 		return nil, clientError{"该成员没有邀请码记录", 400}
 	}
@@ -112,19 +125,22 @@ func (a *App) setMemberInviteCode(r *request, userID int64, whereUser string) (a
 	if str(current["invite_code"]) == code {
 		return M{"invite_code": code}, nil
 	}
-	owner, err := r.one("SELECT user_id FROM "+a.t("imgo_referral")+" WHERE invite_code=?", code)
+	owner, err := one(r.ctx(), tx, "SELECT user_id FROM "+a.t("imgo_referral")+" WHERE invite_code=?", code)
 	if err == nil && number(owner["user_id"]) != userID {
 		return nil, clientError{"邀请码已被其他成员使用", 400}
 	}
 	if err != nil && err != sql.ErrNoRows {
 		return nil, err
 	}
-	_, err = a.db.ExecContext(r.ctx(), "UPDATE "+a.t("imgo_referral")+" SET invite_code=? WHERE user_id=?", code, userID)
+	_, err = tx.ExecContext(r.ctx(), "UPDATE "+a.t("imgo_referral")+" SET invite_code=? WHERE user_id=?", code, userID)
 	if err != nil {
 		var duplicate *mysql.MySQLError
 		if errors.As(err, &duplicate) && duplicate.Number == 1062 {
 			return nil, clientError{"邀请码已被其他成员使用", 400}
 		}
+		return nil, err
+	}
+	if err := tx.Commit(); err != nil {
 		return nil, err
 	}
 	return M{"invite_code": code}, nil

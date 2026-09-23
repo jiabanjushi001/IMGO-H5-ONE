@@ -197,7 +197,7 @@ func (a *App) manageUser(r *request) (any, error) {
 		}
 		return nil, update(r.ctx(), a.db, a.t("user"), M{"remark": remark}, whereUser, uid)
 	case "setinvitecode":
-		return a.setMemberInviteCode(r, uid, whereUser)
+		return a.setMemberInviteCode(r, uid, whereUser, scope)
 	case "edit":
 		if uid == 1 && r.uid() != 1 {
 			return nil, deny()

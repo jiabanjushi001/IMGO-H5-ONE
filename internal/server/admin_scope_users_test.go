@@ -120,3 +120,49 @@ func TestAgentManageUserAddBindsNewMemberInSameTransaction(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func expectAgentInviteCodePrechecks(mock sqlmock.Sqlmock, userID int64) {
+	expectAgentMemberScope(mock)
+	mock.ExpectQuery("SELECT 1 FROM `yu_user` u WHERE u.user_id=").
+		WithArgs(userID, int64(7), int64(7)).WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT user_id FROM `yu_user` WHERE user_id=? AND role=0 AND user_id<>1 AND delete_time=0")).
+		WithArgs(userID).WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(userID))
+}
+
+func TestAgentManageUserSetInviteCodeRejectsMemberPromotedBeforeLock(t *testing.T) {
+	a, mock := testApp(t)
+	expectAgentInviteCodePrechecks(mock, 12)
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT user_id FROM `yu_user` WHERE user_id=? AND delete_time=0 AND role=0 AND user_id<>1 FOR UPDATE")).
+		WithArgs(int64(12)).WillReturnRows(sqlmock.NewRows([]string{"user_id"}))
+	mock.ExpectRollback()
+	_, err := a.manageUser(agentMemberRequest(a, "/manage/user/setInviteCode", M{"user_id": 12, "invite_code": "654321"}))
+	assertDenied(t, err)
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAgentManageUserSetInviteCodeUpdatesOnlyAfterLockedScopeCheck(t *testing.T) {
+	a, mock := testApp(t)
+	expectAgentInviteCodePrechecks(mock, 12)
+	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT user_id FROM `yu_user` WHERE user_id=? AND delete_time=0 AND role=0 AND user_id<>1 FOR UPDATE")).
+		WithArgs(int64(12)).WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(12))
+	mock.ExpectQuery("SELECT 1 FROM `yu_user` u WHERE u.user_id=").
+		WithArgs(int64(12), int64(7), int64(7)).WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT invite_code FROM `yu_imgo_referral` WHERE user_id=?")).
+		WithArgs(int64(12)).WillReturnRows(sqlmock.NewRows([]string{"invite_code"}).AddRow("123456"))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT user_id FROM `yu_imgo_referral` WHERE invite_code=?")).
+		WithArgs("654321").WillReturnRows(sqlmock.NewRows([]string{"user_id"}))
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE `yu_imgo_referral` SET invite_code=? WHERE user_id=?")).
+		WithArgs("654321", int64(12)).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+	result, err := a.manageUser(agentMemberRequest(a, "/manage/user/setInviteCode", M{"user_id": 12, "invite_code": "654321"}))
+	if err != nil || str(result.(M)["invite_code"]) != "654321" {
+		t.Fatalf("result=%#v err=%v", result, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
