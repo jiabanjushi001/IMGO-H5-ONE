@@ -138,18 +138,18 @@ const ImgoMemberAgentSettingDialog = {
       isGroup ? h('span', {}, config.name || '未设置群名称') : h('span', {}, (Array.isArray(config.user_ids) ? config.user_ids.length : 0) + ' 位客服'),
       isGroup ? h('span', {}, ` · 群主 ID ${config.owner_uid || '—'} · 人数上限 ${config.userMax || '—'}`) : h('span', {}, ` · 欢迎语：${config.welcome || '无'}`)
     ])
-    const disabledUser = this.loading || this.saving || this.inheritAutoUser
-    const disabledGroup = this.loading || this.saving || this.inheritAutoGroup
+    const disabledUser = this.loading || this.saving
+    const disabledGroup = this.loading || this.saving
     const userFields = [
-      field('自动添加好友', switchField(this.autoAddUser.status, disabledUser, value => { this.autoAddUser.status = value }, '自动添加好友')),
-      field('客服账号', h('el-select', { props: { value: this.autoAddUser.user_ids, multiple: true, filterable: true, disabled: disabledUser || this.autoAddUser.status !== 1, placeholder: '选择导师或下级账号' }, on: { input: value => { this.autoAddUser.user_ids = value } } }, optionNodes)),
-      field('欢迎语', h('el-input', { props: { value: this.autoAddUser.welcome, disabled: disabledUser || this.autoAddUser.status !== 1 }, attrs: { maxlength: 500 }, on: { input: value => { this.autoAddUser.welcome = value } } }))
+      field('自动添加好友', switchField(this.autoAddUser.status, disabledUser, value => { this.inheritAutoUser = false; this.autoAddUser.status = value }, '自动添加好友')),
+      field('客服账号', h('el-select', { props: { value: this.autoAddUser.user_ids, multiple: true, filterable: true, disabled: disabledUser || this.autoAddUser.status !== 1, placeholder: '选择导师或下级账号' }, on: { input: value => { this.inheritAutoUser = false; this.autoAddUser.user_ids = value } } }, optionNodes)),
+      field('欢迎语', h('el-input', { props: { value: this.autoAddUser.welcome, disabled: disabledUser || this.autoAddUser.status !== 1 }, attrs: { maxlength: 500 }, on: { input: value => { this.inheritAutoUser = false; this.autoAddUser.welcome = value } } }))
     ]
     const groupFields = [
-      field('自动加入群聊', switchField(this.autoAddGroup.status, disabledGroup, value => { this.autoAddGroup.status = value }, '自动加入群聊')),
-      field('群主', h('el-select', { props: { value: this.autoAddGroup.owner_uid, filterable: true, disabled: disabledGroup || this.autoAddGroup.status !== 1, placeholder: '选择导师或下级账号' }, on: { input: value => { this.autoAddGroup.owner_uid = value } } }, optionNodes)),
-      field('群名称', h('el-input', { props: { value: this.autoAddGroup.name, disabled: disabledGroup || this.autoAddGroup.status !== 1 }, attrs: { maxlength: 100 }, on: { input: value => { this.autoAddGroup.name = value } } })),
-      field('人数上限', h('el-input-number', { props: { value: this.autoAddGroup.userMax, min: 5, max: 10000, disabled: disabledGroup || this.autoAddGroup.status !== 1 }, on: { input: value => { this.autoAddGroup.userMax = value } } }))
+      field('自动加入群聊', switchField(this.autoAddGroup.status, disabledGroup, value => { this.inheritAutoGroup = false; this.autoAddGroup.status = value }, '自动加入群聊')),
+      field('群主', h('el-select', { props: { value: this.autoAddGroup.owner_uid, filterable: true, disabled: disabledGroup || this.autoAddGroup.status !== 1, placeholder: '选择导师或下级账号' }, on: { input: value => { this.inheritAutoGroup = false; this.autoAddGroup.owner_uid = value } } }, optionNodes)),
+      field('群名称', h('el-input', { props: { value: this.autoAddGroup.name, disabled: disabledGroup || this.autoAddGroup.status !== 1 }, attrs: { maxlength: 100 }, on: { input: value => { this.inheritAutoGroup = false; this.autoAddGroup.name = value } } })),
+      field('人数上限', h('el-input-number', { props: { value: this.autoAddGroup.userMax, min: 5, max: 10000, disabled: disabledGroup || this.autoAddGroup.status !== 1 }, on: { input: value => { this.inheritAutoGroup = false; this.autoAddGroup.userMax = value } } }))
     ]
     return h('el-dialog', {
       props: { title: `导师设置 · ${this.row ? this.row.account || this.row.user_id : ''}`, visible: this.visible, width: '680px', appendToBody: true, closeOnClickModal: false, showClose: !this.saving },

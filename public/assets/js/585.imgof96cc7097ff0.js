@@ -664,5 +664,5 @@ const ImgoRolePanel = {
   }
 }
 ;
-const LegacyManagement = d; d = { name: 'ImgoManagement', render(h) { const bank = this.$route.path === '/manage/bank', finance = this.$route.path.startsWith('/manage/finance/'), role = this.$route.path === '/manage/role'; return h('div', {class: 'imgo-management'}, [role ? h(ImgoRolePanel) : finance ? h(ImgoFinanceShell) : bank ? h(ImgoBankPanel) : h(ImgoOverview, [h(LegacyManagement), h(ImgoMaintenancePanel)])]); } };
+const LegacyManagement = d; d = { name: 'ImgoManagement', render(h) { const bank = this.$route.path === '/manage/bank', finance = this.$route.path.startsWith('/manage/finance/'), role = this.$route.path === '/manage/role', superAdmin=Number((this.$store.state.userInfo||{}).user_id)===1; return h('div', {class: 'imgo-management'}, [role ? h(ImgoRolePanel) : finance ? h(ImgoFinanceShell) : bank ? h(ImgoBankPanel) : h(ImgoOverview, superAdmin?[h(LegacyManagement),h(ImgoMaintenancePanel)]:[])]); } };
 /* IMGO_MAINTENANCE_END */},5080:function(t,a,s){t.exports=s.p+"assets/img/logo.e8099414.png"}}]);

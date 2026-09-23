@@ -25,7 +25,7 @@ const overview = read('frontend/overview-chart.js') + '\n' + read('frontend/over
 const bankPanel = read('frontend/bank-panel.js');
 const financeOrders = read('frontend/finance-orders.js');
 const rolePanel = read('frontend/role-panel.js');
-const extension = `;${begin}\n${read('frontend/notice-actions.js')};\n${panel};\n${overview};\n${bankPanel};\n${financeOrders};\n${rolePanel};\nconst LegacyManagement = d; d = { name: 'ImgoManagement', render(h) { const bank = this.$route.path === '/manage/bank', finance = this.$route.path.startsWith('/manage/finance/'), role = this.$route.path === '/manage/role'; return h('div', {class: 'imgo-management'}, [role ? h(ImgoRolePanel) : finance ? h(ImgoFinanceShell) : bank ? h(ImgoBankPanel) : h(ImgoOverview, [h(LegacyManagement), h(ImgoMaintenancePanel)])]); } };\n${end}`;
+const extension = `;${begin}\n${read('frontend/notice-actions.js')};\n${panel};\n${overview};\n${bankPanel};\n${financeOrders};\n${rolePanel};\nconst LegacyManagement = d; d = { name: 'ImgoManagement', render(h) { const bank = this.$route.path === '/manage/bank', finance = this.$route.path.startsWith('/manage/finance/'), role = this.$route.path === '/manage/role', superAdmin=Number((this.$store.state.userInfo||{}).user_id)===1; return h('div', {class: 'imgo-management'}, [role ? h(ImgoRolePanel) : finance ? h(ImgoFinanceShell) : bank ? h(ImgoBankPanel) : h(ImgoOverview, superAdmin?[h(LegacyManagement),h(ImgoMaintenancePanel)]:[])]); } };\n${end}`;
 text = text.replace(anchor, anchor + extension);
 write(chunk, text);
 let app = read('public/assets/js/app.85372e4e.js');

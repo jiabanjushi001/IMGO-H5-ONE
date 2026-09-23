@@ -34,6 +34,8 @@ assert.ok(build.includes('ImgoRoleApi'), 'role API injection missing')
 assert.ok(build.includes('ImgoMemberRoleSelect'), 'member role selector injection missing')
 assert.ok(build.includes('ordinaryManageGuard'), 'ordinary management routes must redirect to chat')
 assert.ok(build.includes('legacyRoleForm'), 'legacy member role editor must be removed')
+assert.ok(build.includes('superAdmin=Number((this.$store.state.userInfo||{}).user_id)===1'), 'overview must identify super administrator')
+assert.ok(build.includes('superAdmin?[h(LegacyManagement),h(ImgoMaintenancePanel)]:[]'), 'mentor overview must hide global announcement and cleanup controls')
 assert.ok(builtMembers.includes("this.$set(this.row, 'admin_role_agent_mode'"), 'built member selector must update agent mode')
 assert.equal(builtMembers.split('/* IMGO_MEMBER_ROLE_BEGIN */').length - 1, 1, 'member selector must be injected once')
 assert.equal(builtMembers.split('/* IMGO_MEMBER_AGENT_SETTING_BEGIN */').length - 1, 1, 'mentor dialog must be injected once')
@@ -178,6 +180,13 @@ async function checkAgentDialog() {
   const dialogNodes = flatten(agentComponent.render.call(agentState, h))
   assert.equal(dialogNodes.filter(node => node.tag === 'el-switch' && node.data?.attrs?.['aria-label'] === '继承全局设置').length, 2, 'dialog must show two independent inheritance switches')
   assert.ok(dialogNodes.some(node => node.children === '全局群'), 'inherited group summary must be visible')
+  const inheritedUserSwitch = dialogNodes.find(node => node.tag === 'el-switch' && node.data?.attrs?.['aria-label'] === '自动添加好友')
+  assert.equal(inheritedUserSwitch.data.props.disabled, false, 'inherited settings must remain directly editable')
+  inheritedUserSwitch.data.on.input(0)
+  assert.equal(agentState.inheritAutoUser, false, 'editing inherited customer settings must switch to mentor override')
+  const inheritedGroupName = dialogNodes.find(node => node.tag === 'el-input' && node.data?.attrs?.maxlength === 100)
+  inheritedGroupName.data.on.input('导师自己的群')
+  assert.equal(agentState.inheritAutoGroup, false, 'editing inherited group settings must switch to mentor override')
   agentState.inheritAutoUser = false
   agentState.inheritAutoGroup = false
   agentState.autoAddUser.status = 0
