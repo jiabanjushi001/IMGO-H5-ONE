@@ -3,12 +3,50 @@ package server
 import (
 	"context"
 	"database/sql"
-	"github.com/go-sql-driver/mysql"
 	"os"
+	"regexp"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DATA-DOG/go-sqlmock"
+	"github.com/go-sql-driver/mysql"
 )
+
+func TestAddonDDLIncludesAgentTables(t *testing.T) {
+	a := &App{cfg: Config{Prefix: "test_"}}
+	joinedDDL := strings.Join(a.addonTableDDL(), "\n")
+	for _, name := range []string{
+		"imgo_agent_setting", "imgo_agent_auto_state", "imgo_agent_online_sample",
+	} {
+		if !strings.Contains(joinedDDL, name) {
+			t.Fatalf("missing %s", name)
+		}
+	}
+}
+
+func TestSeedMentorRoleCreatesSevenPermissionsOnce(t *testing.T) {
+	a, mock := testApp(t)
+	ctx := context.Background()
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT role_id FROM `yu_imgo_admin_role` WHERE role_code=?")).
+		WithArgs("mentor").WillReturnRows(sqlmock.NewRows([]string{"role_id"}))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `yu_imgo_admin_role` ")).
+		WithArgs("导师", "", 1, 1, "mentor", sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(9, 1))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `yu_imgo_admin_role_permission` (role_id,permission_id) SELECT ?,permission_id FROM `yu_imgo_admin_permission` WHERE permission_key<>'manage.settings'")).
+		WithArgs(int64(9)).WillReturnResult(sqlmock.NewResult(0, 7))
+	if err := a.seedMentorRole(ctx, a.db); err != nil {
+		t.Fatal(err)
+	}
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT role_id FROM `yu_imgo_admin_role` WHERE role_code=?")).
+		WithArgs("mentor").WillReturnRows(sqlmock.NewRows([]string{"role_id"}).AddRow(9))
+	if err := a.seedMentorRole(ctx, a.db); err != nil {
+		t.Fatal(err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
 
 func TestStartupAddonUpgrade(t *testing.T) {
 	password := os.Getenv("IMGO_TEST_MYSQL_PASSWORD")
@@ -107,6 +145,25 @@ func TestStartupAddonUpgrade(t *testing.T) {
 		if err = db.QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?", table).Scan(&exists); err != nil || exists != 1 {
 			t.Fatalf("missing RBAC table %s: %v", table, err)
 		}
+	}
+	for _, table := range []string{"test_imgo_agent_setting", "test_imgo_agent_auto_state", "test_imgo_agent_online_sample"} {
+		var exists int
+		if err = db.QueryRow("SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?", table).Scan(&exists); err != nil || exists != 1 {
+			t.Fatalf("missing agent table %s: %v", table, err)
+		}
+	}
+	for _, column := range []string{"agent_mode", "role_code"} {
+		var exists int
+		if err = db.QueryRow("SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name='test_imgo_admin_role' AND column_name=?", column).Scan(&exists); err != nil || exists != 1 {
+			t.Fatalf("missing role column %s: %v", column, err)
+		}
+	}
+	var mentorMode, mentorPermissions int
+	if err = db.QueryRow("SELECT agent_mode FROM test_imgo_admin_role WHERE role_code='mentor'").Scan(&mentorMode); err != nil || mentorMode != 1 {
+		t.Fatalf("mentor role mode = %d: %v", mentorMode, err)
+	}
+	if err = db.QueryRow("SELECT COUNT(*) FROM test_imgo_admin_role_permission rp JOIN test_imgo_admin_role r ON r.role_id=rp.role_id WHERE r.role_code='mentor'").Scan(&mentorPermissions); err != nil || mentorPermissions != 7 {
+		t.Fatalf("mentor permissions = %d: %v", mentorPermissions, err)
 	}
 	var permissionCount int
 	if err = db.QueryRow("SELECT COUNT(*) FROM test_imgo_admin_permission WHERE permission_key LIKE 'manage.%'").Scan(&permissionCount); err != nil || permissionCount != 8 {

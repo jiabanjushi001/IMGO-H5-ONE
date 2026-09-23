@@ -101,7 +101,7 @@ func (a *App) CheckSchema(ctx context.Context) error {
 	if length.Int64 < 60 {
 		return errors.New("密码列不足以存储 bcrypt，请先备份测试库并运行 -migrate")
 	}
-	for _, name := range []string{"imgo_session", "imgo_chat_lock", "imgo_object", "imgo_online_sample", "imgo_bank_card", "imgo_check_in", "imgo_wallet", "imgo_withdrawal", "imgo_wallet_entry", "imgo_recharge_order", "imgo_referral", "imgo_referral_legacy_code", "imgo_referral_path"} {
+	for _, name := range []string{"imgo_session", "imgo_chat_lock", "imgo_object", "imgo_online_sample", "imgo_bank_card", "imgo_check_in", "imgo_wallet", "imgo_withdrawal", "imgo_wallet_entry", "imgo_recharge_order", "imgo_referral", "imgo_referral_legacy_code", "imgo_referral_path", "imgo_agent_setting", "imgo_agent_auto_state", "imgo_agent_online_sample"} {
 		var n int
 		if e := a.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?", a.cfg.Prefix+name).Scan(&n); e != nil || n == 0 {
 			return errors.New("缺少 Go 服务附加表，请运行 -migrate")

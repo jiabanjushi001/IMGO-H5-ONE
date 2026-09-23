@@ -142,6 +142,45 @@ CREATE TABLE `yu_user` (
   `status` tinyint(1) UNSIGNED DEFAULT '1'
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci ROW_FORMAT=COMPACT;
 
+CREATE TABLE `yu_imgo_admin_role` (
+  role_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  name VARCHAR(64) NOT NULL,
+  remark VARCHAR(255) NOT NULL DEFAULT '',
+  status TINYINT NOT NULL DEFAULT 1,
+  agent_mode TINYINT NOT NULL DEFAULT 0,
+  role_code VARCHAR(32) NULL,
+  created_at BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL,
+  UNIQUE KEY imgo_admin_role_name(name),
+  UNIQUE KEY imgo_admin_role_code(role_code),
+  INDEX imgo_admin_role_status(status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `yu_imgo_agent_setting` (
+  agent_user_id BIGINT PRIMARY KEY,
+  auto_add_user JSON NULL,
+  auto_add_group JSON NULL,
+  updated_by BIGINT NOT NULL,
+  updated_at BIGINT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `yu_imgo_agent_auto_state` (
+  agent_user_id BIGINT PRIMARY KEY,
+  last_customer_user_id BIGINT NOT NULL DEFAULT 0,
+  group_id BIGINT NOT NULL DEFAULT 0,
+  group_num INT NOT NULL DEFAULT 1,
+  updated_at BIGINT NOT NULL
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+CREATE TABLE `yu_imgo_agent_online_sample` (
+  agent_user_id BIGINT NOT NULL,
+  sample_at BIGINT NOT NULL,
+  users INT NOT NULL,
+  devices INT NOT NULL,
+  PRIMARY KEY(agent_user_id,sample_at),
+  INDEX(sample_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 ALTER TABLE `yu_config`
   ADD PRIMARY KEY (`id`);
 
