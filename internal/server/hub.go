@@ -32,6 +32,37 @@ type Hub struct {
 var errSocketDisconnected = clientError{"WebSocket 连接已断开", 400}
 
 func newHub(a *App) *Hub { return &Hub{a: a, peers: map[string]*peer{}} }
+
+// Online means authenticated, live WebSocket connections. Multiple
+// connections from one user count as devices, but only one online user.
+func (h *Hub) onlineCounts(now time.Time) (int, int) {
+	return h.onlineCountsMatching(nil, true, now)
+}
+
+func (h *Hub) onlineCountsForUsers(allowed map[int64]bool, now time.Time) (int, int) {
+	return h.onlineCountsMatching(allowed, false, now)
+}
+
+func (h *Hub) onlineCountsMatching(allowed map[int64]bool, all bool, now time.Time) (int, int) {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+	users := map[int64]bool{}
+	devices := 0
+	for _, p := range h.peers {
+		if p.uid == 0 || p.claims.Exp <= now.Unix() || !all && !allowed[p.uid] {
+			continue
+		}
+		select {
+		case <-p.done:
+			continue
+		default:
+		}
+		users[p.uid] = true
+		devices++
+	}
+	return len(users), devices
+}
+
 func (h *Hub) serve(c *gin.Context) {
 	connectionIP := h.a.clientIP(c)
 	// Clients authenticate with an explicit token; Origin is not an access restriction.

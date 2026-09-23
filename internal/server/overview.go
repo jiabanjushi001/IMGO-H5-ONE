@@ -7,32 +7,40 @@ import (
 
 var dashboardZone = time.FixedZone("Asia/Shanghai", 8*60*60)
 
-// Online means authenticated, live WebSocket connections; multiple connections
-// from one user count as multiple devices, but only one online user.
-func (h *Hub) onlineCounts(now time.Time) (int, int) {
-	h.mu.RLock()
-	defer h.mu.RUnlock()
-	users := map[int64]bool{}
-	devices := 0
-	for _, p := range h.peers {
-		if p.uid == 0 || p.claims.Exp <= now.Unix() {
-			continue
-		}
-		select {
-		case <-p.done:
-			continue
-		default:
-		}
-		users[p.uid] = true
-		devices++
-	}
-	return len(users), devices
-}
-
 func (a *App) recordOnline(ctx context.Context, now time.Time) error {
+	// Resolve team membership before touching the Hub, then release its lock
+	// before any sample write. A LEFT JOIN keeps agents with no descendants.
+	teams, err := rows(ctx, a.db, "SELECT agent.user_id AS agent_user_id,child.user_id AS descendant_user_id FROM "+a.t("user")+" agent JOIN "+a.t("imgo_admin_role")+" ar ON ar.role_id=agent.admin_role_id LEFT JOIN "+a.t("imgo_referral_path")+" rp ON rp.ancestor_user_id=agent.user_id AND rp.depth>0 LEFT JOIN "+a.t("user")+" child ON child.user_id=rp.descendant_user_id AND child.delete_time=0 WHERE agent.status=1 AND agent.delete_time=0 AND ar.status=1 AND ar.agent_mode=1 ORDER BY agent.user_id,rp.descendant_user_id")
+	if err != nil {
+		return err
+	}
+	teamUsers := map[int64]map[int64]bool{}
+	agentIDs := []int64{}
+	for _, row := range teams {
+		agentID := number(row["agent_user_id"])
+		if agentID < 1 {
+			continue
+		}
+		if _, ok := teamUsers[agentID]; !ok {
+			teamUsers[agentID] = map[int64]bool{}
+			agentIDs = append(agentIDs, agentID)
+		}
+		if childID := number(row["descendant_user_id"]); childID > 0 && childID != agentID {
+			teamUsers[agentID][childID] = true
+		}
+	}
 	users, devices := a.hub.onlineCounts(now)
-	_, err := a.db.ExecContext(ctx, "INSERT INTO "+a.t("imgo_online_sample")+" (sample_at,users,devices) VALUES (?,?,?) ON DUPLICATE KEY UPDATE users=GREATEST(users,VALUES(users)),devices=GREATEST(devices,VALUES(devices))", now.Unix()/60*60, users, devices)
-	return err
+	sampleAt := now.Unix() / 60 * 60
+	if _, err := a.db.ExecContext(ctx, "INSERT INTO "+a.t("imgo_online_sample")+" (sample_at,users,devices) VALUES (?,?,?) ON DUPLICATE KEY UPDATE users=GREATEST(users,VALUES(users)),devices=GREATEST(devices,VALUES(devices))", sampleAt, users, devices); err != nil {
+		return err
+	}
+	for _, agentID := range agentIDs {
+		users, devices := a.hub.onlineCountsForUsers(teamUsers[agentID], now)
+		if _, err := a.db.ExecContext(ctx, "INSERT INTO "+a.t("imgo_agent_online_sample")+" (agent_user_id,sample_at,users,devices) VALUES (?,?,?,?) ON DUPLICATE KEY UPDATE users=GREATEST(users,VALUES(users)),devices=GREATEST(devices,VALUES(devices))", agentID, sampleAt, users, devices); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Called only by the HTTP server, after schema validation, not by migration tools.
@@ -76,7 +84,7 @@ func periodStarts(now time.Time, months bool, count int) []time.Time {
 	return out
 }
 
-func (a *App) trend(ctx context.Context, table, predicate string, boundaries []time.Time, monthly bool) ([]M, error) {
+func (a *App) trend(ctx context.Context, table, alias, predicate string, predicateArgs []any, boundaries []time.Time, monthly bool) ([]M, error) {
 	format := "2006-01-02"
 	sqlFormat := "%Y-%m-%d"
 	if monthly {
@@ -84,8 +92,10 @@ func (a *App) trend(ctx context.Context, table, predicate string, boundaries []t
 		sqlFormat = "%Y-%m"
 	}
 	// DATE_ADD from a literal epoch avoids dependency on the MySQL session timezone.
-	q := "SELECT DATE_FORMAT(DATE_ADD('1970-01-01', INTERVAL (create_time+28800) SECOND), ?) AS bucket,COUNT(*) AS n FROM " + a.t(table) + " WHERE " + predicate + " AND create_time>=? AND create_time<? GROUP BY bucket"
-	data, err := rows(ctx, a.db, q, sqlFormat, boundaries[0].Unix(), boundaries[len(boundaries)-1].Unix())
+	q := "SELECT DATE_FORMAT(DATE_ADD('1970-01-01', INTERVAL (" + alias + ".create_time+28800) SECOND), ?) AS bucket,COUNT(*) AS n FROM " + a.t(table) + " " + alias + " WHERE " + predicate + " AND " + alias + ".create_time>=? AND " + alias + ".create_time<? GROUP BY bucket"
+	args := append([]any{sqlFormat}, predicateArgs...)
+	args = append(args, boundaries[0].Unix(), boundaries[len(boundaries)-1].Unix())
+	data, err := rows(ctx, a.db, q, args...)
 	if err != nil {
 		return nil, err
 	}
@@ -104,23 +114,63 @@ func (a *App) trend(ctx context.Context, table, predicate string, boundaries []t
 func (a *App) overview(r *request) (any, error) {
 	now := time.Now()
 	today := periodStarts(now, false, 1)[0].Unix()
+	scope, err := a.adminScope(r.ctx(), r.user)
+	if err != nil {
+		return nil, err
+	}
 	result := M{"timezone": "Asia/Shanghai", "generated_at": now.Unix()}
 	totals := M{}
 	daily := M{}
-	for _, spec := range []struct{ name, table, where string }{{"users", "user", "delete_time=0"}, {"groups", "group", "status=1 AND delete_time=0"}, {"messages", "message", "status=1 AND chat_identify<>'admin_notice'"}, {"files", "file", "status=1 AND delete_time=0"}} {
+	userScope, userArgs := scope.userPredicate("u")
+	groupScope, groupArgs := a.groupScopePredicate(scope, "g")
+	messageScope, messageArgs := a.messageScopePredicate(scope, "m")
+	fileScope, fileArgs := scope.userPredicate("f")
+	type overviewSpec struct {
+		name, table, alias, where string
+		args                      []any
+	}
+	specs := []overviewSpec{
+		{"users", "user", "u", "u.delete_time=0 AND " + userScope, userArgs},
+		{"groups", "group", "g", "g.status=1 AND g.delete_time=0 AND " + groupScope, groupArgs},
+		{"messages", "message", "m", "m.status=1 AND m.chat_identify<>'admin_notice' AND " + messageScope, messageArgs},
+		{"files", "file", "f", "f.status=1 AND f.delete_time=0 AND " + fileScope, fileArgs},
+	}
+	for _, spec := range specs {
 		var total, added int64
-		err := a.db.QueryRowContext(r.ctx(), "SELECT COUNT(*),COALESCE(SUM(create_time>=?),0) FROM "+a.t(spec.table)+" WHERE "+spec.where, today).Scan(&total, &added)
+		args := append([]any{today}, spec.args...)
+		err := a.db.QueryRowContext(r.ctx(), "SELECT COUNT(*),COALESCE(SUM("+spec.alias+".create_time>=?),0) FROM "+a.t(spec.table)+" "+spec.alias+" WHERE "+spec.where, args...).Scan(&total, &added)
 		if err != nil {
 			return nil, err
 		}
 		totals[spec.name] = total
 		daily[spec.name] = added
 	}
-	users, devices := a.hub.onlineCounts(now)
+	users, devices := 0, 0
+	if scope.Global {
+		users, devices = a.hub.onlineCounts(now)
+	} else {
+		allowed := map[int64]bool{}
+		members, err := rows(r.ctx(), a.db, "SELECT path.descendant_user_id AS user_id FROM "+a.t("imgo_referral_path")+" path JOIN "+a.t("user")+" child ON child.user_id=path.descendant_user_id WHERE path.ancestor_user_id=? AND path.depth>0 AND child.delete_time=0", scope.AgentUserID)
+		if err != nil {
+			return nil, err
+		}
+		for _, member := range members {
+			allowed[number(member["user_id"])] = true
+		}
+		users, devices = a.hub.onlineCountsForUsers(allowed, now)
+	}
 	totals["online_users"] = users
 	totals["online_devices"] = devices
 	var pu, pd int64
-	if err := a.db.QueryRowContext(r.ctx(), "SELECT COALESCE(MAX(users),0),COALESCE(MAX(devices),0) FROM "+a.t("imgo_online_sample")+" WHERE sample_at>=?", today).Scan(&pu, &pd); err != nil {
+	peakTable := a.t("imgo_online_sample")
+	peakWhere := "sample_at>=?"
+	peakArgs := []any{today}
+	if !scope.Global {
+		peakTable = a.t("imgo_agent_online_sample")
+		peakWhere = "agent_user_id=? AND sample_at>=?"
+		peakArgs = []any{scope.AgentUserID, today}
+	}
+	if err := a.db.QueryRowContext(r.ctx(), "SELECT COALESCE(MAX(users),0),COALESCE(MAX(devices),0) FROM "+peakTable+" WHERE "+peakWhere, peakArgs...).Scan(&pu, &pd); err != nil {
 		return nil, err
 	}
 	if int64(users) > pu {
@@ -134,11 +184,12 @@ func (a *App) overview(r *request) (any, error) {
 	result["totals"] = totals
 	result["today"] = daily
 	for _, spec := range []struct {
-		key, table, where string
-		monthly           bool
-		count             int
-	}{{"registration_month", "user", "delete_time=0", true, 12}, {"registration_day", "user", "delete_time=0", false, 30}, {"messages", "message", "status=1 AND chat_identify<>'admin_notice'", false, 30}, {"groups", "group", "status=1 AND delete_time=0", true, 12}, {"files", "file", "status=1 AND delete_time=0", true, 12}} {
-		data, err := a.trend(r.ctx(), spec.table, spec.where, periodStarts(now, spec.monthly, spec.count), spec.monthly)
+		key     string
+		spec    overviewSpec
+		monthly bool
+		count   int
+	}{{"registration_month", specs[0], true, 12}, {"registration_day", specs[0], false, 30}, {"messages", specs[2], false, 30}, {"groups", specs[1], true, 12}, {"files", specs[3], true, 12}} {
+		data, err := a.trend(r.ctx(), spec.spec.table, spec.spec.alias, spec.spec.where, spec.spec.args, periodStarts(now, spec.monthly, spec.count), spec.monthly)
 		if err != nil {
 			return nil, err
 		}
@@ -156,7 +207,15 @@ func (a *App) overview(r *request) (any, error) {
 	if days > 1 {
 		bucket = 3600
 	}
-	samples, err := rows(r.ctx(), a.db, "SELECT FLOOR(sample_at/?)*? AS time,MAX(users) AS users,MAX(devices) AS devices FROM "+a.t("imgo_online_sample")+" WHERE sample_at>=? AND sample_at<=? GROUP BY `time` ORDER BY `time`", bucket, bucket, since, now.Unix())
+	sampleTable := a.t("imgo_online_sample")
+	sampleWhere := "sample_at>=? AND sample_at<=?"
+	sampleArgs := []any{bucket, bucket, since, now.Unix()}
+	if !scope.Global {
+		sampleTable = a.t("imgo_agent_online_sample")
+		sampleWhere = "agent_user_id=? AND " + sampleWhere
+		sampleArgs = []any{bucket, bucket, scope.AgentUserID, since, now.Unix()}
+	}
+	samples, err := rows(r.ctx(), a.db, "SELECT FLOOR(sample_at/?)*? AS time,MAX(users) AS users,MAX(devices) AS devices FROM "+sampleTable+" WHERE "+sampleWhere+" GROUP BY `time` ORDER BY `time`", sampleArgs...)
 	if err != nil {
 		return nil, err
 	}
