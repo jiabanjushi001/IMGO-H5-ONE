@@ -67,6 +67,13 @@ func TestMySQLIntegration(t *testing.T) {
 	if e = a.CheckSchema(ctx); e != nil {
 		t.Fatal(e)
 	}
+	// This isolated fixture exercises immediate retries and concurrent sends.
+	// Disable configurable message pacing so those checks reach persistence.
+	chatConfig := a.config(ctx, "chatInfo")
+	chatConfig["sendInterval"] = 0
+	if e = update(ctx, a.db, a.t("config"), M{"value": js(chatConfig)}, "name=?", "chatInfo"); e != nil {
+		t.Fatal(e)
+	}
 	for _, name := range []string{"alice", "bob", "outsider"} {
 		if _, e = a.createUser(ctx, a.db, M{"account": name, "realname": name, "password": "test-password"}, "127.0.0.1"); e != nil {
 			t.Fatal(e)
@@ -404,9 +411,11 @@ func TestMySQLIntegration(t *testing.T) {
 		if e != nil {
 			t.Fatal(e)
 		}
-		if e = update(ctx, a.db, a.t("user"), M{"role": 2}, "user_id=?", uid); e != nil {
-			t.Fatal(e)
-		}
+		role := obj(success("/manage/role/save", admin, M{
+			"name": "Integration moderator", "status": 1, "agent_mode": 0,
+			"permissions": []any{"manage.users", "manage.groups", "manage.messages"},
+		}))
+		success("/manage/user/setRole", admin, M{"user_id": uid, "admin_role_id": role["role_id"]})
 		token := login("moderator", "moderator-password")
 		success("/manage/user/add", token, M{"account": "managed-user", "password": "managed-password"})
 		target, e := one(ctx, a.db, "SELECT user_id FROM yu_user WHERE account='managed-user'")
