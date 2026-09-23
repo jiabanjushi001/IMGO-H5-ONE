@@ -69,8 +69,8 @@ func TestAdminScopeUserPredicateUsesPrefixedPathAndSafeAlias(t *testing.T) {
 		t.Fatal(err)
 	}
 	predicate, args := scope.userPredicate("u")
-	want := "EXISTS (SELECT 1 FROM `yu_imgo_referral_path` scope_path WHERE scope_path.ancestor_user_id=? AND scope_path.descendant_user_id=u.user_id)"
-	if predicate != want || !reflect.DeepEqual(args, []any{int64(7)}) {
+	want := "(u.user_id<>? AND EXISTS (SELECT 1 FROM `yu_imgo_referral_path` scope_path WHERE scope_path.ancestor_user_id=? AND scope_path.descendant_user_id=u.user_id))"
+	if predicate != want || !reflect.DeepEqual(args, []any{int64(7), int64(7)}) {
 		t.Fatalf("predicate = %q, args = %#v", predicate, args)
 	}
 	globalPredicate, globalArgs := (adminScope{Global: true}).userPredicate("u")
@@ -89,8 +89,8 @@ func TestRequireScopedUserChecksExistenceAndDescendant(t *testing.T) {
 	ctx := context.Background()
 	t.Run("agent descendant is allowed", func(t *testing.T) {
 		a, mock := testApp(t)
-		mock.ExpectQuery(regexp.QuoteMeta("SELECT 1 FROM `yu_user` u WHERE u.user_id=? AND u.delete_time=0 AND EXISTS (SELECT 1 FROM `yu_imgo_referral_path` scope_path WHERE scope_path.ancestor_user_id=? AND scope_path.descendant_user_id=u.user_id)")).
-			WithArgs(int64(12), int64(7)).WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
+		mock.ExpectQuery(regexp.QuoteMeta("SELECT 1 FROM `yu_user` u WHERE u.user_id=? AND u.delete_time=0 AND (u.user_id<>? AND EXISTS (SELECT 1 FROM `yu_imgo_referral_path` scope_path WHERE scope_path.ancestor_user_id=? AND scope_path.descendant_user_id=u.user_id))")).
+			WithArgs(int64(12), int64(7), int64(7)).WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
 		if err := a.requireScopedUser(ctx, a.db, adminScope{AgentUserID: 7}, 12); err != nil {
 			t.Fatal(err)
 		}
@@ -98,15 +98,22 @@ func TestRequireScopedUserChecksExistenceAndDescendant(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
-	t.Run("agent cannot access self or an unrelated user", func(t *testing.T) {
-		for _, userID := range []int64{7, 99} {
-			a, mock := testApp(t)
-			mock.ExpectQuery("SELECT 1 FROM `yu_user` u WHERE u.user_id=").
-				WithArgs(userID, int64(7)).WillReturnRows(sqlmock.NewRows([]string{"1"}))
-			assertDenied(t, a.requireScopedUser(ctx, a.db, adminScope{AgentUserID: 7}, userID))
-			if err := mock.ExpectationsWereMet(); err != nil {
-				t.Fatal(err)
-			}
+	t.Run("matching self path cannot authorize agent's own record", func(t *testing.T) {
+		a, mock := testApp(t)
+		mock.ExpectQuery("SELECT 1 FROM `yu_user` u WHERE u.user_id=\\? AND u.delete_time=0 AND \\(u.user_id<>\\?").
+			WithArgs(int64(7), int64(7), int64(7)).WillReturnRows(sqlmock.NewRows([]string{"1"}).AddRow(1))
+		assertDenied(t, a.requireScopedUser(ctx, a.db, adminScope{AgentUserID: 7}, 7))
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
+		}
+	})
+	t.Run("unrelated user is denied", func(t *testing.T) {
+		a, mock := testApp(t)
+		mock.ExpectQuery("SELECT 1 FROM `yu_user` u WHERE u.user_id=").
+			WithArgs(int64(99), int64(7), int64(7)).WillReturnRows(sqlmock.NewRows([]string{"1"}))
+		assertDenied(t, a.requireScopedUser(ctx, a.db, adminScope{AgentUserID: 7}, 99))
+		if err := mock.ExpectationsWereMet(); err != nil {
+			t.Fatal(err)
 		}
 	})
 	t.Run("global scope still checks user existence", func(t *testing.T) {
@@ -122,7 +129,7 @@ func TestRequireScopedUserChecksExistenceAndDescendant(t *testing.T) {
 		a, mock := testApp(t)
 		failure := errors.New("database unavailable")
 		mock.ExpectQuery("SELECT 1 FROM `yu_user` u WHERE u.user_id=").
-			WithArgs(int64(12), int64(7)).WillReturnError(failure)
+			WithArgs(int64(12), int64(7), int64(7)).WillReturnError(failure)
 		if err := a.requireScopedUser(ctx, a.db, adminScope{AgentUserID: 7}, 12); !errors.Is(err, failure) {
 			t.Fatalf("error = %v, want database failure", err)
 		}
@@ -131,7 +138,7 @@ func TestRequireScopedUserChecksExistenceAndDescendant(t *testing.T) {
 
 func TestNearestAgentSelectsClosestEnabledAncestor(t *testing.T) {
 	a, mock := testApp(t)
-	mock.ExpectQuery("SELECT p.ancestor_user_id FROM `yu_imgo_referral_path` p JOIN `yu_user` u ON u.user_id=p.ancestor_user_id JOIN `yu_imgo_admin_role` r ON r.role_id=u.admin_role_id WHERE p.descendant_user_id=\\? AND u.status=1 AND u.delete_time=0 AND r.status=1 AND r.agent_mode=1 ORDER BY p.depth ASC,p.ancestor_user_id ASC LIMIT 1").
+	mock.ExpectQuery("SELECT p.ancestor_user_id FROM `yu_imgo_referral_path` p JOIN `yu_user` u ON u.user_id=p.ancestor_user_id JOIN `yu_imgo_admin_role` r ON r.role_id=u.admin_role_id WHERE p.descendant_user_id=\\? AND p.ancestor_user_id<>p.descendant_user_id AND u.status=1 AND u.delete_time=0 AND r.status=1 AND r.agent_mode=1 ORDER BY p.depth ASC,p.ancestor_user_id ASC LIMIT 1").
 		WithArgs(int64(20)).WillReturnRows(sqlmock.NewRows([]string{"ancestor_user_id"}).AddRow(14))
 	got, err := a.nearestAgent(context.Background(), a.db, 20)
 	if err != nil || got != 14 {
@@ -149,6 +156,19 @@ func TestNearestAgentReturnsZeroWithoutMentor(t *testing.T) {
 	got, err := a.nearestAgent(context.Background(), a.db, 20)
 	if err != nil || got != 0 {
 		t.Fatalf("nearest agent = %d, error = %v", got, err)
+	}
+}
+
+func TestNearestAgentDoesNotSelectSelfLoop(t *testing.T) {
+	a, mock := testApp(t)
+	mock.ExpectQuery("SELECT p.ancestor_user_id FROM `yu_imgo_referral_path` p .*p.ancestor_user_id<>p.descendant_user_id").
+		WithArgs(int64(20)).WillReturnRows(sqlmock.NewRows([]string{"ancestor_user_id"}).AddRow(20))
+	got, err := a.nearestAgent(context.Background(), a.db, 20)
+	if err != nil || got != 0 {
+		t.Fatalf("self path selected as mentor: id=%d error=%v", got, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -44,7 +44,7 @@ func (s adminScope) userPredicate(alias string) (string, []any) {
 	if s.referralTable == "" {
 		panic("missing referral table for admin scope")
 	}
-	return "EXISTS (SELECT 1 FROM " + s.referralTable + " scope_path WHERE scope_path.ancestor_user_id=? AND scope_path.descendant_user_id=" + alias + ".user_id)", []any{s.AgentUserID}
+	return "(" + alias + ".user_id<>? AND EXISTS (SELECT 1 FROM " + s.referralTable + " scope_path WHERE scope_path.ancestor_user_id=? AND scope_path.descendant_user_id=" + alias + ".user_id))", []any{s.AgentUserID, s.AgentUserID}
 }
 
 func safeSQLAlias(alias string) bool {
@@ -73,6 +73,9 @@ func (a *App) requireScopedUser(ctx context.Context, db DB, scope adminScope, us
 	if errors.Is(err, sql.ErrNoRows) {
 		return deny()
 	}
+	if err == nil && !scope.Global && userID == scope.AgentUserID {
+		return deny()
+	}
 	return err
 }
 
@@ -84,7 +87,7 @@ func (a *App) nearestAgent(ctx context.Context, db DB, userID int64) (int64, err
 		"SELECT p.ancestor_user_id FROM "+a.t("imgo_referral_path")+" p "+
 			"JOIN "+a.t("user")+" u ON u.user_id=p.ancestor_user_id "+
 			"JOIN "+a.t("imgo_admin_role")+" r ON r.role_id=u.admin_role_id "+
-			"WHERE p.descendant_user_id=? AND u.status=1 AND u.delete_time=0 AND r.status=1 AND r.agent_mode=1 "+
+			"WHERE p.descendant_user_id=? AND p.ancestor_user_id<>p.descendant_user_id AND u.status=1 AND u.delete_time=0 AND r.status=1 AND r.agent_mode=1 "+
 			"ORDER BY p.depth ASC,p.ancestor_user_id ASC LIMIT 1", userID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return 0, nil
@@ -92,5 +95,9 @@ func (a *App) nearestAgent(ctx context.Context, db DB, userID int64) (int64, err
 	if err != nil {
 		return 0, err
 	}
-	return number(row["ancestor_user_id"]), nil
+	agentID := number(row["ancestor_user_id"])
+	if agentID == userID {
+		return 0, nil
+	}
+	return agentID, nil
 }
