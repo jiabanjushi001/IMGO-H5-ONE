@@ -201,3 +201,49 @@ func TestRegistrationAutomationLocksAndPersistsMentorState(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestRegistrationAutomationReadsCurrentSettingsAfterWaitingForLock(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		user      any
+		group     any
+		wantUser  int64
+		wantGroup int64
+	}{
+		{"inherit changed to override", `{"status":1,"user_ids":[7]}`, `{"status":1,"owner_uid":7}`, 7, 7},
+		{"override changed to inherit", nil, nil, 2, 1},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, mock := testApp(t)
+			mock.ExpectBegin()
+			// The next rows represent a save that committed while this registration
+			// waited for the registration lock. Locking reads must see these rows.
+			mock.ExpectExec("INSERT INTO `yu_imgo_chat_lock`").WillReturnResult(sqlmock.NewResult(0, 1))
+			mock.ExpectQuery("SELECT value,status FROM `yu_config` WHERE name='chatInfo' LIMIT 1 FOR UPDATE").
+				WillReturnRows(sqlmock.NewRows([]string{"value", "status"}).AddRow(`{"autoAddUser":{"status":1,"user_ids":[2]},"autoAddGroup":{"status":1,"owner_uid":1}}`, 1))
+			mock.ExpectQuery("SELECT u.user_id FROM `yu_user` u JOIN `yu_imgo_admin_role`").WithArgs(int64(7)).
+				WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(7))
+			mock.ExpectExec("INSERT INTO `yu_imgo_agent_setting`").WithArgs(int64(7), int64(0), int64(0)).
+				WillReturnResult(sqlmock.NewResult(0, 1))
+			mock.ExpectQuery("SELECT auto_add_user,auto_add_group FROM `yu_imgo_agent_setting` WHERE agent_user_id=\\? FOR UPDATE").WithArgs(int64(7)).
+				WillReturnRows(sqlmock.NewRows([]string{"auto_add_user", "auto_add_group"}).AddRow(tc.user, tc.group))
+			mock.ExpectRollback()
+			tx, err := a.db.Begin()
+			if err != nil {
+				t.Fatal(err)
+			}
+			got, err := a.registrationAutomation(context.Background(), tx, 7)
+			if err != nil {
+				t.Fatal(err)
+			}
+			customers := ids(got.AutoUser["user_ids"])
+			if got.AgentUserID != 7 || len(customers) != 1 || customers[0] != tc.wantUser || number(got.AutoGroup["owner_uid"]) != tc.wantGroup {
+				t.Fatalf("stale automation selected: %#v", got)
+			}
+			_ = tx.Rollback()
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}

@@ -25,7 +25,16 @@ func (a *App) mentorEnabled(ctx context.Context, db DB, userID int64) (bool, err
 }
 
 func (a *App) agentSetting(ctx context.Context, db DB, agentID int64) (M, M, bool, bool, error) {
-	row, err := one(ctx, db, "SELECT auto_add_user,auto_add_group FROM "+a.t("imgo_agent_setting")+" WHERE agent_user_id=?", agentID)
+	query := "SELECT auto_add_user,auto_add_group FROM " + a.t("imgo_agent_setting") + " WHERE agent_user_id=?"
+	if tx, ok := db.(*sql.Tx); ok {
+		// Materialize an inherited row so a concurrent administrator save must
+		// wait for this registration even when no setting existed yet.
+		if _, err := tx.ExecContext(ctx, "INSERT INTO "+a.t("imgo_agent_setting")+" (agent_user_id,updated_by,updated_at) VALUES (?,?,?) ON DUPLICATE KEY UPDATE agent_user_id=VALUES(agent_user_id)", agentID, int64(0), int64(0)); err != nil {
+			return nil, nil, false, false, err
+		}
+		query += " FOR UPDATE"
+	}
+	row, err := one(ctx, db, query, agentID)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, nil, true, true, nil
 	}
@@ -35,8 +44,39 @@ func (a *App) agentSetting(ctx context.Context, db DB, agentID int64) (M, M, boo
 	return obj(row["auto_add_user"]), obj(row["auto_add_group"]), row["auto_add_user"] == nil, row["auto_add_group"] == nil, nil
 }
 
+func (a *App) registrationChatConfig(ctx context.Context, db DB) (M, error) {
+	tx, transactional := db.(*sql.Tx)
+	if !transactional {
+		return a.config(ctx, "chatInfo"), nil
+	}
+	// All registrations take this lock first. A registration that waited here
+	// then reads the current chatInfo and mentor setting rows with locking reads.
+	if _, err := tx.ExecContext(ctx, "INSERT INTO "+a.t("imgo_chat_lock")+" (chat_identify) VALUES ('__registration__') ON DUPLICATE KEY UPDATE chat_identify=VALUES(chat_identify)"); err != nil {
+		return nil, err
+	}
+	row, err := one(ctx, tx, "SELECT value,status FROM "+a.t("config")+" WHERE name='chatInfo' LIMIT 1 FOR UPDATE")
+	if errors.Is(err, sql.ErrNoRows) {
+		return defaultConfig("chatInfo"), nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	if number(row["status"]) != 1 {
+		return defaultConfig("chatInfo"), nil
+	}
+	return obj(row["value"]), nil
+}
+
 func (a *App) registrationAutomation(ctx context.Context, db DB, inviterID int64) (registrationAutomation, error) {
 	result := registrationAutomation{UserInherited: true, GroupInherited: true}
+	var chat M
+	if _, transactional := db.(*sql.Tx); transactional {
+		var err error
+		chat, err = a.registrationChatConfig(ctx, db)
+		if err != nil {
+			return result, err
+		}
+	}
 	if inviterID > 0 {
 		direct, err := a.mentorEnabled(ctx, db, inviterID)
 		if err != nil {
@@ -59,7 +99,13 @@ func (a *App) registrationAutomation(ctx context.Context, db DB, inviterID int64
 		}
 	}
 	if result.UserInherited || result.GroupInherited {
-		chat := a.config(ctx, "chatInfo")
+		if chat == nil {
+			var err error
+			chat, err = a.registrationChatConfig(ctx, db)
+			if err != nil {
+				return result, err
+			}
+		}
 		if result.UserInherited {
 			result.AutoUser = obj(chat["autoAddUser"])
 		}

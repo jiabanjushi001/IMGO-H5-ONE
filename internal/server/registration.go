@@ -34,9 +34,6 @@ func (a *App) addMutualFriendship(ctx context.Context, db DB, customerID, userID
 }
 
 func (a *App) loadGlobalAutoTask(ctx context.Context, tx *sql.Tx) (M, M, error) {
-	if _, err := tx.ExecContext(ctx, "INSERT INTO "+a.t("imgo_chat_lock")+" (chat_identify) VALUES ('__registration__') ON DUPLICATE KEY UPDATE chat_identify=VALUES(chat_identify)"); err != nil {
-		return nil, nil, err
-	}
 	state, err := one(ctx, tx, "SELECT id,value FROM "+a.t("config")+" WHERE name='autoTask' LIMIT 1 FOR UPDATE")
 	if err == sql.ErrNoRows {
 		id, e := insert(ctx, tx, a.t("config"), M{"name": "autoTask", "value": `{"user_id":0,"group_id":0,"group_num":1}`, "status": 1})
@@ -172,6 +169,8 @@ func (a *App) createRegisteredUser(ctx context.Context, p M, ip string) (int64, 
 		}
 		return uid, nil
 	}
+	// Lock order: registration row, chatInfo row, mentor setting row,
+	// global autoTask row, then mentor state row.
 	automation, e := a.registrationAutomation(ctx, tx, inviterID)
 	if e != nil {
 		return 0, e
