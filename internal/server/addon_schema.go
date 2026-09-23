@@ -178,8 +178,23 @@ func (a *App) seedMentorRole(ctx context.Context, db DB) error {
 	if !errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("查询导师角色失败: %w", err)
 	}
+	name := "导师专员"
+	for suffix := 0; ; suffix++ {
+		if suffix == 1 {
+			name = "导师专员（预置）"
+		} else if suffix > 1 {
+			name = fmt.Sprintf("导师专员（预置 %d）", suffix)
+		}
+		_, err = one(ctx, db, "SELECT role_id FROM "+a.t("imgo_admin_role")+" WHERE name=?", name)
+		if errors.Is(err, sql.ErrNoRows) {
+			break
+		}
+		if err != nil {
+			return fmt.Errorf("查询导师角色名称失败: %w", err)
+		}
+	}
 	now := time.Now().Unix()
-	result, err := db.ExecContext(ctx, "INSERT INTO "+a.t("imgo_admin_role")+" (name,remark,status,agent_mode,role_code,created_at,updated_at) VALUES (?,?,?,?,?,?,?)", "导师", "", 1, 1, "mentor", now, now)
+	result, err := db.ExecContext(ctx, "INSERT INTO "+a.t("imgo_admin_role")+" (name,remark,status,agent_mode,role_code,created_at,updated_at) VALUES (?,?,?,?,?,?,?)", name, "", 1, 1, "mentor", now, now)
 	if err != nil {
 		return fmt.Errorf("创建导师角色失败: %w", err)
 	}
@@ -187,7 +202,14 @@ func (a *App) seedMentorRole(ctx context.Context, db DB) error {
 	if err != nil {
 		return err
 	}
-	_, err = db.ExecContext(ctx, "INSERT INTO "+a.t("imgo_admin_role_permission")+" (role_id,permission_id) SELECT ?,permission_id FROM "+a.t("imgo_admin_permission")+" WHERE permission_key<>'manage.settings'", roleID)
+	permissionKeys := []string{"manage.overview", "manage.users", "manage.messages", "manage.groups", "manage.files", "manage.bank", "manage.finance"}
+	args := make([]any, 0, len(permissionKeys)+1)
+	args = append(args, roleID)
+	for _, key := range permissionKeys {
+		args = append(args, key)
+	}
+	placeholders := strings.TrimSuffix(strings.Repeat("?,", len(permissionKeys)), ",")
+	_, err = db.ExecContext(ctx, "INSERT INTO "+a.t("imgo_admin_role_permission")+" (role_id,permission_id) SELECT ?,permission_id FROM "+a.t("imgo_admin_permission")+" WHERE permission_key IN ("+placeholders+")", args...)
 	if err != nil {
 		return fmt.Errorf("写入导师角色权限失败: %w", err)
 	}

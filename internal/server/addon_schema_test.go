@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"os"
 	"regexp"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -30,16 +31,42 @@ func TestSeedMentorRoleCreatesSevenPermissionsOnce(t *testing.T) {
 	ctx := context.Background()
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT role_id FROM `yu_imgo_admin_role` WHERE role_code=?")).
 		WithArgs("mentor").WillReturnRows(sqlmock.NewRows([]string{"role_id"}))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT role_id FROM `yu_imgo_admin_role` WHERE name=?")).
+		WithArgs("导师专员").WillReturnRows(sqlmock.NewRows([]string{"role_id"}))
 	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `yu_imgo_admin_role` ")).
-		WithArgs("导师", "", 1, 1, "mentor", sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WithArgs("导师专员", "", 1, 1, "mentor", sqlmock.AnyArg(), sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(9, 1))
-	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `yu_imgo_admin_role_permission` (role_id,permission_id) SELECT ?,permission_id FROM `yu_imgo_admin_permission` WHERE permission_key<>'manage.settings'")).
-		WithArgs(int64(9)).WillReturnResult(sqlmock.NewResult(0, 7))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `yu_imgo_admin_role_permission` (role_id,permission_id) SELECT ?,permission_id FROM `yu_imgo_admin_permission` WHERE permission_key IN (?,?,?,?,?,?,?)")).
+		WithArgs(int64(9), "manage.overview", "manage.users", "manage.messages", "manage.groups", "manage.files", "manage.bank", "manage.finance").
+		WillReturnResult(sqlmock.NewResult(0, 7))
 	if err := a.seedMentorRole(ctx, a.db); err != nil {
 		t.Fatal(err)
 	}
 	mock.ExpectQuery(regexp.QuoteMeta("SELECT role_id FROM `yu_imgo_admin_role` WHERE role_code=?")).
 		WithArgs("mentor").WillReturnRows(sqlmock.NewRows([]string{"role_id"}).AddRow(9))
+	if err := a.seedMentorRole(ctx, a.db); err != nil {
+		t.Fatal(err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSeedMentorRolePreservesCustomRoleWithSameName(t *testing.T) {
+	a, mock := testApp(t)
+	ctx := context.Background()
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT role_id FROM `yu_imgo_admin_role` WHERE role_code=?")).
+		WithArgs("mentor").WillReturnRows(sqlmock.NewRows([]string{"role_id"}))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT role_id FROM `yu_imgo_admin_role` WHERE name=?")).
+		WithArgs("导师专员").WillReturnRows(sqlmock.NewRows([]string{"role_id"}).AddRow(5))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT role_id FROM `yu_imgo_admin_role` WHERE name=?")).
+		WithArgs("导师专员（预置）").WillReturnRows(sqlmock.NewRows([]string{"role_id"}))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `yu_imgo_admin_role` ")).
+		WithArgs("导师专员（预置）", "", 1, 1, "mentor", sqlmock.AnyArg(), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(9, 1))
+	mock.ExpectExec(regexp.QuoteMeta("INSERT INTO `yu_imgo_admin_role_permission` (role_id,permission_id) SELECT ?,permission_id FROM `yu_imgo_admin_permission` WHERE permission_key IN (?,?,?,?,?,?,?)")).
+		WithArgs(int64(9), "manage.overview", "manage.users", "manage.messages", "manage.groups", "manage.files", "manage.bank", "manage.finance").
+		WillReturnResult(sqlmock.NewResult(0, 7))
 	if err := a.seedMentorRole(ctx, a.db); err != nil {
 		t.Fatal(err)
 	}
@@ -83,6 +110,10 @@ func TestStartupAddonUpgrade(t *testing.T) {
 		"INSERT INTO test_user VALUES (7,'existing')",
 		"CREATE TABLE test_imgo_wallet (user_id INT PRIMARY KEY,available_cents BIGINT,pending_cents BIGINT,updated_at BIGINT)",
 		"INSERT INTO test_imgo_wallet VALUES (7,12345,678,1)",
+		"CREATE TABLE test_imgo_admin_role (role_id BIGINT AUTO_INCREMENT PRIMARY KEY,name VARCHAR(64) NOT NULL,remark VARCHAR(255) NOT NULL DEFAULT '',status TINYINT NOT NULL DEFAULT 1,created_at BIGINT NOT NULL,updated_at BIGINT NOT NULL,UNIQUE KEY imgo_admin_role_name(name))",
+		"INSERT INTO test_imgo_admin_role (role_id,name,remark,status,created_at,updated_at) VALUES (41,'导师专员','自定义角色',1,1,1)",
+		"CREATE TABLE test_imgo_admin_permission (permission_id BIGINT AUTO_INCREMENT PRIMARY KEY,permission_key VARCHAR(64) NOT NULL,name VARCHAR(64) NOT NULL,menu_path VARCHAR(128) NOT NULL DEFAULT '',sort INT NOT NULL DEFAULT 0,UNIQUE KEY imgo_admin_permission_key(permission_key))",
+		"INSERT INTO test_imgo_admin_permission (permission_key,name,menu_path,sort) VALUES ('manage.extra','历史额外权限','',99)",
 	} {
 		if _, err = db.ExecContext(ctx, q); err != nil {
 			t.Fatal(err)
@@ -90,6 +121,50 @@ func TestStartupAddonUpgrade(t *testing.T) {
 	}
 	if err = a.EnsureAddonSchema(ctx); err != nil {
 		t.Fatal(err)
+	}
+	var customName, customRemark string
+	var customMode int
+	var customCode sql.NullString
+	if err = db.QueryRow("SELECT name,remark,agent_mode,role_code FROM test_imgo_admin_role WHERE role_id=41").Scan(&customName, &customRemark, &customMode, &customCode); err != nil || customName != "导师专员" || customRemark != "自定义角色" || customMode != 0 || customCode.Valid {
+		t.Fatalf("custom role changed: name=%q remark=%q mode=%d code=%v err=%v", customName, customRemark, customMode, customCode, err)
+	}
+	var mentorID int64
+	var mentorName string
+	var mentorMode, mentorStatus int
+	if err = db.QueryRow("SELECT role_id,name,agent_mode,status FROM test_imgo_admin_role WHERE role_code='mentor'").Scan(&mentorID, &mentorName, &mentorMode, &mentorStatus); err != nil || mentorName != "导师专员（预置）" || mentorMode != 1 || mentorStatus != 1 {
+		t.Fatalf("new mentor role: id=%d name=%q mode=%d status=%d err=%v", mentorID, mentorName, mentorMode, mentorStatus, err)
+	}
+	mentorPermissions := func() []string {
+		t.Helper()
+		r, queryErr := db.Query("SELECT p.permission_key FROM test_imgo_admin_role_permission rp JOIN test_imgo_admin_permission p ON p.permission_id=rp.permission_id WHERE rp.role_id=? ORDER BY p.permission_key", mentorID)
+		if queryErr != nil {
+			t.Fatal(queryErr)
+		}
+		defer r.Close()
+		var keys []string
+		for r.Next() {
+			var key string
+			if scanErr := r.Scan(&key); scanErr != nil {
+				t.Fatal(scanErr)
+			}
+			keys = append(keys, key)
+		}
+		if rowErr := r.Err(); rowErr != nil {
+			t.Fatal(rowErr)
+		}
+		return keys
+	}
+	if got, want := mentorPermissions(), []string{"manage.bank", "manage.files", "manage.finance", "manage.groups", "manage.messages", "manage.overview", "manage.users"}; !slices.Equal(got, want) {
+		t.Fatalf("initial mentor permissions = %v, want %v", got, want)
+	}
+	for _, q := range []string{
+		"UPDATE test_imgo_admin_role SET name='导师专员（管理员修改）',status=0,agent_mode=0 WHERE role_id=?",
+		"DELETE FROM test_imgo_admin_role_permission WHERE role_id=? AND permission_id=(SELECT permission_id FROM test_imgo_admin_permission WHERE permission_key='manage.finance')",
+		"INSERT INTO test_imgo_admin_role_permission (role_id,permission_id) SELECT ?,permission_id FROM test_imgo_admin_permission WHERE permission_key='manage.settings'",
+	} {
+		if _, err = db.ExecContext(ctx, q, mentorID); err != nil {
+			t.Fatal(err)
+		}
 	}
 	var invite string
 	if err = db.QueryRow("SELECT invite_code FROM test_imgo_referral WHERE user_id=7").Scan(&invite); err != nil {
@@ -158,15 +233,18 @@ func TestStartupAddonUpgrade(t *testing.T) {
 			t.Fatalf("missing role column %s: %v", column, err)
 		}
 	}
-	var mentorMode, mentorPermissions int
-	if err = db.QueryRow("SELECT agent_mode FROM test_imgo_admin_role WHERE role_code='mentor'").Scan(&mentorMode); err != nil || mentorMode != 1 {
-		t.Fatalf("mentor role mode = %d: %v", mentorMode, err)
+	var mentorCount int
+	if err = db.QueryRow("SELECT COUNT(*) FROM test_imgo_admin_role WHERE role_code='mentor'").Scan(&mentorCount); err != nil || mentorCount != 1 {
+		t.Fatalf("mentor role count = %d: %v", mentorCount, err)
 	}
-	if err = db.QueryRow("SELECT COUNT(*) FROM test_imgo_admin_role_permission rp JOIN test_imgo_admin_role r ON r.role_id=rp.role_id WHERE r.role_code='mentor'").Scan(&mentorPermissions); err != nil || mentorPermissions != 7 {
-		t.Fatalf("mentor permissions = %d: %v", mentorPermissions, err)
+	if err = db.QueryRow("SELECT name,agent_mode,status FROM test_imgo_admin_role WHERE role_id=?", mentorID).Scan(&mentorName, &mentorMode, &mentorStatus); err != nil || mentorName != "导师专员（管理员修改）" || mentorMode != 0 || mentorStatus != 0 {
+		t.Fatalf("mentor edits overwritten: name=%q mode=%d status=%d err=%v", mentorName, mentorMode, mentorStatus, err)
+	}
+	if got, want := mentorPermissions(), []string{"manage.bank", "manage.files", "manage.groups", "manage.messages", "manage.overview", "manage.settings", "manage.users"}; !slices.Equal(got, want) {
+		t.Fatalf("mentor permissions overwritten: got %v, want %v", got, want)
 	}
 	var permissionCount int
-	if err = db.QueryRow("SELECT COUNT(*) FROM test_imgo_admin_permission WHERE permission_key LIKE 'manage.%'").Scan(&permissionCount); err != nil || permissionCount != 8 {
-		t.Fatalf("expected 8 seeded permissions, got %d: %v", permissionCount, err)
+	if err = db.QueryRow("SELECT COUNT(*) FROM test_imgo_admin_permission WHERE permission_key LIKE 'manage.%'").Scan(&permissionCount); err != nil || permissionCount != 9 {
+		t.Fatalf("expected 8 catalog and 1 historical permission, got %d: %v", permissionCount, err)
 	}
 }
