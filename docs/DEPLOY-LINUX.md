@@ -23,7 +23,7 @@ ADMIN_ACCOUNT=administrator ADMIN_PASSWORD='替换为强密码' ./start.sh -crea
 
 前台运行：`./start.sh`。守护运行：`./run.sh start`。可用 `status`、`restart`、`stop`、`logs` 管理进程。不要同时使用 `run.sh`、systemd 和宝塔进程管理器启动多个实例。
 
-使用 Nginx 反向代理 `127.0.0.1:8088`，并为 `/wss` 配置 WebSocket Upgrade。API 域名和后台域名分离的示例位于 `deploy/domain-split/`。
+默认使用 Nginx 反向代理 `127.0.0.1:8080`，并为 `/wss` 配置 WebSocket Upgrade。如果修改了 `.env` 中的 `IMGO_ADDR`，Nginx 的 `proxy_pass` 也要使用同一端口。API 域名和后台域名分离的示例位于 `deploy/domain-split/`。
 
 ## 更新已有部署
 
@@ -36,7 +36,7 @@ ADMIN_ACCOUNT=administrator ADMIN_PASSWORD='替换为强密码' ./start.sh -crea
 ## 验证
 
 ```sh
-curl http://127.0.0.1:8088/healthz
+curl http://127.0.0.1:8080/healthz
 file bin/imgo
 ```
 
