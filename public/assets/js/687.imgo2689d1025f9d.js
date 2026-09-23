@@ -7,7 +7,7 @@ const ImgoMemberAgentSettingDialog = {
       inheritAutoUser: true, inheritAutoGroup: true,
       autoAddUser: { status: 0, user_ids: [], welcome: '' },
       autoAddGroup: { status: 0, owner_uid: 0, userMax: 5, name: '' },
-      globalAutoUser: {}, globalAutoGroup: {}, options: []
+      globalAutoUser: {}, globalAutoGroup: {}, options: [], unavailableNotice: ''
     }
   },
   computed: {
@@ -23,6 +23,7 @@ const ImgoMemberAgentSettingDialog = {
       this.loading = true
       this.error = ''
       this.options = []
+      this.unavailableNotice = ''
       try {
         const [detail, options] = await Promise.all([
           this.$api.agentSettingApi.detail({ agent_user_id: Number(row.user_id) }),
@@ -39,14 +40,15 @@ const ImgoMemberAgentSettingDialog = {
       }
     },
     async loadOptions(row) {
-      const options = [{ user_id: Number(row.user_id), account: row.account || String(row.user_id) }]
-      let page = 1
+      const options = Number(row.status) === 1 ? [{ user_id: Number(row.user_id), account: row.account || String(row.user_id), status: row.status }] : []
+      let page = 1, fetched = 0
       while (true) {
         const response = await this.$api.userApi.getUserList({ keywords: row.account, referral_scope: 'all', page, limit: 200 })
         if (Number(response.code) !== 0) throw Error(response.msg || '读取下级账号失败')
         if (!Array.isArray(response.data)) throw Error('下级账号数据无效')
-        options.push(...response.data)
-        if (response.data.length < 200 || options.length - 1 >= Number(response.count || 0)) break
+        fetched += response.data.length
+        options.push(...response.data.filter(item => Number(item.status) === 1))
+        if (response.data.length < 200 || fetched >= Number(response.count || 0)) break
         page++
       }
       return options.filter((item, index, all) => all.findIndex(candidate => Number(candidate.user_id) === Number(item.user_id)) === index)
@@ -61,6 +63,8 @@ const ImgoMemberAgentSettingDialog = {
       const allowed = new Set(this.options.map(option => Number(option.user_id)))
       const userIDs = Array.isArray(user.user_ids) ? user.user_ids.map(Number) : []
       const ownerID = Number(group.owner_uid || 0)
+      this.unavailableNotice = (!this.inheritAutoUser && userIDs.some(id => !allowed.has(id))) || (!this.inheritAutoGroup && ownerID > 0 && !allowed.has(ownerID))
+        ? '已保存的客服或群主账号已停用或不在导师范围，已从可编辑配置移除；保存后这些账号将被清除。' : ''
       this.autoAddUser = { status: Number(user.status) === 1 ? 1 : 0, user_ids: userIDs.filter(id => allowed.has(id)), welcome: user.welcome || '' }
       this.autoAddGroup = { status: Number(group.status) === 1 ? 1 : 0, owner_uid: allowed.has(ownerID) ? ownerID : 0, userMax: Number(group.userMax || 5), name: group.name || '' }
       if (this.row) {
@@ -95,15 +99,24 @@ const ImgoMemberAgentSettingDialog = {
       try {
         const response = await this.$api.agentSettingApi.save(payload)
         if (Number(response.code) !== 0) throw Error(response.msg || '保存导师设置失败')
-        this.$set(this.row, 'agent_setting_inherit_auto_user', payload.inherit_auto_user)
-        this.$set(this.row, 'agent_setting_inherit_auto_group', payload.inherit_auto_group)
-        this.$emit('saved', payload.agent_user_id)
+      } catch (error) {
+        this.$message.error(error.message || '保存导师设置失败')
+        this.saving = false
+        return
+      }
+      this.$set(this.row, 'agent_setting_inherit_auto_user', payload.inherit_auto_user)
+      this.$set(this.row, 'agent_setting_inherit_auto_group', payload.inherit_auto_group)
+      this.$emit('saved', payload.agent_user_id)
+      this.$message.success('导师设置已保存')
+      try {
         const fresh = await this.$api.agentSettingApi.detail({ agent_user_id: payload.agent_user_id })
         if (Number(fresh.code) !== 0) throw Error(fresh.msg || '刷新导师设置失败')
         this.applyDetail(fresh.data || {})
-        this.$message.success('导师设置已保存')
       } catch (error) {
-        this.$message.error(error.message || '保存导师设置失败')
+        this.$message.warning('导师设置已保存，刷新失败；请重新打开查看最新设置')
+        this.visible = false
+        this.row = null
+        this.serial++
       } finally { this.saving = false }
     }
   },
@@ -140,6 +153,7 @@ const ImgoMemberAgentSettingDialog = {
     }, this.visible ? [
       this.error ? h('el-alert', { props: { title: this.error, type: 'error', showIcon: true, closable: false } }) : null,
       this.error ? h('el-button', { props: { type: 'text' }, on: { click: () => this.open(this.row) } }, '重试') : null,
+      this.unavailableNotice ? h('el-alert', { props: { title: this.unavailableNotice, type: 'warning', showIcon: true, closable: false } }) : null,
       h('div', { class: 'imgo-agent-setting-body', directives: [{ name: 'loading', value: this.loading }] }, [
         h('section', { class: 'imgo-agent-setting-section' }, [
           h('h3', {}, '自动添加好友'),
