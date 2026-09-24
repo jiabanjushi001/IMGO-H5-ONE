@@ -107,7 +107,7 @@
 			    <video v-show="remoteStream && is_video" class="remotevideo" ref="remotevideo" x5-video-player-fullscreen="true" autoplay x5-playsinline playsinline webkit-playsinline @click="changeVideo()" poster="./image/wallpaper.png"></video>
 			    <div class="call-user-box" v-if="displayBtn">
 			      <div class="call-user" v-if="contact">
-			        <img class="avatar" v-if="status!=2 || !is_video" :src="contact.avatar" alt="">
+			        <img class="avatar" v-if="status!=2 || !is_video" :src="displayAvatar || contact.avatar" alt="">
 			        <div class="text"> 
 			          <b v-if="!is_video && status==2">{{contact.displayName}}</b>
 			          <span v-if="status!=2">
@@ -190,6 +190,7 @@
 					callTime:0, //通话时间
 					callTimeDis:'', //通话时间展示
 					timerIntervalId:null,  //通话计时器
+					displayAvatar:'',
 					contact:{
 						id:params.target_id,
 						displayName:params.name,
@@ -198,6 +199,7 @@
 				};
 			},
 			mounted() {
+				this.resolveContactAvatar();
 				this.pc = new RTCPeerConnection(config);
 				this.pc.ontrack = (event) => {
 					console.log(event,'接收视频流');
@@ -266,6 +268,28 @@
 				}
 			},
 			methods: {
+				resolveContactAvatar() {
+					const raw = decodeURIComponent(this.contact && this.contact.avatar ? this.contact.avatar : (params.avatar || ''))
+					const token = decodeURIComponent(params.token || '')
+					if (!raw) return
+					const needsAuth = /\/storage\//i.test(raw) || /\/avatar\/group-/i.test(raw) || (/\/avatar\//i.test(raw) && /[?&]v=/i.test(raw))
+					if (!needsAuth || typeof fetch !== 'function') {
+						this.displayAvatar = raw
+						return
+					}
+					fetch(raw, {
+						headers: token ? { Authorization: token } : {},
+						credentials: 'omit',
+						cache: 'no-store'
+					}).then((response) => {
+						if (!response.ok) throw new Error(String(response.status))
+						return response.blob()
+					}).then((blob) => {
+						this.displayAvatar = URL.createObjectURL(blob)
+					}).catch(() => {
+						this.displayAvatar = ''
+					})
+				},
 				// 开始通话计时
 			    startTime() {
 					this.timerIntervalId=setInterval(()=>{

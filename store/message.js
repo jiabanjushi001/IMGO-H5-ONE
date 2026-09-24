@@ -41,6 +41,19 @@ export const useMsgStore = defineStore({
 		updateUnread (data) {
 			this.unread = parseInt(data);
 		},
+		/** 进入会话时清该联系人未读，并重算总未读。返回是否有变化。 */
+		clearContactUnread(contactId) {
+			const id = String(contactId || '')
+			if (!id) return false
+			const contacts = storedContacts()
+			const contact = contacts.find((item) => String(item.id) === id)
+			if (!contact || !(Number(contact.unread) > 0)) return false
+			this.updateContacts({
+				id,
+				unread: 0
+			})
+			return true
+		},
 		//初始化联系人
 		initContacts (data) {
 			data = Array.isArray(data) ? data.filter(contact => !isFileTransferAssistant(contact)) : [];

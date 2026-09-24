@@ -10,10 +10,19 @@
 
 	// #ifdef H5
 		import VConsole from 'vconsole';
+		import {
+			ENABLE_YIMEN_NOTIFY_P1_SMOKE,
+			ensureNotifyAuthWithSettingsPrompt,
+			isYimenApp,
+			notifyIncomingChat,
+			refreshNotifyAuthIfDenied,
+			runYimenNotifyP1Smoke
+		} from '@/utils/yimen-notify.js'
 	// #endif
 	let vConsole = null; //移动H5调试器
 	const msgStore = useMsgStore(pinia)
 	const userStore = useloginStore(pinia)
+	let yimenNotifyBootstrapped = false
 	// #ifdef APP-PLUS
 		import appUpdate from '@/common/appUpdate.js';
 		// 安卓设备引入保活插件
@@ -23,7 +32,8 @@
 		data() {
 			return {
 				globalSocketMessageHandler: null,
-				globalConnectErrorHandler: null
+				globalConnectErrorHandler: null,
+				appStatus: true
 			}
 		},
 		onLaunch: function() {
@@ -97,6 +107,8 @@
 			//启用H5调试模式
 			// #ifdef H5
 			this.loadVConsole();
+			this.bootstrapYimenNotify();
+			this.bindYimenVisibility();
 			// #endif
 			
 			// #ifdef APP-PLUS
@@ -154,6 +166,105 @@
 		},
 		
 		methods:{
+			// #ifdef H5
+			/** 一门壳：启动时申请通知权限；未开则引导去系统设置。 */
+			bootstrapYimenNotify() {
+				if (!isYimenApp() || yimenNotifyBootstrapped) return
+				yimenNotifyBootstrapped = true
+				setTimeout(async () => {
+					try {
+						const granted = await ensureNotifyAuthWithSettingsPrompt()
+						if (!ENABLE_YIMEN_NOTIFY_P1_SMOKE) return
+						if (!granted) return
+						const result = await runYimenNotifyP1Smoke()
+						console.log('[yimen-notify] P1 smoke', result)
+						if (result.ok) {
+							uni.showToast({ title: '本地通知已发送，请查看通知栏', icon: 'none', duration: 2500 })
+						}
+					} catch (error) {
+						console.warn('[yimen-notify] bootstrap failed', error)
+					}
+				}, 800)
+			},
+			/**
+			 * 前后台状态：
+			 * - 回桌面必须能置为后台，否则收不到本地通知
+			 * - 点通知后 visibility 可能误报 hidden，靠 hasFocus 在 shouldSend 里兜底
+			 */
+			bindYimenVisibility() {
+				if (!isYimenApp() || typeof document === 'undefined') return
+				document.addEventListener('visibilitychange', () => {
+					if (document.visibilityState === 'hidden') {
+						this.markYimenBackground()
+					} else {
+						this.markYimenForeground()
+					}
+				})
+				window.addEventListener('pageshow', () => this.markYimenForeground())
+				window.addEventListener('focus', () => {
+					this.appStatus = true
+				})
+				window.addEventListener('blur', () => {
+					// 与 visibility 配合：仅失焦且已 hidden 时才当后台
+					if (typeof document !== 'undefined' && document.visibilityState === 'hidden') {
+						this.markYimenBackground()
+					}
+				})
+				const bridge = typeof window !== 'undefined' ? window.jsBridge : null
+				if (bridge && typeof bridge.onAppEnterForeground === 'function') {
+					try {
+						bridge.onAppEnterForeground(() => this.markYimenForeground())
+					} catch (error) {
+						console.warn('[yimen-notify] onAppEnterForeground bind failed', error)
+					}
+				}
+				if (bridge && typeof bridge.onAppEnterBackground === 'function') {
+					try {
+						bridge.onAppEnterBackground(() => this.markYimenBackground())
+					} catch (error) {
+						console.warn('[yimen-notify] onAppEnterBackground bind failed', error)
+					}
+				}
+			},
+			markYimenForeground() {
+				this.appStatus = true
+				// 曾拒绝过时，从设置返回后再检测一次
+				refreshNotifyAuthIfDenied().catch(() => {})
+			},
+			markYimenBackground() {
+				this.appStatus = false
+			},
+			/** 是否应发本地通知：以后台标记为准；窗口仍有焦点则视为前台。 */
+			shouldSendYimenLocalNotify() {
+				if (typeof document !== 'undefined' && typeof document.hasFocus === 'function' && document.hasFocus()) {
+					this.appStatus = true
+					return false
+				}
+				return !this.appStatus
+			},
+			createYimenLocalNotify(data, contact, contactId) {
+				if (!isYimenApp() || !contact) return
+				const regex = /<[^>]+>/g
+				let content = String(data.content || '').replace(regex, '')
+				if (data.type != 'text') {
+					const callVideo = data.extends?.type ?? 0
+					content = this.$util.getMsgType(data.type, callVideo)
+				}
+				if (data.is_group == 1) {
+					content = (data.fromUser?.displayName || '') + ':' + content
+				}
+				if (!content) content = '发来一条新消息'
+				notifyIncomingChat({
+					title: contact.displayName || '新消息',
+					content,
+					contactId
+				}).then((result) => {
+					if (!result.ok && result.reason !== 'throttled') {
+						console.log('[yimen-notify] skip', result.reason)
+					}
+				})
+			},
+			// #endif
 			// 开启调试模式
 			loadVConsole() { //初始化vConsole，用于H5调试用
 				if (config.isVConsole) { //开启调试时
@@ -512,6 +623,18 @@
 						this.createPushMsg(data,contact);
 					}
 				// #endif
+				// #ifdef H5
+					if (
+						isYimenApp() &&
+						this.shouldSendYimenLocalNotify() &&
+						data.toContactId != 'system' &&
+						data.fromUser?.id != userInfo.user_id &&
+						contact &&
+						contact.is_notice == 1
+					) {
+						this.createYimenLocalNotify(data, contact, toUser)
+					}
+				// #endif
 			},
 			createPushMsg(data,contact){
 				console.info("创建通知栏");
@@ -583,6 +706,9 @@
 		},
 		onHide: function() {
 			this.appStatus=false;
+			// #ifdef H5
+			this.markYimenBackground();
+			// #endif
 			console.log('App Hide')
 		}
 	}

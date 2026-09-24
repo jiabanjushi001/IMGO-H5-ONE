@@ -1,0 +1,1 @@
+import{_ as s,c as t,b as e,i as a,o as p}from"./index-BDHgOUP0.js";const r=s({props:{type:{type:String,default:"primary"},pulse:{type:[Boolean,Number],default:!0}}},[["render",function(s,r,c,o,n,l){const u=a;return p(),t(u,{class:e(["sc-state",[{"sc-status-processing":c.pulse},"sc-state-bg--"+c.type]])},null,8,["class"])}],["__scopeId","data-v-58c8b561"]]);export{r as s};

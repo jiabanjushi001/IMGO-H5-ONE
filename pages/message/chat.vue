@@ -422,15 +422,7 @@
 				uni.$on('groupNoticeChanged', this.groupNoticeChangedHandler);
 				this.getGroupInfo();
 			}
-			let unread=msgStore.unread;
-			// 如果有未读,就将未读的角标置为0
-			if(data.unread>0){
-				let contacts=msgStore.updateContacts({
-					id:options.id,
-					unread:0
-				});
-				msgStore.unread = unread - data.unread;
-			}
+			this.clearCurrentChatUnread();
 			// 监听消息更新请求
 			this.socketMessageHandler = (res) => {
 				let message=res.data;
@@ -621,6 +613,8 @@
 			// 检测ws是否还在线
 			this.socketIo.send({type:'ping'});
 			if (this.is_group == 1 && this.contact_id) this.getGroupInfo();
+			// 从通知回到已打开的会话时 onLoad 不会再跑，这里补清未读
+			this.clearCurrentChatUnread();
 			// #ifdef H5
 			this.$nextTick(() => {
 				this.syncChatViewport();
@@ -724,6 +718,35 @@
 					this.measureChatLayout();
 					if (this.isBottom) this.scrollToBottom();
 				});
+			},
+			/** 进入/回到会话：清该会话未读。 */
+			clearCurrentChatUnread(){
+				if (!this.contact_id) return
+				const changed = msgStore.clearContactUnread(this.contact_id)
+				const contact = msgStore.getContact(this.contact_id)
+				if (contact) this.contact = contact
+				if (changed) {
+					// 等首屏消息加载后再上报已读，避免空列表误报
+					this._pendingReadReport = true
+				}
+			},
+			reportCurrentChatRead(){
+				if (!this.contact_id || !this.contact) return
+				const others = (msgStore.msgList || []).filter((item) => {
+					return item &&
+						item.type !== 'event' &&
+						item.fromUser &&
+						item.fromUser.id != this.user.user_id &&
+						!item.is_read
+				})
+				if (!others.length && !this._pendingReadReport) return
+				this._pendingReadReport = false
+				this.$api.msgApi.setMsgIsRead({
+					toContactId: this.contact_id,
+					is_group: this.contact.is_group,
+					messages: others.length === 1 ? others[0] : (others.length ? others : { toContactId: this.contact_id }),
+					fromUser: others[0]?.fromUser?.id || ''
+				}).catch(() => {})
 			},
 			// 长按头像@人
 			at(item){
@@ -927,12 +950,12 @@
 					if(this.page==1){
 						msgStore.msgList = [];
 					}
-					let data=res.data.slice().reverse();
-					data.forEach(it => {
-						msgStore.msgList.unshift(it)
+					// 接口分页多为时间倒序；统一按 sendTime 正序后再拼，保证旧上新下
+					const batch = res.data.slice().sort((a, b) => {
+						return (Number(a?.sendTime) || 0) - (Number(b?.sendTime) || 0)
 					})
-					var _this=this;
-					this.loading='more';
+					msgStore.msgList = this.page == 1 ? batch : batch.concat(msgStore.msgList)
+					this.loading='more'
 					
 					// 如果返回的数据小于每页的数量
 					if (res.data.length < this.limit) {
@@ -943,6 +966,7 @@
 						this.prefetchListMedia(this.messageList)
 						if(this.page==1){
 							this.scrollToBottom();
+							if (this._pendingReadReport) this.reportCurrentChatRead();
 						}else{
 							this.getScrollHeight();
 						}

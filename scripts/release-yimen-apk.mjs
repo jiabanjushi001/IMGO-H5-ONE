@@ -4,7 +4,7 @@
  * - 内置 config.js（APK 内无法像网站那样单独挂配置时也能启动）
  * - 输出 release/yimen-apk/ 与 release/yimen-apk.zip，可直接上传一门「网页打包 / HTML 离线」
  */
-import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync, copyFileSync } from 'node:fs'
 import { resolve } from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
@@ -14,6 +14,7 @@ const distH5 = resolve(projectRoot, 'dist/build/h5')
 const outDir = resolve(projectRoot, 'release/yimen-apk')
 const outZip = resolve(projectRoot, 'release/yimen-apk.zip')
 const configSource = resolve(projectRoot, 'config.js')
+const faviconSource = resolve(projectRoot, 'favicon.ico')
 const readmePath = resolve(outDir, 'README-一门打包说明.txt')
 
 if (!existsSync(resolve(distH5, 'index.html'))) {
@@ -33,8 +34,8 @@ cpSync(distH5, outDir, {
 	recursive: true,
 	filter: (src) => {
 		const name = src.replace(/\\/g, '/').split('/').pop()
-		// 去掉指向源码的软链，后面改为真实 config.js
-		return name !== 'config.js'
+		// 去掉指向源码的软链，后面改为真实文件
+		return name !== 'config.js' && name !== 'favicon.ico'
 	},
 })
 
@@ -42,6 +43,10 @@ if (!existsSync(configSource)) {
 	throw new Error('缺少项目根目录 config.js，一门 APK 包需要内置服务器地址')
 }
 writeFileSync(resolve(outDir, 'config.js'), readFileSync(configSource))
+if (!existsSync(faviconSource)) {
+	throw new Error('缺少项目根目录 favicon.ico，登录页 Logo 依赖该文件')
+}
+copyFileSync(faviconSource, resolve(outDir, 'favicon.ico'))
 
 const classic = spawnSync(
 	process.execPath,

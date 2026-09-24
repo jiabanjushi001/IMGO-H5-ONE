@@ -85,9 +85,25 @@ const updateConfig = {
  * | updateType      | y        | String    | forcibly = 强制更新, solicit = 弹窗确认更新, silent = 静默更新 |
  * | downloadUrl     | y        | String    | 版本下载链接（IOS安装包更新请放跳转store应用商店链接,安卓apk和wgt文件放文件下载链接）  |
  */
+function resolveRuntimeString(key) {
+	// #ifdef H5
+	try {
+		const value = typeof window !== 'undefined' && typeof window[key] === 'string'
+			? window[key].trim()
+			: ''
+		if (value) return value
+	} catch (e) {}
+	// #endif
+	return ''
+}
+
 export default {
 	apiUrl,
 	wssUrl,
+	/** 登录/注册品牌名，来自 config.js 的 window.appName；默认空 */
+	appName: resolveRuntimeString('appName'),
+	/** 登录/注册 Logo，来自 config.js 的 window.appLogo；默认空 */
+	appLogo: resolveRuntimeString('appLogo'),
 	/** 运行时再取一次，避免构造时拿到过期的备用站地址 */
 	getWssUrl() {
 		// #ifdef H5

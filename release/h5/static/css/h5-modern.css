@@ -1065,3 +1065,8 @@ uni-page[data-page="pages/login/register"] .cu-custom .cu-bar {
 	color: var(--im-text) !important;
 	backdrop-filter: blur(24rpx);
 }
+
+/* 聊天输入区高于首页 TabBar/loading，避免挡住输入 */
+.im-footer {
+	z-index: 1100 !important;
+}

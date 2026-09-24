@@ -4,10 +4,10 @@
 		<view class="auth-orb auth-orb-two"></view>
 		<view class="auth-shell">
 			<view class="auth-brand">
-				<view class="auth-logo-wrap">
-					<image class="login-logo" :src="globalConfig.sysInfo.logo || $asset('static/image/rocket.png')" mode="aspectFit"></image>
+				<view class="auth-logo-wrap" v-if="appLogo">
+					<image class="login-logo" :src="$asset(appLogo)" mode="aspectFit"></image>
 				</view>
-				<view class="auth-brand-name">{{globalConfig.sysInfo.name ?? packData.name}}</view>
+				<view class="auth-brand-name" v-if="appName">{{appName}}</view>
 				<view class="auth-brand-copy">让每一次沟通，都简单而可靠</view>
 			</view>
 
@@ -52,7 +52,7 @@
 				<view>账号：13800000002～13800000020</view>
 				<view>密码：123456</view>
 			</view>
-			<view class="footer-version">{{globalConfig.sysInfo.name ?? packData.name}} · v{{packData.version}}</view>
+			<view class="footer-version">{{appName ? appName + ' · ' : ''}}v{{packData.version}}</view>
 		</view>
 	</view>
 </template>
@@ -61,6 +61,7 @@
 	import { useloginStore } from '@/store/login'
 	import pinia from '@/store/index'
 	import packageData from "../../package.json"
+	import runtimeConfig from '@/common/config.js'
 	const loginStore = useloginStore(pinia)
 	export default {
 		data() {
@@ -74,6 +75,8 @@
 				},
 				forget:false,
 				packData:packageData,
+				appName: runtimeConfig.appName,
+				appLogo: runtimeConfig.appLogo,
 				globalConfig:loginStore.globalConfig
 			}
 		},

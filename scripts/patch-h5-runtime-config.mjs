@@ -103,24 +103,28 @@ function patchBuild(directory, { relativeAssets = true } = {}) {
     }
   }
 
-  // 本地预览目录：把 config.js 链到项目根，方便改一处即可生效。
+  // 本地预览目录：把 config.js / favicon.ico 链到项目根，方便改一处即可生效。
   if (
     root === resolve(projectRoot, 'dist/build/h5') ||
     root === resolve(projectRoot, 'unpackage/dist/build/h5')
   ) {
-    const configPath = resolve(root, 'config.js')
-    const sourcePath = resolve(projectRoot, 'config.js')
-    const linkTarget = relative(root, sourcePath)
-    let info
-    try {
-      info = lstatSync(configPath)
-    } catch (error) {
-      if (error.code !== 'ENOENT') throw error
+    const linkRuntimeFile = (fileName) => {
+      const configPath = resolve(root, fileName)
+      const sourcePath = resolve(projectRoot, fileName)
+      const linkTarget = relative(root, sourcePath)
+      let info
+      try {
+        info = lstatSync(configPath)
+      } catch (error) {
+        if (error.code !== 'ENOENT') throw error
+      }
+      if (!info) symlinkSync(linkTarget, configPath)
+      else if (!info.isSymbolicLink() || readlinkSync(configPath) !== linkTarget) {
+        throw Error(`${directory}: ${fileName} must link to the project root ${fileName}`)
+      }
     }
-    if (!info) symlinkSync(linkTarget, configPath)
-    else if (!info.isSymbolicLink() || readlinkSync(configPath) !== linkTarget) {
-      throw Error(`${directory}: config.js must link to the project root config.js`)
-    }
+    linkRuntimeFile('config.js')
+    linkRuntimeFile('favicon.ico')
   }
   console.log(`${directory}: ${entryName}; relativeAssets=${relativeAssets}`)
 }

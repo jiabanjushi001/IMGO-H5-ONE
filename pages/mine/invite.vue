@@ -1,5 +1,5 @@
 <script setup>
-import { computed, shallowRef } from 'vue'
+import { shallowRef } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import inviteApi from '@/api/invite.js'
 import InviteHero from '@/components/invite/InviteHero.vue'
@@ -12,17 +12,6 @@ const error = shallowRef(false)
 const inviteCode = shallowRef('')
 const directCount = shallowRef(0)
 const streakDays = shallowRef(0)
-const serverURL = shallowRef('')
-
-const shareURL = computed(() => {
-	if (!/^[0-9]{6}$/.test(inviteCode.value)) return ''
-	// #ifdef H5
-	if (typeof window !== 'undefined') {
-		return `${window.location.origin}${window.location.pathname}#/pages/login/register?inviteCode=${inviteCode.value}`
-	}
-	// #endif
-	return serverURL.value
-})
 
 async function load() {
 	loading.value = true
@@ -35,7 +24,6 @@ async function load() {
 		inviteCode.value = data.invite_code
 		directCount.value = Number(data.direct_count) || 0
 		streakDays.value = Number(data.streak_days) || 0
-		serverURL.value = data.invite_url || ''
 	} catch (cause) {
 		error.value = true
 	} finally {
@@ -68,7 +56,7 @@ onShow(load)
 			<InviteHero />
 			<InviteMetrics :direct-count="directCount" :streak-days="streakDays" :loading="loading" :error="error" />
 			<view class="invite-code-wrap"><InviteCodeCard :code="inviteCode" :loading="loading" :error="error" @copy-code="copy(inviteCode, '邀请码')" @retry="load" /></view>
-			<InviteShareActions :disabled="loading || error" @copy-link="copy(shareURL, '邀请链接')" />
+			<InviteShareActions />
 		</view>
 	</view>
 </template>
