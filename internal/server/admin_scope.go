@@ -34,6 +34,37 @@ func (a *App) adminScope(ctx context.Context, user M) (adminScope, error) {
 	return adminScope{AgentUserID: userID, referralTable: a.t("imgo_referral_path")}, nil
 }
 
+// canViewUserNetworkInfo keeps registration, login and chat IP details limited
+// to active backend roles. Agent roles may only inspect users in their team.
+func (a *App) canViewUserNetworkInfo(ctx context.Context, user M, targetUserID int64) (bool, error) {
+	viewerID := number(user["user_id"])
+	if viewerID == 1 {
+		return true, nil
+	}
+	if viewerID < 1 || number(user["admin_role_id"]) < 1 {
+		return false, nil
+	}
+	scope, err := a.adminScope(ctx, user)
+	if err != nil {
+		var clientErr clientError
+		if errors.As(err, &clientErr) && clientErr.code == 403 {
+			return false, nil
+		}
+		return false, err
+	}
+	if scope.Global || targetUserID == viewerID {
+		return true, nil
+	}
+	if err = a.requireScopedUser(ctx, a.db, scope, targetUserID); err != nil {
+		var clientErr clientError
+		if errors.As(err, &clientErr) && clientErr.code == 403 {
+			return false, nil
+		}
+		return false, err
+	}
+	return true, nil
+}
+
 func (s adminScope) userPredicate(alias string) (string, []any) {
 	return s.userPredicateWithLock(alias, false)
 }
@@ -124,7 +155,13 @@ func (a *App) groupScopePredicate(scope adminScope, alias string) (string, []any
 	if alias != a.t("group") && !safeSQLAlias(alias) {
 		panic("invalid group scope alias")
 	}
-	predicate, args := scope.userPredicate("scope_owner")
+	// Group ownership includes the mentor themselves; general user management
+	// remains descendants-only (in particular for financial operations).
+	if scope.AgentUserID < 1 || scope.referralTable == "" {
+		return "1=0", nil
+	}
+	predicate := "(scope_owner.user_id=? OR EXISTS (SELECT 1 FROM " + scope.referralTable + " scope_path WHERE scope_path.ancestor_user_id=? AND scope_path.descendant_user_id=scope_owner.user_id))"
+	args := []any{scope.AgentUserID, scope.AgentUserID}
 	return "EXISTS (SELECT 1 FROM " + a.t("user") + " scope_owner WHERE scope_owner.user_id=" + alias + ".owner_id AND " + predicate + ")", args
 }
 
@@ -158,7 +195,15 @@ func (a *App) requireScopedGroup(ctx context.Context, db DB, scope adminScope, g
 	if err != nil {
 		return err
 	}
-	return a.requireScopedUser(ctx, db, scope, number(group["owner_id"]))
+	ownerID := number(group["owner_id"])
+	return a.requireScopedGroupOwner(ctx, db, scope, ownerID)
+}
+
+func (a *App) requireScopedGroupOwner(ctx context.Context, db DB, scope adminScope, ownerID int64) error {
+	if scope.Global || scope.AgentUserID > 0 && ownerID == scope.AgentUserID {
+		return nil
+	}
+	return a.requireScopedUser(ctx, db, scope, ownerID)
 }
 
 func (a *App) requireGlobalAdminScope(r *request) error {

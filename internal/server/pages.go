@@ -49,6 +49,14 @@ func (a *App) index(r *request) (any, error) {
 		r.c.String(http.StatusOK, `<!doctype html><meta charset="utf-8"><title>文件预览</title><p><a href="%s" download>下载文件</a></p><iframe sandbox style="width:100%%;height:90vh;border:0" src="%s"></iframe>`, html.EscapeString(src), html.EscapeString(src))
 		return nil, nil
 	case "downapp":
+		r.c.Header("Cache-Control", "no-store")
+		if target := strings.TrimSpace(str(a.config(r.ctx(), "sysInfo")["clientDownloadUrl"])); target != "" {
+			if err := validateClientDownloadURL(target); err != nil {
+				return nil, err
+			}
+			r.c.Redirect(http.StatusFound, target)
+			return nil, nil
+		}
 		r.c.Header("Content-Type", "text/html; charset=utf-8")
 		r.c.String(200, `<!doctype html><meta charset="utf-8"><title>客户端下载</title><h1>客户端下载</h1><p><a href="/downloadApp/windows">Windows</a> · <a href="/downloadApp/mac">macOS</a> · <a href="/downloadApp/andriod">Android</a></p>`)
 		return nil, nil
@@ -75,6 +83,21 @@ func (a *App) index(r *request) (any, error) {
 		return a.scanInfo(r)
 	}
 	return nil, r.fail("未知页面")
+}
+
+func validateClientDownloadURL(raw string) error {
+	if raw == "" {
+		return nil
+	}
+	u, err := url.Parse(raw)
+	if err != nil || len(raw) > 2048 || strings.ContainsAny(raw, "\r\n") || u.Hostname() == "" || u.User != nil || (u.Scheme != "http" && u.Scheme != "https") {
+		return clientError{"客户端下载地址必须是完整的 HTTP/HTTPS 链接", 400}
+	}
+	// Do not point the configurable entry back to itself.
+	if strings.TrimRight(u.Path, "/") == "/downapp" || strings.EqualFold(strings.TrimRight(u.Path, "/"), "/index/index/downapp") {
+		return clientError{"客户端下载地址不能指向下载入口自身", 400}
+	}
+	return nil
 }
 func (a *App) scanInfo(r *request) (any, error) {
 	kind := r.s("action")

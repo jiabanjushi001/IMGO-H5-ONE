@@ -50,7 +50,7 @@ func (a *App) url(p string) string {
 	return a.cfg.BaseURL + "/" + strings.TrimLeft(p, "/")
 }
 func (a *App) safeUser(u M) M {
-	v := pick(u, "user_id", "realname", "avatar", "sex", "motto", "name_py", "role")
+	v := pick(u, "user_id", "account", "realname", "avatar", "sex", "motto", "name_py", "role")
 	v["id"] = u["user_id"]
 	v["displayName"] = u["realname"]
 	v["avatar"] = a.userAvatar(u)
@@ -70,7 +70,7 @@ func (a *App) public(r *request) (any, error) {
 		if _, _, err := a.authenticate(r.ctx(), r.c.GetHeader("Authorization")); err != nil {
 			delete(chat, "stunPass")
 		}
-		return M{"sysInfo": s, "chatInfo": chat, "compass": a.config(r.ctx(), "compass"), "fileUpload": pick(a.config(r.ctx(), "fileUpload"), "size", "preview", "fileExt")}, nil
+		return M{"sysInfo": s, "chatInfo": chat, "compass": a.config(r.ctx(), "compass"), "fileUpload": pick(a.config(r.ctx(), "fileUpload"), "size", "videoSize", "preview", "fileExt"), "security": M{"googleAuthEnabled": a.googleAuthEnabled()}}, nil
 	case "checkversion":
 		return a.checkVersion(r), nil
 	case "sendcode":
@@ -95,13 +95,15 @@ func (a *App) public(r *request) (any, error) {
 	return nil, r.fail("未知操作")
 }
 func (a *App) login(r *request) (any, error) {
+	loginIP := a.clientIP(r.c)
+	adminLogin := r.n("admin_login") == 1
 	if r.s("captcha") != "" && !a.validCaptcha(r.c, r.s("captcha")) {
 		return nil, r.fail("图形验证码无效")
 	}
 	if number(a.get("login-fail:"+r.s("account"), false)) >= 5 {
 		return nil, r.fail("密码错误过多，请 5 分钟后重试")
 	}
-	if !a.allow("login-rate:"+a.clientIP(r.c), 100*time.Millisecond) {
+	if !a.allow("login-rate:"+loginIP, 100*time.Millisecond) {
 		return nil, r.fail("请求过于频繁")
 	}
 	var u M
@@ -142,13 +144,26 @@ func (a *App) login(r *request) (any, error) {
 	if number(u["status"]) != 1 || number(u["delete_time"]) != 0 {
 		return nil, r.fail("账号不可用")
 	}
-	if e = r.exec("UPDATE "+a.t("user")+" SET login_count=login_count+1,last_login_time=?,last_login_ip=? WHERE user_id=?", time.Now().Unix(), a.clientIP(r.c), u["user_id"]); e != nil {
+	if adminLogin {
+		a.googleAuthMu.RLock()
+		defer a.googleAuthMu.RUnlock()
+		if a.loginIPWhitelistEnabled() && !a.loginIPAllowed(loginIP) {
+			return nil, clientError{"当前 IP 不在后台登录白名单", 403}
+		}
+		if a.googleAuthEnabled() {
+			if e = a.verifyUserGoogleAuth(r.ctx(), number(u["user_id"]), r.s("google_code")); e != nil {
+				a.recordFailure("login-fail:" + r.s("account"))
+				return nil, e
+			}
+		}
+	}
+	if e = r.exec("UPDATE "+a.t("user")+" SET login_count=login_count+1,last_login_time=?,last_login_ip=? WHERE user_id=?", time.Now().Unix(), loginIP, u["user_id"]); e != nil {
 		return nil, e
 	}
 	a.get("login-fail:"+r.s("account"), true)
 	sid := randomID()
 	expiry := time.Now().Add(24 * time.Hour)
-	_, e = insert(r.ctx(), a.db, a.t("imgo_session"), M{"sid": sid, "user_id": u["user_id"], "expires_at": expiry.Unix()})
+	_, e = insert(r.ctx(), a.db, a.t("imgo_session"), M{"sid": sid, "user_id": u["user_id"], "expires_at": expiry.Unix(), "login_ip": loginIP, "admin_login": adminLogin})
 	if e != nil {
 		return nil, e
 	}
@@ -179,6 +194,12 @@ func (a *App) login(r *request) (any, error) {
 		if e = a.hub.bind(r.s("client_id"), number(u["user_id"]), claims{number(u["user_id"]), sid, expiry.Unix()}); e != nil && !errors.Is(e, errSocketDisconnected) {
 			return nil, e
 		}
+	}
+	if adminLogin {
+		a.recordAdminLogin(r, u)
+		a.queueSystemAlert(systemAlertEvent{Type: "admin_login", OccurredAt: time.Now(), IP: loginIP, Actor: systemAlertUserIdentity(u), ActorID: number(u["user_id"]), Target: systemAlertUserIdentity(u), TargetID: number(u["user_id"])})
+	} else {
+		a.queueSystemAlert(systemAlertEvent{Type: "user_login", OccurredAt: time.Now(), IP: loginIP, Actor: systemAlertUserIdentity(u), ActorID: number(u["user_id"]), Target: systemAlertUserIdentity(u), TargetID: number(u["user_id"])})
 	}
 	return M{"sessionId": sid, "authToken": "bearer " + token, "userInfo": v}, nil
 }
@@ -230,6 +251,7 @@ func (a *App) registerUser(r *request) (any, error) {
 	if e != nil {
 		return nil, e
 	}
+	a.queueSystemAlert(systemAlertEvent{Type: "user_register", OccurredAt: time.Now(), IP: a.clientIP(r.c), Actor: fmt.Sprintf("%s (#%d)", r.s("account"), uid), ActorID: uid, Target: fmt.Sprintf("%s (#%d)", r.s("account"), uid), TargetID: uid})
 	return M{"user_id": uid}, nil
 }
 func (a *App) verifyCode(account, kind, code string) bool {

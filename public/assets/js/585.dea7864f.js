@@ -359,6 +359,12 @@ function imgoFinanceDate(seconds) {
     ? new Date(Number(seconds) * 1000).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })
     : '—'
 }
+function imgoWithdrawalStatusName(value) {
+  return ({ 0: '待处理', 1: '已打款', 2: '已拒绝', 3: '已冻结' })[Number(value)] || '未知'
+}
+function imgoWithdrawalStatusColor(value) {
+  return ({ 0: 'warning', 1: 'success', 2: 'danger', 3: 'info' })[Number(value)] || 'info'
+}
 function imgoFinanceSearchInput(h, value, onInput, onSearch) {
   return h('el-input', {
     props: { value, placeholder: '搜索成员账号或姓名', clearable: true },
@@ -426,9 +432,10 @@ const ImgoWithdrawalDetail = {
   props: { visible: Boolean, detail: { type: Object, default: () => ({}) }, processing: Boolean },
   render(h) {
     const detail = this.detail || {}
+    const status = Number(detail.status)
     const info = (label, value) => h('div', [h('span', label), value || '—'])
     return h('el-dialog', {
-      props: { title: '提现订单详情', visible: this.visible, width: '560px', closeOnClickModal: false, appendToBody: true },
+      props: { title: status === 0 || status === 3 ? '编辑提现订单' : '提现订单详情', visible: this.visible, width: '560px', closeOnClickModal: false, appendToBody: true, customClass: 'imgo-finance-withdraw-dialog' },
       on: { close: () => this.$emit('close') }
     }, this.visible ? [
       h('div', { class: 'imgo-finance-detail' }, [
@@ -436,24 +443,28 @@ const ImgoWithdrawalDetail = {
         info('成员', `${detail.account || '—'}（ID ${detail.user_id || '—'}）`),
         info('金额', h('strong', imgoFinanceMoney(detail.amount_cents))),
         info('申请时间', imgoFinanceDate(detail.created_at)),
-        info('状态', ['待处理', '已打款', '已拒绝'][Number(detail.status)] || '未知'),
+        info('状态', imgoWithdrawalStatusName(status)),
         info('收款姓名', detail.receipt_name),
         info('收款银行', detail.bank_name),
         info('支行名称', detail.branch_name),
         info('收款卡号', h('strong', { class: 'imgo-finance-account' }, detail.receipt_account || '—'))
       ]),
       h('div', { class: 'imgo-finance-remark' }, [
-        h('label', '处理备注 / 拒绝原因'),
+        h('label', status === 3 ? '冻结原因' : '处理备注 / 冻结或拒绝原因'),
         h('el-input', {
-          props: { type: 'textarea', rows: 3, value: detail.remark || '', disabled: Number(detail.status) !== 0, showWordLimit: true },
-          attrs: { maxlength: 500, placeholder: '拒绝时须填写原因；确认打款可填写转账备注' },
+          props: { type: 'textarea', rows: 3, value: detail.remark || '', disabled: status !== 0, showWordLimit: true },
+          attrs: { maxlength: 500, placeholder: '冻结或拒绝时须填写原因；确认打款可填写转账备注' },
           on: { input: value => this.$emit('remark-change', value) }
         })
       ]),
-      h('span', { slot: 'footer' }, Number(detail.status) === 0 ? [
+      h('span', { slot: 'footer', class: 'imgo-finance-dialog-actions' }, status === 0 ? [
         h('el-button', { on: { click: () => this.$emit('close') } }, '关闭'),
+        h('el-button', { props: { type: 'warning', plain: true, loading: this.processing }, on: { click: () => this.$emit('freeze', true) } }, '冻结订单'),
         h('el-button', { props: { type: 'danger', loading: this.processing }, on: { click: () => this.$emit('review', 2) } }, '拒绝并退款'),
         h('el-button', { props: { type: 'primary', loading: this.processing }, on: { click: () => this.$emit('review', 1) } }, '确认已线下打款')
+      ] : status === 3 ? [
+        h('el-button', { on: { click: () => this.$emit('close') } }, '关闭'),
+        h('el-button', { props: { type: 'primary', loading: this.processing }, on: { click: () => this.$emit('freeze', false) } }, '解除冻结')
       ] : [h('el-button', { on: { click: () => this.$emit('close') } }, '关闭')])
     ] : [])
   }
@@ -466,7 +477,7 @@ const ImgoWithdrawalOrders = {
   },
   mounted() { this.refresh() },
   methods: {
-    statusName(value) { return ['待处理', '已打款', '已拒绝'][Number(value)] || '未知' },
+    statusName(value) { return imgoWithdrawalStatusName(value) },
     async refresh() {
       this.loading = true
       try {
@@ -507,6 +518,27 @@ const ImgoWithdrawalOrders = {
         await this.refresh()
       } catch (error) { this.$message.error(error.message || '处理失败，请重试') }
       finally { this.processing = false }
+    },
+    async freeze(frozen) {
+      if (!this.detail.withdrawal_id || this.processing) return
+      const remark = String(this.detail.remark || '').trim()
+      if (frozen && remark.length < 2) { this.$message.warning('冻结时请填写至少 2 个字的原因'); return }
+      if (remark.length > 500) { this.$message.warning('冻结原因不能超过 500 字'); return }
+      try {
+        await this.$confirm(frozen
+          ? '冻结后订单不能打款或拒绝，提现金额仍保留在冻结余额中。'
+          : '解除后订单恢复待处理，提现金额仍保持冻结，等待打款或拒绝。',
+        frozen ? '确认冻结订单' : '确认解除冻结', { type: 'warning', confirmButtonText: frozen ? '确认冻结' : '解除冻结', cancelButtonText: '取消' })
+      } catch (_) { return }
+      this.processing = true
+      try {
+        const result = await this.$api.walletApi.freeze({ withdrawal_id: this.detail.withdrawal_id, frozen: frozen ? 1 : 0, remark: frozen ? remark : '' })
+        if (result.code !== 0) throw Error(result.msg || '操作失败')
+        this.$message.success(frozen ? '提现订单已冻结' : '提现订单已解除冻结')
+        this.close()
+        await this.refresh()
+      } catch (error) { this.$message.error(error.message || '操作失败，请重试') }
+      finally { this.processing = false }
     }
   },
   render(h) {
@@ -520,7 +552,7 @@ const ImgoWithdrawalOrders = {
           imgoFinanceSearchInput(h, this.keywords, value => { this.keywords = value }, this.search),
           h('el-select', { props: { value: this.status }, on: { input: value => { this.status = value; this.search() } } }, [
             h('el-option', { props: { label: '全部状态', value: '' } }),
-            [0, 1, 2].map(value => h('el-option', { key: value, props: { label: this.statusName(value), value: String(value) } }))
+            [0, 1, 2, 3].map(value => h('el-option', { key: value, props: { label: this.statusName(value), value: String(value) } }))
           ]),
           h('el-button', { props: { type: 'primary' }, on: { click: this.search } }, '查询'),
           h('el-button', { props: { icon: 'el-icon-refresh', loading: this.loading }, on: { click: this.refresh } }, '刷新')
@@ -530,17 +562,17 @@ const ImgoWithdrawalOrders = {
           col('成员账号', 'account', '145'),
           h('el-table-column', { props: { label: '订单金额', width: '135' }, scopedSlots: { default: scope => h('strong', imgoFinanceMoney(scope.row.amount_cents)) } }),
           h('el-table-column', { props: { label: '时间', width: '190' }, scopedSlots: { default: scope => imgoFinanceDate(scope.row.created_at) } }),
-          h('el-table-column', { props: { label: '状态', width: '105' }, scopedSlots: { default: scope => h('el-tag', { props: { type: ['warning', 'success', 'danger'][Number(scope.row.status)] || 'info', size: 'small' } }, this.statusName(scope.row.status)) } }),
+          h('el-table-column', { props: { label: '状态', width: '105' }, scopedSlots: { default: scope => h('el-tag', { props: { type: imgoWithdrawalStatusColor(scope.row.status), size: 'small' } }, this.statusName(scope.row.status)) } }),
           col('收款银行', 'bank_name', '160'),
           h('el-table-column', { props: { label: '卡号末四位', width: '130' }, scopedSlots: { default: scope => '•••• ' + scope.row.account_last4 } }),
           col('处理备注', 'remark'),
-          h('el-table-column', { props: { label: '操作', width: '115', fixed: 'right', align: 'center' }, scopedSlots: { default: scope => h('el-button', { props: { type: 'text' }, on: { click: () => this.open(scope.row) } }, Number(scope.row.status) === 0 ? '查看处理' : '查看详情') } })
+          h('el-table-column', { props: { label: '操作', width: '115', fixed: 'right', align: 'center' }, scopedSlots: { default: scope => h('el-button', { props: { type: 'text' }, on: { click: () => this.open(scope.row) } }, [0, 3].includes(Number(scope.row.status)) ? '编辑处理' : '查看详情') } })
         ]),
         imgoFinancePagination(h, this)
       ]),
       h(ImgoWithdrawalDetail, {
         props: { visible: this.visible, detail: this.detail, processing: this.processing },
-        on: { close: this.close, 'remark-change': value => { this.$set(this.detail, 'remark', value) }, review: this.review }
+        on: { close: this.close, 'remark-change': value => { this.$set(this.detail, 'remark', value) }, review: this.review, freeze: this.freeze }
       })
     ])
   }
@@ -664,5 +696,86 @@ const ImgoRolePanel = {
   }
 }
 ;
-const LegacyManagement = d; d = { name: 'ImgoManagement', render(h) { const bank = this.$route.path === '/manage/bank', finance = this.$route.path.startsWith('/manage/finance/'), role = this.$route.path === '/manage/role', superAdmin=Number((this.$store.state.userInfo||{}).user_id)===1; return h('div', {class: 'imgo-management'}, [role ? h(ImgoRolePanel) : finance ? h(ImgoFinanceShell) : bank ? h(ImgoBankPanel) : h(ImgoOverview, superAdmin?[h(LegacyManagement),h(ImgoMaintenancePanel)]:[])]); } };
+const ImgoAuditPanel = {
+  name: 'ImgoAuditPanel',
+  data() {
+    return {
+      loading: false, rows: [], total: 0,
+      requestVisible: false, activeRequest: null,
+      query: { page: 1, limit: 20, category: '', risk_level: '', status: '', keywords: '' },
+      categories: ['登录', '成员', '群聊', '设置', '概况', '消息', '任务', '角色', '绑卡', '财务']
+    }
+  },
+  mounted() { this.load() },
+  methods: {
+    async load(reset) {
+      if (reset) this.query.page = 1
+      this.loading = true
+      try {
+        const result = await this.$api.auditApi.index(this.query)
+        if (Number(result.code) !== 0) throw Error(result.msg || '读取日志失败')
+        this.rows = Array.isArray(result.data) ? result.data : []
+        this.total = Number(result.count || 0)
+      } catch (error) { this.$message.error(error.message || '读取日志失败') }
+      finally { this.loading = false }
+    },
+    time(value) {
+      const date = new Date(Number(value || 0) * 1000)
+      if (Number.isNaN(date.getTime())) return '-'
+      const pad = number => String(number).padStart(2, '0')
+      return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`
+    },
+    risk(value) {
+      return ({ low: ['普通', 'info'], medium: ['注意', 'warning'], high: ['高敏', 'danger'], critical: ['严重', 'danger'] })[value] || ['普通', 'info']
+    },
+    pretty(value) {
+      if (!value) return '{}'
+      try { return JSON.stringify(typeof value === 'string' ? JSON.parse(value) : value, null, 2) }
+      catch (_) { return String(value) }
+    },
+    openRequest(row) {
+      this.activeRequest = row
+      this.requestVisible = true
+    }
+  },
+  render(h) {
+    const columns = [
+      h('el-table-column', { props: { label: '时间', width: 170 }, scopedSlots: { default: ({ row }) => h('span', this.time(row.created_at)) } }),
+      h('el-table-column', { props: { label: '操作账号', minWidth: 160 }, scopedSlots: { default: ({ row }) => h('div', [h('strong', row.actor_account || '-'), h('small', { class: 'imgo-audit-sub' }, `${row.actor_name || ''} · ${row.actor_role || ''}`)]) } }),
+      h('el-table-column', { props: { label: '操作分类', minWidth: 150 }, scopedSlots: { default: ({ row }) => h('span', { class: 'imgo-audit-action' }, [h('b', row.category), h('i', '→'), h('span', row.action)]) } }),
+      h('el-table-column', { props: { label: '敏感等级', width: 92 }, scopedSlots: { default: ({ row }) => { const risk = this.risk(row.risk_level); return h('el-tag', { props: { size: 'mini', type: risk[1], effect: row.risk_level === 'critical' ? 'dark' : 'light' } }, risk[0]) } } }),
+      h('el-table-column', { props: { label: '操作对象', minWidth: 160 }, scopedSlots: { default: ({ row }) => h('span', row.target_name ? `${row.target_name}（${row.target_type || '用户'} #${row.target_id}）` : `${row.target_type || '-'}${row.target_id ? ` #${row.target_id}` : ''}`) } }),
+      h('el-table-column', { props: { label: 'IP', minWidth: 125 }, scopedSlots: { default: ({ row }) => h('code', row.ip || '-') } }),
+      h('el-table-column', { props: { label: '结果', width: 90 }, scopedSlots: { default: ({ row }) => h('el-tag', { props: { size: 'mini', type: Number(row.status) === 1 ? 'success' : 'danger' } }, Number(row.status) === 1 ? '成功' : '失败') } }),
+      h('el-table-column', { props: { label: '说明', minWidth: 150, showOverflowTooltip: true }, scopedSlots: { default: ({ row }) => h('span', row.error_message || row.detail || '-') } }),
+      h('el-table-column', { props: { label: '请求数据', width: 100, fixed: 'right' }, scopedSlots: { default: ({ row }) => h('el-button', { props: { type: 'text', size: 'mini' }, on: { click: () => this.openRequest(row) } }, '查看') } })
+    ]
+    return h('section', { class: 'imgo-audit-page' }, [
+      h('header', { class: 'imgo-audit-heading' }, [h('div', [h('h1', '日志'), h('p', '记录后台账号的重要操作，并按业务和敏感等级分类。')])]),
+      h('div', { class: 'imgo-audit-filters' }, [
+        h('el-input', { props: { value: this.query.keywords, clearable: true, placeholder: '账号、姓名、动作、对象或 IP' }, on: { input: value => { this.query.keywords = value }, clear: () => this.load(true) }, nativeOn: { keyup: event => { if (event.key === 'Enter') this.load(true) } } }),
+        h('el-select', { props: { value: this.query.category, clearable: true, placeholder: '业务分类' }, on: { input: value => { this.query.category = value }, change: () => this.load(true) } }, this.categories.map(value => h('el-option', { key: value, props: { label: value, value } }))),
+        h('el-select', { props: { value: this.query.risk_level, clearable: true, placeholder: '敏感等级' }, on: { input: value => { this.query.risk_level = value }, change: () => this.load(true) } }, [
+          h('el-option', { props: { label: '普通', value: 'low' } }), h('el-option', { props: { label: '注意', value: 'medium' } }),
+          h('el-option', { props: { label: '高敏', value: 'high' } }), h('el-option', { props: { label: '严重', value: 'critical' } })
+        ]),
+        h('el-select', { props: { value: this.query.status, clearable: true, placeholder: '操作结果' }, on: { input: value => { this.query.status = value }, change: () => this.load(true) } }, [h('el-option', { props: { label: '成功', value: '1' } }), h('el-option', { props: { label: '失败', value: '0' } })]),
+        h('el-button', { props: { type: 'primary', icon: 'el-icon-search' }, on: { click: () => this.load(true) } }, '查询')
+      ]),
+      h('el-table', { class: 'imgo-audit-table', props: { data: this.rows, border: true, stripe: true }, directives: [{ name: 'loading', value: this.loading }] }, columns),
+      h('div', { class: 'imgo-audit-pagination' }, [h('el-pagination', { props: { currentPage: this.query.page, pageSize: this.query.limit, total: this.total, layout: 'total, prev, pager, next' }, on: { 'current-change': page => { this.query.page = page; this.load() } } })]),
+      h('el-dialog', {
+        props: { title: '请求详情', visible: this.requestVisible, width: '760px', appendToBody: true, closeOnClickModal: false },
+        on: { 'update:visible': value => { this.requestVisible = value } }
+      }, this.activeRequest ? [
+        h('div', { class: 'imgo-audit-request-line' }, [h('el-tag', { props: { size: 'mini' } }, this.activeRequest.request_method || 'POST'), h('code', this.activeRequest.request_path || '-')]),
+        h('div', { class: 'imgo-audit-request-block' }, [h('h3', '请求头'), h('pre', this.pretty(this.activeRequest.request_headers))]),
+        h('div', { class: 'imgo-audit-request-block' }, [h('h3', '请求数据'), h('pre', this.pretty(this.activeRequest.request_data))]),
+        h('el-alert', { props: { title: '密码、Token、Cookie、验证码和银行卡号等敏感值已隐藏', type: 'info', showIcon: true, closable: false } })
+      ] : [])
+    ])
+  }
+}
+;
+const LegacyManagement = d; d = { name: 'ImgoManagement', render(h) { const bank = this.$route.path === '/manage/bank', finance = this.$route.path.startsWith('/manage/finance/'), role = this.$route.path === '/manage/role', audit = this.$route.path === '/manage/audit', superAdmin=Number((this.$store.state.userInfo||{}).user_id)===1; return h('div', {class: 'imgo-management'}, [audit ? h(ImgoAuditPanel) : role ? h(ImgoRolePanel) : finance ? h(ImgoFinanceShell) : bank ? h(ImgoBankPanel) : h(ImgoOverview, superAdmin?[h(LegacyManagement),h(ImgoMaintenancePanel)]:[])]); } };
 /* IMGO_MAINTENANCE_END */},5080:function(t,a,s){t.exports=s.p+"assets/img/logo.e8099414.png"}}]);

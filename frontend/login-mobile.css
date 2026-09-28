@@ -1,0 +1,242 @@
+/* IMGO_ADD_ACCOUNT_LOGIN_BEGIN */
+.imgo-add-account-login {
+  position: relative;
+  isolation: isolate;
+  background-position: center;
+}
+
+.imgo-add-account-login::before {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  content: "";
+  background:
+    radial-gradient(circle at 18% 16%, rgba(113, 168, 255, .32), transparent 34%),
+    linear-gradient(160deg, rgba(9, 30, 66, .18), rgba(9, 30, 66, .48));
+}
+
+.imgo-add-account-login .form-box {
+  position: relative;
+}
+
+.imgo-add-account-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin: 0 0 12px -4px;
+  padding: 6px 8px;
+  border: 0;
+  border-radius: 8px;
+  color: #718096;
+  background: transparent;
+  font: inherit;
+  cursor: pointer;
+  transition: color .18s ease, background .18s ease;
+}
+
+.imgo-add-account-back:hover {
+  color: #3478e5;
+  background: #f2f6fd;
+}
+
+.imgo-add-account-login .form-title {
+  margin-bottom: 18px !important;
+}
+
+.imgo-add-account-login .form-title img {
+  width: 76px;
+  height: 76px;
+  border-radius: 20px;
+  object-fit: cover;
+  box-shadow: 0 12px 28px rgba(52, 120, 229, .2);
+}
+
+.imgo-add-account-login .form-title p {
+  margin-top: 14px !important;
+  color: #202b3c;
+  font-size: 23px !important;
+  font-weight: 650;
+  letter-spacing: .5px;
+}
+
+.imgo-add-account-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 11px 13px;
+  border: 1px solid #dbe8ff;
+  border-radius: 12px;
+  color: #58708f;
+  background: #f4f8ff;
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.imgo-add-account-note i {
+  flex: 0 0 auto;
+  margin-top: 2px;
+  color: #4c8df3;
+  font-size: 16px;
+}
+
+.imgo-add-account-note strong,
+.imgo-add-account-note span {
+  display: block;
+}
+
+.imgo-add-account-note strong {
+  margin-bottom: 2px;
+  color: #2f5f9f;
+  font-size: 13px;
+}
+
+@media (max-width: 700px) {
+  .imgo-add-account-login {
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    min-height: 100vh;
+    min-height: 100dvh;
+    height: auto;
+    padding: max(18px, env(safe-area-inset-top)) 14px max(18px, env(safe-area-inset-bottom));
+    overflow-x: hidden;
+    overflow-y: auto;
+    background-position: center;
+  }
+
+  .imgo-add-account-login .form-box {
+    box-sizing: border-box;
+    width: min(100%, 390px);
+    margin: auto;
+    padding: 18px 20px 22px;
+    border: 1px solid rgba(255, 255, 255, .72);
+    border-radius: 22px;
+    background: rgba(255, 255, 255, .96);
+    box-shadow: 0 24px 60px rgba(6, 25, 57, .24);
+    -webkit-backdrop-filter: blur(16px);
+    backdrop-filter: blur(16px);
+  }
+
+  .imgo-add-account-back {
+    min-height: 40px;
+    margin-bottom: 4px;
+    font-size: 14px;
+  }
+
+  .imgo-add-account-login .form-title {
+    margin-bottom: 16px !important;
+  }
+
+  .imgo-add-account-login .form-title img {
+    width: 68px;
+    height: 68px;
+    border-radius: 18px;
+  }
+
+  .imgo-add-account-login .form-title p {
+    margin: 12px 0 0 !important;
+    font-size: 22px !important;
+  }
+
+  .imgo-add-account-note {
+    margin-bottom: 18px;
+  }
+
+  .imgo-add-account-login .el-form-item {
+    margin-bottom: 17px;
+  }
+
+  .imgo-add-account-login .el-input__inner {
+    height: 48px;
+    padding-left: 40px;
+    border-color: #dfe5ed;
+    border-radius: 12px;
+    color: #263449;
+    background: #fbfcfe;
+    font-size: 16px;
+    line-height: 48px;
+  }
+
+  .imgo-add-account-login .el-input__inner:focus {
+    border-color: #5b98f5;
+    background: #fff;
+    box-shadow: 0 0 0 3px rgba(64, 137, 238, .1);
+  }
+
+  .imgo-add-account-login .el-input__prefix,
+  .imgo-add-account-login .el-input__icon {
+    line-height: 48px;
+  }
+
+  .imgo-add-account-login .remenber {
+    min-height: 32px;
+  }
+
+  .imgo-add-account-login .el-checkbox__label,
+  .imgo-add-account-login .el-button--text {
+    font-size: 14px;
+  }
+
+  .imgo-add-account-login .login-form > .el-form-item:nth-last-of-type(1) .el-button--primary,
+  .imgo-add-account-login .el-button--primary {
+    min-height: 48px;
+    border: 0;
+    border-radius: 12px;
+    background: linear-gradient(135deg, #5b9cf6, #3978e8);
+    box-shadow: 0 10px 22px rgba(57, 120, 232, .24);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 4px;
+  }
+
+  .imgo-add-account-login .login-form > .el-button.is-plain {
+    min-height: 44px;
+    border-color: #e0e6ef;
+    border-radius: 11px;
+    color: #5d6b7e;
+    background: #f8fafc;
+  }
+
+  .imgo-add-account-login .c-999 {
+    margin-top: 2px;
+    color: #a0a8b5;
+    font-size: 12px;
+  }
+}
+
+@media (max-width: 380px) {
+  .imgo-add-account-login {
+    padding-right: 10px;
+    padding-left: 10px;
+  }
+
+  .imgo-add-account-login .form-box {
+    padding-right: 16px;
+    padding-left: 16px;
+  }
+}
+
+@media (max-height: 650px) and (max-width: 700px) {
+  .imgo-add-account-login {
+    align-items: flex-start;
+  }
+
+  .imgo-add-account-login .form-title img {
+    width: 54px;
+    height: 54px;
+    border-radius: 15px;
+  }
+
+  .imgo-add-account-login .form-title p {
+    margin-top: 8px !important;
+    font-size: 19px !important;
+  }
+
+  .imgo-add-account-note {
+    margin-bottom: 14px;
+    padding-top: 8px;
+    padding-bottom: 8px;
+  }
+}
+/* IMGO_ADD_ACCOUNT_LOGIN_END */

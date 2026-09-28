@@ -35,6 +35,7 @@ BEGIN
          CONCAT(@imgo_clear_prefix, 'imgo_agent_setting'),
          CONCAT(@imgo_clear_prefix, 'imgo_agent_auto_state'),
          CONCAT(@imgo_clear_prefix, 'imgo_agent_online_sample'),
+         CONCAT(@imgo_clear_prefix, 'imgo_admin_audit_log'),
          CONCAT(@imgo_clear_prefix, 'imgo_bank_card'),
          CONCAT(@imgo_clear_prefix, 'imgo_check_in'),
          CONCAT(@imgo_clear_prefix, 'imgo_wallet'),
@@ -112,6 +113,19 @@ BEGIN
   PREPARE clear_statement FROM @imgo_clear_sql;
   EXECUTE clear_statement USING @imgo_admin_user_id;
   DEALLOCATE PREPARE clear_statement;
+
+  -- 谷歌验证密钥按成员独立保存；删除其他成员时保留超级管理员自己的绑定。
+  IF (SELECT COUNT(*)
+        FROM information_schema.tables
+       WHERE table_schema = DATABASE()
+         AND table_name = CONCAT(@imgo_clear_prefix, 'imgo_user_totp')) = 1 THEN
+    SET @imgo_clear_sql = CONCAT(
+      'DELETE FROM `', @imgo_clear_prefix, 'imgo_user_totp` WHERE user_id<>?'
+    );
+    PREPARE clear_statement FROM @imgo_clear_sql;
+    EXECUTE clear_statement USING @imgo_admin_user_id;
+    DEALLOCATE PREPARE clear_statement;
+  END IF;
 
   -- 清除管理员的历史头像、IP、登录计数及客服关联，避免引用已删除数据。
   SET @imgo_clear_sql = CONCAT(

@@ -120,11 +120,20 @@ func bankCardSummary(card M) M {
 func (a *App) bankCard(r *request) (any, error) {
 	r.c.Header("Cache-Control", "no-store")
 	if action(r) == "get" {
-		card, err := r.one("SELECT user_id,receipt_name,bank_name,branch_name,account_last4,status,remark,version,created_at,updated_at FROM "+a.t("imgo_bank_card")+" WHERE user_id=?", r.uid())
+		card, err := r.one("SELECT user_id,receipt_name,bank_name,branch_name,account_cipher,account_last4,status,remark,version,created_at,updated_at FROM "+a.t("imgo_bank_card")+" WHERE user_id=?", r.uid())
 		if errors.Is(err, sql.ErrNoRows) {
 			return bankCardSummary(nil), nil
 		}
-		return bankCardSummary(card), err
+		if err != nil {
+			return nil, err
+		}
+		account, err := decryptBankAccount(a.cfg.JWTKey, str(card["account_cipher"]))
+		if err != nil {
+			return nil, err
+		}
+		detail := bankCardSummary(card)
+		detail["receipt_account"] = account
+		return detail, nil
 	}
 	if action(r) != "save" {
 		return nil, r.fail("未知操作")

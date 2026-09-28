@@ -13,4 +13,4 @@ body:has(.imgo-admin) .imgo-finance-detail strong {font-size:18px}
 body:has(.imgo-admin) .imgo-finance-account {font-variant-numeric:tabular-nums;letter-spacing:.5px}
 body:has(.imgo-admin) .imgo-finance-remark {margin-top:24px}
 body:has(.imgo-admin) .imgo-finance-remark label {display:block;margin-bottom:9px;color:#5c687e;font-size:13px}
-@media(max-width:750px){.imgo-finance{padding:16px}.imgo-finance-toolbar .el-input{width:100%}body:has(.imgo-admin) .imgo-finance-detail{grid-template-columns:1fr}}
+@media(max-width:750px){.imgo-finance{padding:16px}.imgo-finance-toolbar .el-input{width:100%}body:has(.imgo-admin) .imgo-finance-detail{grid-template-columns:1fr}.imgo-finance-withdraw-dialog .el-dialog__footer{padding:12px}.imgo-finance-dialog-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}.imgo-finance-dialog-actions .el-button{margin-left:0}}

@@ -1,0 +1,169 @@
+/* IMGO_CHAT_ACCOUNT_SWITCHER_CSS_BEGIN */
+.imgo-account-switch-dialog {
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.imgo-account-switch-dialog .el-dialog__header {
+  padding: 20px 22px 14px;
+  border-bottom: 1px solid #edf0f5;
+}
+
+.imgo-account-switch-dialog .el-dialog__body {
+  padding: 14px 22px 4px;
+}
+
+.imgo-account-switch-dialog .el-dialog__footer {
+  padding: 14px 22px 20px;
+  border-top: 1px solid #edf0f5;
+}
+
+.imgo-account-switcher__tip {
+  margin-bottom: 12px;
+  color: #8b93a5;
+  font-size: 13px;
+  line-height: 1.6;
+}
+
+.imgo-account-switcher__list {
+  max-height: min(52vh, 430px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.imgo-account-switcher__item {
+  display: flex;
+  align-items: center;
+  min-height: 68px;
+  margin-bottom: 8px;
+  padding: 10px 12px;
+  border: 1px solid #e8ecf2;
+  border-radius: 10px;
+  background: #fff;
+}
+
+.imgo-account-switcher__item.is-current {
+  border-color: #8eb1ff;
+  background: #f5f8ff;
+}
+
+.imgo-account-switcher__identity {
+  flex: 1;
+  min-width: 0;
+  padding: 0 12px;
+}
+
+.imgo-account-switcher__name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  color: #27344c;
+  font-weight: 600;
+}
+
+.imgo-account-switcher__name > span:first-child,
+.imgo-account-switcher__account {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.imgo-account-switcher__current {
+  flex: 0 0 auto;
+  padding: 2px 7px;
+  border-radius: 999px;
+  color: #356dd8;
+  background: #e5eeff;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.imgo-account-switcher__account {
+  margin-top: 5px;
+  color: #9198a8;
+  font-size: 12px;
+}
+
+.imgo-account-switcher__actions {
+  display: flex;
+  align-items: center;
+}
+
+.imgo-account-switcher__remove {
+  margin-left: 8px !important;
+  color: #a1a7b3 !important;
+}
+
+.imgo-account-switcher__empty {
+  padding: 32px 0;
+  color: #a1a7b3;
+  text-align: center;
+}
+
+.imgo-account-switcher__empty i {
+  font-size: 36px;
+}
+
+.imgo-account-switcher__footer .el-button {
+  width: 100%;
+}
+
+@media (max-width: 700px) {
+  .el-dialog__wrapper:has(.imgo-account-switch-dialog) {
+    display: flex;
+    align-items: flex-end;
+    padding: 0;
+  }
+
+  .imgo-account-switch-dialog {
+    width: 100% !important;
+    max-height: 82dvh;
+    margin: 0 !important;
+    border-radius: 18px 18px 0 0;
+  }
+
+  .imgo-account-switch-dialog .el-dialog__header {
+    padding: 18px 18px 13px;
+  }
+
+  .imgo-account-switch-dialog .el-dialog__body {
+    padding: 12px 14px 2px;
+  }
+
+  .imgo-account-switch-dialog .el-dialog__footer {
+    padding: 12px 14px calc(14px + env(safe-area-inset-bottom));
+  }
+
+  .imgo-account-switcher__list {
+    max-height: calc(82dvh - 178px);
+  }
+
+  .imgo-account-switcher__item {
+    min-height: 72px;
+    padding: 10px;
+  }
+
+  .imgo-account-switcher__identity {
+    padding: 0 9px;
+  }
+
+  .imgo-account-switcher__actions {
+    flex-direction: column;
+  }
+
+  .imgo-account-switcher__actions .el-button {
+    min-width: 56px;
+    min-height: 34px;
+    margin: 0 !important;
+  }
+
+  .imgo-account-switcher__remove {
+    min-height: 30px !important;
+  }
+
+  .imgo-account-switcher__footer .el-button {
+    min-height: 44px;
+  }
+}
+/* IMGO_CHAT_ACCOUNT_SWITCHER_CSS_END */

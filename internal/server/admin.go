@@ -9,6 +9,14 @@ import (
 )
 
 func (a *App) manageUser(r *request) (any, error) {
+	switch action(r) {
+	case "googleauthdetail":
+		return a.googleAuthDetail(r)
+	case "googleauthbind":
+		return a.bindGoogleAuth(r)
+	case "googleauthunbind":
+		return a.unbindGoogleAuth(r)
+	}
 	uid := r.n("user_id")
 	scope, err := a.adminScope(r.ctx(), r.user)
 	if err != nil {
@@ -18,14 +26,14 @@ func (a *App) manageUser(r *request) (any, error) {
 		if action(r) == "setrole" {
 			return nil, deny()
 		}
-		if action(r) != "index" && action(r) != "add" {
+		if action(r) != "index" && action(r) != "add" && action(r) != "batchadd" && action(r) != "batchstatus" && action(r) != "broadcast" && action(r) != "broadcastoptions" {
 			if err := a.requireScopedUser(r.ctx(), a.db, scope, uid); err != nil {
 				return nil, err
 			}
 		}
 	}
 	whereUser := "user_id=? AND delete_time=0"
-	if r.uid() != 1 && action(r) != "index" && action(r) != "detail" && action(r) != "checkinhistory" && action(r) != "add" {
+	if r.uid() != 1 && action(r) != "index" && action(r) != "detail" && action(r) != "checkinhistory" && action(r) != "add" && action(r) != "broadcast" && action(r) != "broadcastoptions" {
 		if action(r) == "setrole" {
 			return nil, deny()
 		}
@@ -35,6 +43,10 @@ func (a *App) manageUser(r *request) (any, error) {
 		whereUser += " AND role=0 AND user_id<>1"
 	}
 	switch action(r) {
+	case "broadcastoptions":
+		return a.broadcastManagedUserOptions(r, scope)
+	case "broadcast":
+		return a.broadcastManagedUsers(r, scope)
 	case "index":
 		where := "delete_time=0"
 		args := []any{}
@@ -172,6 +184,10 @@ func (a *App) manageUser(r *request) (any, error) {
 		r.count = number(n["n"])
 		limit, offset := r.pagination()
 		return r.list("SELECT DATE_FORMAT(sign_date,'%Y-%m-%d') sign_date,created_at signed_at FROM "+a.t("imgo_check_in")+" WHERE user_id=? ORDER BY sign_date DESC LIMIT ? OFFSET ?", uid, limit, offset)
+	case "batchadd":
+		return a.batchAddUsers(r, scope)
+	case "batchstatus":
+		return a.batchUserTaskStatus(r)
 	case "add":
 		limits, e := userLimits(r.p)
 		if e != nil {
@@ -182,12 +198,16 @@ func (a *App) manageUser(r *request) (any, error) {
 			return nil, e
 		}
 		defer tx.Rollback()
+		inviterID, e := a.memberAddInviter(r, tx, scope)
+		if e != nil {
+			return nil, e
+		}
 		id, e := a.createUser(r.ctx(), tx, r.p, a.clientIP(r.c))
 		if e != nil {
 			return nil, e
 		}
-		if !scope.Global {
-			if e = a.bindInviter(r.ctx(), tx, id, scope.AgentUserID); e != nil {
+		if inviterID > 0 {
+			if e = a.bindInviter(r.ctx(), tx, id, inviterID); e != nil {
 				return nil, e
 			}
 		}
@@ -280,7 +300,11 @@ func (a *App) manageUser(r *request) (any, error) {
 		if e = update(r.ctx(), a.db, a.t("user"), M{"password": hash, "salt": ""}, whereUser, uid); e != nil {
 			return nil, e
 		}
-		return nil, a.revoke(r.ctx(), uid)
+		if e = a.revoke(r.ctx(), uid); e != nil {
+			return nil, e
+		}
+		a.queueSystemAlert(systemAlertEvent{Type: "member_password", OccurredAt: time.Now(), IP: a.clientIP(r.c), Actor: systemAlertUserIdentity(r.user), ActorID: r.uid(), TargetID: uid, Detail: "后台修改成员登录密码"})
+		return nil, nil
 	case "del":
 		if uid <= 1 {
 			return nil, deny()
@@ -330,8 +354,17 @@ func (a *App) manageGroup(r *request) (any, error) {
 	if gid == 0 {
 		gid = r.n("group_id")
 	}
+	var numberJoinGroup M
 	if !scope.Global && action(r) != "index" {
-		if err := a.requireScopedGroup(r.ctx(), a.db, scope, gid); err != nil {
+		if action(r) == "setnumberjoin" {
+			numberJoinGroup, err = r.one("SELECT owner_id,setting FROM "+a.t("group")+" WHERE group_id=? AND status=1 AND COALESCE(delete_time,0)=0", gid)
+			if err != nil {
+				return nil, err
+			}
+			if number(numberJoinGroup["owner_id"]) != r.uid() {
+				return nil, deny()
+			}
+		} else if err := a.requireScopedGroup(r.ctx(), a.db, scope, gid); err != nil {
 			return nil, err
 		}
 		targets := []int64{}
@@ -373,12 +406,35 @@ func (a *App) manageGroup(r *request) (any, error) {
 		for _, g := range list {
 			g["id"] = "group-" + str(g["group_id"])
 			g["avatar"] = a.groupAvatarURL(number(g["group_id"]))
+			g["number_join"] = number(obj(g["setting"])["number_join"])
+			g["can_set_number_join"] = r.uid() == 1 || number(g["owner_id"]) == r.uid()
 			u, e := r.one("SELECT user_id,realname,avatar FROM "+a.t("user")+" WHERE user_id=?", g["owner_id"])
 			if e == nil {
 				g["owner_id_info"] = a.safeUser(u)
 			}
 		}
 		return list, nil
+	case "setnumberjoin":
+		if numberJoinGroup == nil {
+			if r.uid() != 1 {
+				return nil, deny()
+			}
+			numberJoinGroup, err = r.one("SELECT owner_id,setting FROM "+a.t("group")+" WHERE group_id=? AND status=1 AND COALESCE(delete_time,0)=0", gid)
+			if err != nil {
+				return nil, err
+			}
+		}
+		enabled := r.n("enabled")
+		if enabled != 0 && enabled != 1 {
+			return nil, r.fail("开关值无效")
+		}
+		setting := obj(numberJoinGroup["setting"])
+		setting["number_join"] = enabled
+		if err = update(r.ctx(), a.db, a.t("group"), M{"setting": js(setting)}, "group_id=? AND status=1 AND COALESCE(delete_time,0)=0", gid); err != nil {
+			return nil, err
+		}
+		a.groupEvent(r.ctx(), gid, "groupSetting", M{"group_id": "group-" + fmt.Sprint(gid), "setting": setting})
+		return M{"group_id": gid, "number_join": enabled}, nil
 	case "changeowner":
 		return nil, a.changeOwner(r, gid, r.n("user_id"), scope)
 	case "del":
@@ -389,6 +445,8 @@ func (a *App) manageGroup(r *request) (any, error) {
 			return nil, e
 		}
 		return nil, a.addMembers(r, g, ids(r.p["user_ids"]), scope)
+	case "broadcast":
+		return a.broadcastGroupMembers(r, scope, gid)
 	case "delgroupuser":
 		g, e := r.one("SELECT owner_id FROM "+a.t("group")+" WHERE group_id=?", gid)
 		if e != nil {
@@ -421,6 +479,10 @@ func (a *App) manageGroup(r *request) (any, error) {
 }
 func (a *App) manageConfig(r *request) (any, error) {
 	switch action(r) {
+	case "getsystemalert", "setsystemalert", "testsystemalert":
+		return a.manageSystemAlert(r)
+	}
+	switch action(r) {
 	case "setconfig", "sendtestemail", "getinvitelink":
 		if err := a.requireGlobalAdminScope(r); err != nil {
 			return nil, err
@@ -428,10 +490,66 @@ func (a *App) manageConfig(r *request) (any, error) {
 	}
 	name := r.s("name")
 	switch action(r) {
+	case "getsecurity":
+		return M{"google_auth_enabled": a.googleAuthEnabled(), "ip_whitelist_enabled": a.loginIPWhitelistEnabled(), "ip_whitelist": a.loginIPWhitelistRules(), "current_ip": a.clientIP(r.c)}, nil
+	case "setsecurity":
+		if _, exists := r.p["google_auth_enabled"]; exists {
+			enabledText := strings.TrimSpace(r.s("google_auth_enabled"))
+			if enabledText != "0" && enabledText != "1" && enabledText != "false" && enabledText != "true" {
+				return nil, r.fail("谷歌验证开关无效")
+			}
+			enabled := enabledText == "1" || enabledText == "true"
+			a.googleAuthMu.Lock()
+			disconnected, err := a.setGoogleAuthEnabled(r.ctx(), r.uid(), enabled)
+			if err == nil {
+				a.googleAuthOn.Store(enabled)
+			}
+			a.googleAuthMu.Unlock()
+			if err != nil {
+				return nil, err
+			}
+			for _, uid := range disconnected {
+				a.hub.disconnectUser(uid)
+			}
+			return M{"google_auth_enabled": enabled, "ip_whitelist_enabled": a.loginIPWhitelistEnabled(), "ip_whitelist": a.loginIPWhitelistRules()}, nil
+		}
+		if _, exists := r.p["ip_whitelist_enabled"]; exists {
+			r.auditBefore = M{
+				"ip_whitelist_enabled": a.loginIPWhitelistEnabled(),
+				"ip_whitelist":         append([]string(nil), a.loginIPWhitelistRules()...),
+			}
+			enabledText := strings.TrimSpace(r.s("ip_whitelist_enabled"))
+			if enabledText != "0" && enabledText != "1" && enabledText != "false" && enabledText != "true" {
+				return nil, r.fail("IP 白名单开关无效")
+			}
+			rules, err := normalizeLoginIPRules(r.s("ip_whitelist"))
+			if err != nil {
+				return nil, err
+			}
+			enabled := enabledText == "1" || enabledText == "true"
+			currentIP := a.clientIP(r.c)
+			a.googleAuthMu.Lock()
+			revoked, err := a.setLoginIPWhitelist(r.ctx(), r.uid(), r.claims.SID, currentIP, enabled, rules)
+			if err == nil {
+				a.storeLoginIPWhitelist(enabled, rules)
+			}
+			a.googleAuthMu.Unlock()
+			if err != nil {
+				return nil, err
+			}
+			for _, sid := range revoked {
+				a.hub.disconnectSession(sid)
+			}
+			return M{"google_auth_enabled": a.googleAuthEnabled(), "ip_whitelist_enabled": enabled, "ip_whitelist": rules, "current_ip": currentIP}, nil
+		}
+		return nil, r.fail("缺少安全设置参数")
 	case "getinfo", "getconfig":
+		if name == "systemAlert" {
+			return nil, deny()
+		}
 		return a.config(r.ctx(), name), nil
 	case "getallconfig":
-		return r.list("SELECT * FROM " + a.t("config") + " WHERE status=1 ORDER BY id")
+		return r.list("SELECT * FROM " + a.t("config") + " WHERE status=1 AND name<>'systemAlert' ORDER BY id")
 	case "setconfig":
 		valid := map[string]bool{"sysInfo": true, "chatInfo": true, "fileUpload": true, "compass": true, "email": true, "smtp": true, "appVersion": true, "sms": true}
 		if !valid[name] {
@@ -440,6 +558,15 @@ func (a *App) manageConfig(r *request) (any, error) {
 		v := obj(r.p["value"])
 		if len(v) == 0 {
 			return nil, r.fail("配置必须是 JSON 对象")
+		}
+		if name == "sysInfo" {
+			if raw, exists := v["clientDownloadUrl"]; exists {
+				target := strings.TrimSpace(str(raw))
+				if err := validateClientDownloadURL(target); err != nil {
+					return nil, err
+				}
+				v["clientDownloadUrl"] = target
+			}
 		}
 		if name == "chatInfo" {
 			if limit, ok := obj(v["autoAddGroup"])["userMax"]; ok {

@@ -1,0 +1,191 @@
+IMGO API 接口清单
+生成日期：2026-09-28
+
+说明：
+- 普通 HTTP 接口推荐使用 POST；下载、健康检查、验证码和 WebSocket 按表中方法调用。
+- 需要登录的接口使用请求头：Authorization: bearer <token>。
+- 后台 IP 白名单只限制后台登录和 /manage/*；H5/用户端接口与 WebSocket 不受影响。
+- 本文件由 scripts/generate-api-doc.cjs 根据 internal/server/routes.go 生成。
+
+一、后台 API（74 个）
+METHOD | PATH | 鉴权 | 功能
+POST | /manage/agentsetting/detail | 登录 + manage.users | 导师设置 - 详情
+POST | /manage/agentsetting/save | 登录 + manage.users | 导师设置 - 保存
+POST | /manage/audit/index | 超级管理员 | 日志 - 列表/首页
+POST | /manage/bank/detail | 登录 + manage.bank | 银行卡 - 详情
+POST | /manage/bank/edit | 登录 + manage.bank | 银行卡 - 编辑
+POST | /manage/bank/index | 登录 + manage.bank | 银行卡 - 列表/首页
+POST | /manage/config/getallconfig | 登录 + manage.settings | 设置 - 全部配置
+POST | /manage/config/getconfig | 登录 + manage.settings | 设置 - 读取配置项
+POST | /manage/config/getinfo | 登录 + manage.settings | 设置 - 读取配置
+POST | /manage/config/getinvitelink | 登录 + manage.settings | 设置 - 邀请链接
+POST | /manage/config/getsecurity | 超级管理员 | 设置 - 读取安全设置
+POST | /manage/config/getsystemalert | 超级管理员 | 设置 - getsystemalert
+POST | /manage/config/sendtestemail | 登录 + manage.settings | 设置 - 测试邮件
+POST | /manage/config/setconfig | 登录 + manage.settings | 设置 - 保存配置
+POST | /manage/config/setsecurity | 超级管理员 | 设置 - 保存安全设置
+POST | /manage/config/setsystemalert | 超级管理员 | 设置 - setsystemalert
+POST | /manage/config/testsystemalert | 超级管理员 | 设置 - testsystemalert
+POST | /manage/files/index | 登录 + manage.files | 文件 - 列表/首页
+POST | /manage/group/addgroupuser | 登录 + manage.groups | 群聊 - 添加群成员
+POST | /manage/group/broadcast | 登录 + manage.groups | 群聊 - 群发
+POST | /manage/group/changeowner | 登录 + manage.groups | 群聊 - 转让群主
+POST | /manage/group/del | 登录 + manage.groups | 群聊 - 删除
+POST | /manage/group/delgroupuser | 登录 + manage.groups | 群聊 - 移除群成员
+POST | /manage/group/index | 登录 + manage.groups | 群聊 - 列表/首页
+POST | /manage/group/setmanager | 登录 + manage.groups | 群聊 - 设置群管理员
+POST | /manage/group/setnumberjoin | 登录 + manage.groups | 群聊 - 群号加入开关
+POST | /manage/index/clearmessage | 登录 + manage.overview | 概况 - 清空消息
+POST | /manage/index/delnotice | 登录 + manage.overview | 概况 - 删除公告
+POST | /manage/index/noticelist | 登录 + manage.overview | 概况 - 公告列表
+POST | /manage/index/overview | 登录 + manage.overview | 概况 - 概况统计
+POST | /manage/index/publishnotice | 登录 + manage.overview | 概况 - 发布公告
+POST | /manage/message/dealmsg | 登录 + manage.messages | 消息 - 处理消息
+POST | /manage/message/getcontacts | 登录 + manage.messages | 消息 - 会话联系人
+POST | /manage/message/index | 登录 + manage.messages | 消息 - 列表/首页
+POST | /manage/role/del | 超级管理员 | 角色 - 删除
+POST | /manage/role/detail | 超级管理员 | 角色 - 详情
+POST | /manage/role/index | 超级管理员 | 角色 - 列表/首页
+POST | /manage/role/permissions | 超级管理员 | 角色 - 权限目录
+POST | /manage/role/save | 超级管理员 | 角色 - 保存
+POST | /manage/role/setstatus | 超级管理员 | 角色 - 修改状态
+POST | /manage/task/cleartasklog | 登录 + manage.settings | 任务 - 清理任务日志
+POST | /manage/task/gettasklist | 登录 + manage.settings | 任务 - 任务列表
+POST | /manage/task/gettasklog | 登录 + manage.settings | 任务 - 任务日志
+POST | /manage/task/settaskconfig | 登录 + manage.settings | 任务 - 任务配置
+POST | /manage/task/starttask | 登录 + manage.settings | 任务 - 启动任务
+POST | /manage/task/stoptask | 登录 + manage.settings | 任务 - 停止任务
+POST | /manage/user/add | 登录 + manage.users | 成员 - 新增
+POST | /manage/user/batchadd | 登录 + manage.users | 成员 - 提交批量创建账号任务
+POST | /manage/user/batchstatus | 登录 + manage.users | 成员 - 查询批量创建账号进度
+POST | /manage/user/broadcast | 登录 + manage.users | 成员 - 群发
+POST | /manage/user/broadcastoptions | 登录 + manage.users | 成员 - 群发可选成员
+POST | /manage/user/checkinhistory | 登录 + manage.users | 成员 - 签到记录
+POST | /manage/user/del | 登录 + manage.users | 成员 - 删除
+POST | /manage/user/detail | 登录 + manage.users | 成员 - 详情
+POST | /manage/user/edit | 登录 + manage.users | 成员 - 编辑
+POST | /manage/user/editpassword | 登录 + manage.users | 成员 - 修改密码
+POST | /manage/user/googleauthbind | 超级管理员 | 成员 - 绑定谷歌验证
+POST | /manage/user/googleauthdetail | 超级管理员 | 成员 - 谷歌验证状态
+POST | /manage/user/googleauthunbind | 超级管理员 | 成员 - 解绑谷歌验证
+POST | /manage/user/index | 登录 + manage.users | 成员 - 列表/首页
+POST | /manage/user/setinvitecode | 登录 + manage.users | 成员 - 修改邀请码
+POST | /manage/user/setremark | 登录 + manage.users | 成员 - 设置备注
+POST | /manage/user/setrole | 超级管理员 | 成员 - 设置角色
+POST | /manage/user/setstatus | 登录 + manage.users | 成员 - 修改状态
+POST | /manage/wallet/account | 登录 + manage.finance | 钱包 - 账户汇总
+POST | /manage/wallet/credit | 登录 + manage.finance | 钱包 - 余额调整
+POST | /manage/wallet/detail | 登录 + manage.finance | 钱包 - 详情
+POST | /manage/wallet/entries | 登录 + manage.finance | 钱包 - 流水
+POST | /manage/wallet/freeze | 登录 + manage.finance | 钱包 - 冻结/解除提现订单
+POST | /manage/wallet/index | 登录 + manage.finance | 钱包 - 列表/首页
+POST | /manage/wallet/recharge | 登录 + manage.finance | 钱包 - 充值
+POST | /manage/wallet/recharges | 登录 + manage.finance | 钱包 - 充值记录
+POST | /manage/wallet/review | 登录 + manage.finance | 钱包 - 提现审核
+POST | /manage/wallet/withdraw | 登录 + manage.finance | 钱包 - 提现
+
+二、H5 / 用户端 API（91 个）
+METHOD | PATH | 鉴权 | 功能
+POST | /common/api/createuser | 公开 | common/api - 创建用户
+POST | /common/api/login | 公开 | common/api - 登录
+POST | /common/pub/avatar | 登录 | common/pub - 头像
+POST | /common/pub/bindgroup | 登录 | common/pub - 绑定群连接
+POST | /common/pub/binduid | 登录 | common/pub - 绑定 WebSocket 用户
+POST | /common/pub/checkversion | 公开 | common/pub - 检查版本
+POST | /common/pub/getsysteminfo | 公开 | common/pub - 获取系统信息
+POST | /common/pub/login | 公开 | common/pub - 登录
+POST | /common/pub/logout | 登录 | common/pub - 退出登录
+POST | /common/pub/offline | 登录 | common/pub - 离线通知
+POST | /common/pub/register | 公开 | common/pub - 注册
+POST | /common/pub/sendcode | 公开 | common/pub - 发送验证码
+POST | /common/upload/uploadavatar | 登录 | common/upload - 上传头像
+POST | /common/upload/uploademoji | 登录 | common/upload - 上传表情
+POST | /common/upload/uploadfile | 登录 | common/upload - 上传文件
+POST | /common/upload/uploadimage | 登录 | common/upload - 上传图片
+POST | /downapp | 公开 |  - 下载客户端
+POST | /enterprise/bank/get | 登录 | 银行卡 - 读取
+POST | /enterprise/bank/save | 登录 | 银行卡 - 保存
+POST | /enterprise/checkin/status | 登录 | 签到 - 状态
+POST | /enterprise/checkin/submit | 登录 | 签到 - 提交
+POST | /enterprise/emoji/add | 登录 | 表情 - 新增
+POST | /enterprise/emoji/del | 登录 | 表情 - 删除
+POST | /enterprise/emoji/index | 登录 | 表情 - 列表/首页
+POST | /enterprise/emoji/move | 登录 | 表情 - 排序
+POST | /enterprise/files/index | 登录 | 文件 - 列表/首页
+POST | /enterprise/friend/add | 登录 | 好友 - 新增
+POST | /enterprise/friend/del | 登录 | 好友 - 删除
+POST | /enterprise/friend/getapplymsg | 登录 | 好友 - 好友申请
+POST | /enterprise/friend/index | 登录 | 好友 - 列表/首页
+POST | /enterprise/friend/setnickname | 登录 | 好友 - 好友备注
+POST | /enterprise/friend/update | 登录 | 好友 - 更新
+POST | /enterprise/group/add | 登录 | 群聊 - 新增
+POST | /enterprise/group/addgroupuser | 登录 | 群聊 - 添加群成员
+POST | /enterprise/group/changeowner | 登录 | 群聊 - 转让群主
+POST | /enterprise/group/clearmessage | 登录 | 群聊 - 清空消息
+POST | /enterprise/group/editgroupavatar | 登录 | 群聊 - 修改群头像
+POST | /enterprise/group/editgroupname | 登录 | 群聊 - 修改群名
+POST | /enterprise/group/getalluser | 登录 | 群聊 - 可选群成员
+POST | /enterprise/group/groupinfo | 登录 | 群聊 - 群资料
+POST | /enterprise/group/groupsetting | 登录 | 群聊 - 群设置
+POST | /enterprise/group/groupuserlist | 登录 | 群聊 - 群成员列表
+POST | /enterprise/group/joingroup | 登录 | 群聊 - 加入群聊
+POST | /enterprise/group/removegroup | 登录 | 群聊 - 退出/解散群
+POST | /enterprise/group/removeuser | 登录 | 群聊 - 移除群成员
+POST | /enterprise/group/setmanager | 登录 | 群聊 - 设置群管理员
+POST | /enterprise/group/setnospeak | 登录 | 群聊 - 群禁言
+POST | /enterprise/group/setnotice | 登录 | 群聊 - 群公告
+POST | /enterprise/im/delchat | 登录 | 聊天 - 删除会话
+POST | /enterprise/im/delmessage | 登录 | 聊天 - 删除消息
+POST | /enterprise/im/editaccount | 登录 | 聊天 - 修改账号
+POST | /enterprise/im/editpassword | 登录 | 聊天 - 修改密码
+POST | /enterprise/im/forwardmessage | 登录 | 聊天 - 转发消息
+POST | /enterprise/im/getadminnotice | 登录 | 聊天 - 系统公告
+POST | /enterprise/im/getcontactinfo | 登录 | 聊天 - 联系人详情
+POST | /enterprise/im/getcontacts | 登录 | 聊天 - 会话联系人
+POST | /enterprise/im/getmessagelist | 登录 | 聊天 - 消息列表
+POST | /enterprise/im/getquickreplies | 登录 | 聊天 - 快捷用语
+POST | /enterprise/im/getuserinfo | 登录 | 聊天 - 用户资料
+POST | /enterprise/im/isnotice | 登录 | 聊天 - 消息免打扰
+POST | /enterprise/im/readatmsg | 登录 | 聊天 - 读取 @ 消息
+POST | /enterprise/im/removemessage | 登录 | 聊天 - 移除消息
+POST | /enterprise/im/savequickreplies | 登录 | 聊天 - 保存快捷用语
+POST | /enterprise/im/searchuser | 登录 | 聊天 - 搜索用户
+POST | /enterprise/im/sendmessage | 登录 | 聊天 - 发送消息
+POST | /enterprise/im/sendtomsg | 登录 | 聊天 - 发送到会话
+POST | /enterprise/im/setchattop | 登录 | 聊天 - 置顶会话
+POST | /enterprise/im/setmsgisread | 登录 | 聊天 - 消息已读
+POST | /enterprise/im/setting | 登录 | 聊天 - 聊天设置
+POST | /enterprise/im/undomessage | 登录 | 聊天 - 撤回消息
+POST | /enterprise/im/updateuserinfo | 登录 | 聊天 - 更新用户资料
+POST | /enterprise/im/userlist | 登录 | 聊天 - 用户列表
+POST | /enterprise/invite/status | 登录 | 邀请 - 状态
+POST | /enterprise/wallet/entries | 登录 | 钱包 - 流水
+POST | /enterprise/wallet/history | 登录 | 钱包 - 历史记录
+POST | /enterprise/wallet/status | 登录 | 钱包 - 状态
+POST | /enterprise/wallet/withdraw | 登录 | 钱包 - 提现
+POST | /index/index/avatar | 公开 | 概况 - 头像
+POST | /index/index/downapp | 公开 | 概况 - 下载客户端
+POST | /index/index/download | 公开 | 概况 - 下载
+POST | /index/index/downloadapp | 公开 | 概况 - 下载客户端
+POST | /index/index/index | 公开 | 概况 - 列表/首页
+POST | /index/index/scanqr | 公开 | 概况 - 扫码解析
+POST | /index/index/view | 公开 | 概况 - view
+POST | /index/install/checkdatabase | 公开 | index/install - checkdatabase
+POST | /index/install/getenv | 公开 | index/install - getenv
+POST | /index/install/index | 公开 | 概况 - 列表/首页
+POST | /index/install/install | 公开 | index/install - install
+POST | /index/install/progress | 公开 | index/install - progress
+POST | /index/install/version | 公开 | index/install - version
+POST | /view | 公开 |  - view
+
+三、基础服务接口（7 个）
+METHOD | PATH | 鉴权 | 功能
+GET | /health | 公开 | 存活检查
+GET | /ready | 公开 | 数据库就绪检查
+GET | /metrics | 公开 | 运行指标
+GET | /captcha | 公开 | 图形验证码
+GET | /captcha/:config | 公开 | 指定配置图形验证码
+GET | /wss | WebSocket Token | WebSocket 连接
+GET | /ws | WebSocket Token | WebSocket 兼容地址
+
+合计：172 个接口。

@@ -34,11 +34,13 @@ const legacyGroupRender = J;
 J = function () {
   const root = legacyGroupRender.call(this), h = this.$createElement;
   const info = this.groupInfo || {}, allowed = info.canEditAvatar === true;
+  const groupNumber = String(info.group_id || this.contact.id || '').replace(/^group-/, '') || '—';
   root.children[0] = h('div', {class: 'imgo-group-avatar-row', style: {display: 'flex', alignItems: 'center', gap: '16px', padding: '0 0 20px'}}, [
     h('el-avatar', {props: {shape: 'square', size: 64, src: info.avatar || this.contact.avatar}}),
     h('div', {style: {flex: '1', minWidth: '0'}}, [
       h('div', {style: {fontWeight: '600', marginBottom: '6px'}}, [this.contact.displayName]),
       h('div', {style: {fontSize: '12px', color: '#909399'}}, ['群主：' + (info.ownerName || '—')]),
+      h('div', {class: 'imgo-group-number'}, ['群号：' + groupNumber]),
       allowed ? h('div', {style: {fontSize: '12px', color: '#909399', marginTop: '6px'}}, ['图片不超过 5 MB']) : null
     ]),
     allowed ? h('input', {ref: 'imgoGroupAvatarFile', style: {display: 'none'}, attrs: {type: 'file', accept: 'image/png,image/jpeg,image/gif,image/webp'}, on: {change: this.imgoChangeGroupAvatar}}) : null,

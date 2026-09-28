@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 	"strings"
@@ -28,8 +29,12 @@ func (a *App) group(r *request) (any, error) {
 				return nil, err
 			}
 			if !scope.Global {
-				if err := a.requireScopedGroup(r.ctx(), a.db, scope, gid); err != nil {
-					return nil, err
+				// A missing group id means the caller is choosing members for a new
+				// group. Existing-group checks only apply while adding members later.
+				if gid > 0 {
+					if err := a.requireScopedGroup(r.ctx(), a.db, scope, gid); err != nil {
+						return nil, err
+					}
 				}
 				predicate, params := scope.userPredicate("u")
 				scopeWhere = " AND " + predicate
@@ -66,7 +71,7 @@ func (a *App) group(r *request) (any, error) {
 		return nil, e
 	}
 	if act == "joingroup" {
-		if number(g["is_public"]) != 1 {
+		if number(g["is_public"]) != 1 && number(obj(g["setting"])["number_join"]) != 1 {
 			token := r.s("token")
 			parts := strings.Split(token, ".")
 			if len(parts) != 3 || number(parts[0]) != gid || number(parts[1]) < time.Now().Unix() || parts[2] != a.signLink(parts[0]+"."+parts[1]) {
@@ -88,7 +93,7 @@ func (a *App) group(r *request) (any, error) {
 			return nil, err
 		}
 		if !scope.Global {
-			if err := a.requireScopedUser(r.ctx(), a.db, scope, number(g["owner_id"])); err != nil {
+			if err := a.requireScopedGroupOwner(r.ctx(), a.db, scope, number(g["owner_id"])); err != nil {
 				return nil, err
 			}
 		}
@@ -269,10 +274,26 @@ func (a *App) group(r *request) (any, error) {
 		}
 		e = update(r.ctx(), a.db, a.t("group"), M{"notice": sanitizeText(r.s("notice"))}, "group_id=?", gid)
 	case "groupsetting":
-		if role != 1 {
+		if role > 2 {
 			return nil, deny()
 		}
-		settings := pick(obj(r.p["setting"]), "manage", "invite", "nospeak", "history")
+		requested := obj(r.p["setting"])
+		settings := pick(requested, "manage", "invite", "nospeak", "history")
+		current := obj(g["setting"])
+		settings["number_join"] = number(current["number_join"])
+		if role == 2 {
+			for _, key := range []string{"manage", "invite", "history", "profile", "number_join"} {
+				if value, exists := requested[key]; exists && number(value) != number(current[key]) {
+					return nil, deny()
+				}
+			}
+			settings = current
+			settings["nospeak"] = number(requested["nospeak"])
+			r.p["setting"] = settings
+		}
+		if number(settings["nospeak"]) < 0 || number(settings["nospeak"]) > 2 {
+			return nil, r.fail("群禁言设置无效")
+		}
 		e = update(r.ctx(), a.db, a.t("group"), M{"setting": js(settings)}, "group_id=?", gid)
 	case "changeowner":
 		if role != 1 {
@@ -307,11 +328,11 @@ func (a *App) createGroup(r *request) (any, error) {
 	if number(a.config(r.ctx(), "chatInfo")["groupChat"]) == 0 {
 		return nil, deny()
 	}
-	users := ids(r.p["user_ids"])
-	if len(users) > 100 {
+	requestedUsers := ids(r.p["user_ids"])
+	if len(requestedUsers) > 100 {
 		return nil, r.fail("单次创建最多邀请 100 人")
 	}
-	users = append(users, r.uid())
+	users := append(requestedUsers, r.uid())
 	unique := map[int64]bool{}
 	for _, u := range users {
 		unique[u] = true
@@ -341,11 +362,22 @@ func (a *App) createGroup(r *request) (any, error) {
 	if len([]rune(name)) > 64 {
 		return nil, r.fail("群名过长")
 	}
+	createScope := adminScope{Global: true}
+	if number(r.user["admin_role_id"]) > 0 {
+		var scopeErr error
+		createScope, scopeErr = a.adminScope(r.ctx(), r.user)
+		if scopeErr != nil {
+			return nil, scopeErr
+		}
+	}
 	tx, e := a.db.BeginTx(r.ctx(), nil)
 	if e != nil {
 		return nil, e
 	}
 	defer tx.Rollback()
+	if e = a.requireCreateGroupUsers(r.ctx(), tx, createScope, r.uid(), users); e != nil {
+		return nil, e
+	}
 	valid, e := rows(r.ctx(), tx, "SELECT user_id FROM "+a.t("user")+" WHERE user_id IN ("+marks(len(users))+") AND status=1 AND delete_time=0", values(users)...)
 	if e != nil {
 		return nil, e
@@ -353,7 +385,7 @@ func (a *App) createGroup(r *request) (any, error) {
 	if len(valid) != len(users) {
 		return nil, r.fail("存在无效成员")
 	}
-	gid, e := insert(r.ctx(), tx, a.t("group"), M{"name": name, "name_py": namePinyin(name), "owner_id": r.uid(), "create_user": r.uid(), "create_time": time.Now().Unix(), "setting": `{"manage":0,"invite":1,"nospeak":0,"history":1}`, "status": 1})
+	gid, e := insert(r.ctx(), tx, a.t("group"), M{"name": name, "name_py": namePinyin(name), "owner_id": r.uid(), "create_user": r.uid(), "create_time": time.Now().Unix(), "setting": `{"manage":0,"invite":1,"nospeak":0,"history":1,"number_join":0}`, "status": 1})
 	if e != nil {
 		return nil, e
 	}
@@ -381,6 +413,21 @@ func (a *App) createGroup(r *request) (any, error) {
 	a.hub.send(users, "addGroup", event)
 	return contact, nil
 }
+
+func (a *App) requireCreateGroupUsers(ctx context.Context, db DB, scope adminScope, creatorID int64, users []int64) error {
+	if scope.Global {
+		return nil
+	}
+	for _, userID := range users {
+		if userID == creatorID {
+			continue
+		}
+		if err := a.requireScopedUser(ctx, db, scope, userID); err != nil {
+			return err
+		}
+	}
+	return nil
+}
 func (a *App) addMembers(r *request, g M, users []int64, scopes ...adminScope) error {
 	if len(users) < 1 || len(users) > 100 {
 		return r.fail("邀请人数须为 1–100")
@@ -396,7 +443,7 @@ func (a *App) addMembers(r *request, g M, users []int64, scopes ...adminScope) e
 		return e
 	}
 	if len(scopes) > 0 && !scopes[0].Global {
-		if err := a.requireScopedUser(r.ctx(), tx, scopes[0], number(locked["owner_id"])); err != nil {
+		if err := a.requireScopedGroupOwner(r.ctx(), tx, scopes[0], number(locked["owner_id"])); err != nil {
 			return err
 		}
 		for _, uid := range users {
@@ -449,7 +496,7 @@ func (a *App) changeOwner(r *request, gid, uid int64, scopes ...adminScope) erro
 		return e
 	}
 	if len(scopes) > 0 && !scopes[0].Global {
-		if err := a.requireScopedUser(r.ctx(), tx, scopes[0], number(g["owner_id"])); err != nil {
+		if err := a.requireScopedGroupOwner(r.ctx(), tx, scopes[0], number(g["owner_id"])); err != nil {
 			return err
 		}
 		if err := a.requireScopedUser(r.ctx(), tx, scopes[0], uid); err != nil {
@@ -488,7 +535,7 @@ func (a *App) deleteGroup(r *request, gid int64, scopes ...adminScope) error {
 		if err != nil {
 			return err
 		}
-		if err := a.requireScopedUser(r.ctx(), tx, scopes[0], number(locked["owner_id"])); err != nil {
+		if err := a.requireScopedGroupOwner(r.ctx(), tx, scopes[0], number(locked["owner_id"])); err != nil {
 			return err
 		}
 	}

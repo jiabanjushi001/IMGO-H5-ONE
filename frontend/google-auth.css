@@ -1,0 +1,28 @@
+.imgo-security-settings { max-width:760px; padding:20px 12px; }
+.imgo-security-settings .el-alert { margin-bottom:24px; }
+.imgo-security-state { margin-left:12px; color:#6f7d92; }
+.imgo-security-description { color:#6f7d92; font-size:13px; line-height:1.8; }
+.imgo-security-description p { margin:0; }
+.imgo-security-settings .el-divider { margin:30px 0 24px; }
+.imgo-security-settings .el-textarea { max-width:560px; }
+.imgo-security-ip-editor { max-width:560px; }
+.imgo-security-ip-list { display:grid; grid-template-columns:repeat(4,minmax(0,1fr)); gap:5px; max-height:122px; padding:6px; overflow:auto; border:1px solid #dfe6f1; border-radius:7px; background:#f8faff; }
+.imgo-security-ip-row { position:relative; min-width:0; padding:5px 25px 5px 8px; border:1px solid #e1e8f3; border-radius:5px; background:#eef4ff; color:#354764; font-family:SFMono-Regular,Consolas,"Liberation Mono",monospace; font-size:12px; line-height:18px; overflow-wrap:anywhere; }
+.imgo-security-ip-remove { position:absolute; top:4px; right:4px; width:20px; height:20px; padding:0; border:0; border-radius:4px; background:transparent; color:#8b98ab; cursor:pointer; font:16px/18px Arial,sans-serif; }
+.imgo-security-ip-remove:hover { background:#fff; color:#f05b68; }
+.imgo-security-ip-empty { padding:24px; border:1px dashed #d9e1ed; border-radius:8px; background:#fafbfd; color:#9aa6b8; text-align:center; }
+.imgo-security-ip-add { display:flex; gap:8px; margin-top:10px; }
+.imgo-security-ip-add .el-input { flex:1; }
+@media (max-width:700px) { .imgo-security-ip-list { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:480px) { .imgo-security-ip-list { grid-template-columns:1fr; } }
+.imgo-security-save { margin-top:12px; }
+.imgo-google-auth-dialog .el-alert { margin-bottom:18px; }
+.imgo-google-auth-setup { display:flex; align-items:flex-start; gap:22px; }
+.imgo-google-auth-qr { width:210px; height:210px; border:1px solid #e5eaf2; border-radius:10px; background:#fff; object-fit:contain; }
+.imgo-google-auth-fields { min-width:0; flex:1; color:#536176; }
+.imgo-google-auth-fields p { margin:5px 0 8px; }
+.imgo-google-auth-secret { display:flex; align-items:center; gap:8px; margin-bottom:14px; }
+.imgo-google-auth-secret code { overflow:hidden; padding:7px 9px; border-radius:6px; background:#f3f6fa; color:#34415a; font-size:12px; overflow-wrap:anywhere; }
+.imgo-google-auth-expire { margin-top:8px; color:#98a3b5; font-size:12px; }
+@media (max-width:620px) { .imgo-google-auth-setup { align-items:center; flex-direction:column; } .imgo-google-auth-fields { width:100%; } }
+.imgo-login-google-tip { margin-top:5px; color:#98a3b5; font-size:11px; line-height:1.4; }

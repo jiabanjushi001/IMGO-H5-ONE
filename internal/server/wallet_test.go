@@ -26,13 +26,16 @@ func TestParseWalletAmount(t *testing.T) {
 func TestWalletStatusUsesAuthenticatedUser(t *testing.T) {
 	a, mock := testApp(t)
 	mock.ExpectQuery("SELECT available_cents,pending_cents FROM `yu_imgo_wallet` WHERE user_id=\\?").
-		WithArgs(int64(7)).WillReturnRows(sqlmock.NewRows([]string{"available_cents", "pending_cents"}).AddRow(1234, 200))
+		WithArgs(int64(7)).WillReturnRows(sqlmock.NewRows([]string{"available_cents", "pending_cents"}).AddRow(1234, 8000))
+	mock.ExpectQuery("SELECT COALESCE\\(SUM\\(amount_cents\\),0\\) frozen_cents FROM `yu_imgo_withdrawal` WHERE user_id=\\? AND status=\\?").
+		WithArgs(int64(7), withdrawalStatusFrozen).
+		WillReturnRows(sqlmock.NewRows([]string{"frozen_cents"}).AddRow(3000))
 	result, err := a.wallet(bankRequest(a, "/enterprise/wallet/status", 7, M{"user_id": 99}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	data := result.(M)
-	if data["available_cents"] != int64(1234) || data["pending_cents"] != int64(200) {
+	if data["available_cents"] != int64(1234) || data["pending_cents"] != int64(8000) || data["frozen_cents"] != int64(3000) {
 		t.Fatalf("wrong balance: %#v", data)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -210,6 +213,59 @@ func TestManageWalletPaidClearsFrozenBalance(t *testing.T) {
 	result, err := a.manageWallet(bankRequest(a, "/manage/wallet/review", 1, M{"withdrawal_id": 51, "status": 1, "remark": "已通过银行转账"}))
 	if err != nil || result.(M)["processed"] != true {
 		t.Fatalf("paid review failed: %#v %v", result, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestManageWalletFreezeKeepsPendingBalance(t *testing.T) {
+	a, mock := testApp(t)
+	if route := a.routes[normalizedPath("/manage/wallet/freeze")]; route.super || route.permission != "manage.finance" {
+		t.Fatal("freeze must require finance permission")
+	}
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT user_id,amount_cents,status FROM `yu_imgo_withdrawal` WHERE withdrawal_id=\\? FOR UPDATE").
+		WithArgs(int64(51)).WillReturnRows(sqlmock.NewRows([]string{"user_id", "amount_cents", "status"}).AddRow(7, 1234, 0))
+	mock.ExpectExec("UPDATE `yu_imgo_withdrawal` SET status=\\?,processed_at=\\?,processed_by=\\?,remark=\\? WHERE withdrawal_id=\\? AND status=0").
+		WithArgs(withdrawalStatusFrozen, sqlmock.AnyArg(), int64(1), "资料待复核", int64(51)).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+	result, err := a.manageWallet(bankRequest(a, "/manage/wallet/freeze", 1, M{"withdrawal_id": 51, "frozen": 1, "remark": "资料待复核"}))
+	if err != nil || result.(M)["processed"] != true || number(result.(M)["status"]) != withdrawalStatusFrozen {
+		t.Fatalf("freeze failed: %#v %v", result, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestManageWalletUnfreezeKeepsPendingBalance(t *testing.T) {
+	a, mock := testApp(t)
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT user_id,amount_cents,status FROM `yu_imgo_withdrawal` WHERE withdrawal_id=\\? FOR UPDATE").
+		WithArgs(int64(51)).WillReturnRows(sqlmock.NewRows([]string{"user_id", "amount_cents", "status"}).AddRow(7, 1234, withdrawalStatusFrozen))
+	mock.ExpectExec("UPDATE `yu_imgo_withdrawal` SET status=0,processed_at=0,processed_by=0,remark='' WHERE withdrawal_id=\\? AND status=\\?").
+		WithArgs(int64(51), withdrawalStatusFrozen).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+	result, err := a.manageWallet(bankRequest(a, "/manage/wallet/freeze", 1, M{"withdrawal_id": 51, "frozen": 0}))
+	if err != nil || result.(M)["processed"] != true || number(result.(M)["status"]) != 0 {
+		t.Fatalf("unfreeze failed: %#v %v", result, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestManageWalletReviewRejectsFrozenOrder(t *testing.T) {
+	a, mock := testApp(t)
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT user_id,amount_cents,status FROM `yu_imgo_withdrawal` WHERE withdrawal_id=\\? FOR UPDATE").
+		WithArgs(int64(51)).WillReturnRows(sqlmock.NewRows([]string{"user_id", "amount_cents", "status"}).AddRow(7, 1234, withdrawalStatusFrozen))
+	mock.ExpectRollback()
+	_, err := a.manageWallet(bankRequest(a, "/manage/wallet/review", 1, M{"withdrawal_id": 51, "status": 1, "remark": "已转账"}))
+	var ce clientError
+	if !errors.As(err, &ce) || ce.code != 409 {
+		t.Fatalf("frozen order review must reject: %v", err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

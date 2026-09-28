@@ -46,16 +46,51 @@ func isCloudflareIP(ip netip.Addr) bool {
 	return false
 }
 
+func parseRequestIP(value string) (netip.Addr, bool) {
+	ip, err := netip.ParseAddr(strings.TrimSpace(value))
+	if err != nil {
+		return netip.Addr{}, false
+	}
+	return ip.Unmap(), true
+}
+
+func forwardedClientIP(value string) (netip.Addr, bool) {
+	for _, candidate := range strings.Split(value, ",") {
+		ip, ok := parseRequestIP(candidate)
+		if !ok {
+			continue
+		}
+		return ip, true
+	}
+	return netip.Addr{}, false
+}
+
 func (a *App) clientIP(c *gin.Context) string {
-	forwarded := strings.TrimSpace(c.ClientIP())
-	proxyIP, err := netip.ParseAddr(forwarded)
-	if err == nil && isCloudflareIP(proxyIP.Unmap()) {
-		visitorIP, parseErr := netip.ParseAddr(strings.TrimSpace(c.GetHeader("CF-Connecting-IP")))
-		if parseErr == nil {
-			return visitorIP.Unmap().String()
+	// The service is deployed behind reverse proxies. The first valid address
+	// in X-Forwarded-For is the original visitor, regardless of proxy count.
+	if forwardedIP, ok := forwardedClientIP(c.GetHeader("X-Forwarded-For")); ok {
+		if isCloudflareIP(forwardedIP) {
+			if visitorIP, valid := parseRequestIP(c.GetHeader("CF-Connecting-IP")); valid {
+				return visitorIP.String()
+			}
+		}
+		return forwardedIP.String()
+	}
+	if realIP, ok := parseRequestIP(c.GetHeader("X-Real-IP")); ok {
+		if isCloudflareIP(realIP) {
+			if visitorIP, valid := parseRequestIP(c.GetHeader("CF-Connecting-IP")); valid {
+				return visitorIP.String()
+			}
+		}
+		return realIP.String()
+	}
+	remoteIP := strings.TrimSpace(c.ClientIP())
+	if proxyIP, ok := parseRequestIP(remoteIP); ok && isCloudflareIP(proxyIP) {
+		if visitorIP, valid := parseRequestIP(c.GetHeader("CF-Connecting-IP")); valid {
+			return visitorIP.String()
 		}
 	}
-	return forwarded
+	return remoteIP
 }
 
 func (a *App) recordChatIP(ctx context.Context, uid int64, ip string) (int64, error) {

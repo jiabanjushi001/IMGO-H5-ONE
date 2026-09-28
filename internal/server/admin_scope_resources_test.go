@@ -199,7 +199,7 @@ func TestAgentScopeMessageContactsConstrainGroupAndLatestQueries(t *testing.T) {
 	expectResourceUser(mock, 12, true)
 	mock.ExpectQuery("SELECT \\* FROM `yu_user` WHERE user_id=").WithArgs(int64(12)).WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(12))
 	mock.ExpectQuery("SELECT value FROM `yu_config`").WillReturnRows(sqlmock.NewRows([]string{"value"}).AddRow(`{}`))
-	mock.ExpectQuery("SELECT u.user_id,u.realname.*FROM `yu_user`.*scope_path.descendant_user_id=u.user_id.*scope_contact.*is_group=0").WithArgs(int64(12), int64(12), int64(7), int64(7), int64(12), int64(12)).WillReturnRows(sqlmock.NewRows([]string{"user_id", "realname"}).AddRow(13, "范围内已有会话用户"))
+	mock.ExpectQuery("SELECT u.user_id,u.account,u.realname.*FROM `yu_user`.*scope_path.descendant_user_id=u.user_id.*scope_contact.*is_group=0").WithArgs(int64(12), int64(12), int64(7), int64(7), int64(12), int64(12)).WillReturnRows(sqlmock.NewRows([]string{"user_id", "account", "realname"}).AddRow(13, "member13", "范围内已有会话用户"))
 	mock.ExpectQuery("SELECT from_user,COUNT").WithArgs(int64(12)).WillReturnRows(sqlmock.NewRows([]string{"from_user", "n"}))
 	mock.ExpectQuery("SELECT g.*scope_owner.user_id=g.owner_id.*scope_path").WithArgs(int64(12), int64(7), int64(7)).WillReturnRows(sqlmock.NewRows([]string{"group_id"}))
 	mock.ExpectQuery("SELECT m.*scope_group.group_id=.*to_user.*scope_path").WithArgs(int64(12), int64(12), int64(12), int64(12), int64(12), int64(7), int64(7), int64(7), int64(7), int64(7), int64(7)).WillReturnRows(sqlmock.NewRows([]string{"msg_id"}))
@@ -211,6 +211,9 @@ func TestAgentScopeMessageContactsConstrainGroupAndLatestQueries(t *testing.T) {
 	for _, contact := range result.([]M) {
 		if number(contact["user_id"]) == 99 {
 			t.Fatal("unrelated foreign user disclosed")
+		}
+		if number(contact["user_id"]) == 13 && str(contact["account"]) != "member13" {
+			t.Fatal("contact account missing from searchable payload", contact)
 		}
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
@@ -235,13 +238,13 @@ func TestAgentScopeGroupChangeOwnerRechecksLockedOwner(t *testing.T) {
 	}
 }
 
-func TestAgentScopeFileDownloadAndPreviewMatrix(t *testing.T) {
+func TestMediaDownloadAndPreviewAuthorizationMatrix(t *testing.T) {
 	for _, preview := range []bool{false, true} {
 		for _, tc := range []struct {
-			name      string
-			uid, mode int64
-			allowed   bool
-		}{{"descendant", 7, 1, true}, {"foreign", 7, 1, false}, {"super", 1, 0, true}, {"global role", 7, 0, true}} {
+			name    string
+			uid     int64
+			allowed bool
+		}{{"chat participant", 7, true}, {"unrelated media", 7, false}, {"super", 1, true}} {
 			t.Run(tc.name+fmt.Sprint(preview), func(t *testing.T) {
 				a, mock := testApp(t)
 				if err := os.MkdirAll(filepath.Join(a.cfg.PublicDir, "storage/file"), 0700); err != nil {
@@ -265,14 +268,15 @@ func TestAgentScopeFileDownloadAndPreviewMatrix(t *testing.T) {
 				mock.ExpectQuery("SELECT user_id FROM `yu_imgo_session`").WithArgs("scope-file", tc.uid, sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(tc.uid))
 				mock.ExpectQuery("SELECT \\* FROM `yu_user`").WithArgs(tc.uid).WillReturnRows(sqlmock.NewRows([]string{"user_id", "admin_role_id"}).AddRow(tc.uid, 3))
 				if tc.uid != 1 {
-					mock.ExpectQuery("SELECT agent_mode FROM `yu_imgo_admin_role`").WithArgs(int64(3)).WillReturnRows(sqlmock.NewRows([]string{"agent_mode"}).AddRow(tc.mode))
-					if tc.mode == 1 {
-						expectResourceUser(mock, 12, tc.allowed)
-					}
-				}
-				if tc.allowed && tc.uid != 1 {
 					mock.ExpectQuery("SELECT id FROM `yu_emoji`").WillReturnRows(sqlmock.NewRows([]string{"id"}))
-					mock.ExpectQuery("SELECT m.msg_id FROM `yu_message`").WillReturnRows(sqlmock.NewRows([]string{"msg_id"}).AddRow(2))
+					messageRows := sqlmock.NewRows([]string{"msg_id"})
+					if tc.allowed {
+						messageRows.AddRow(2)
+					}
+					mock.ExpectQuery("SELECT m.msg_id FROM `yu_message`").WillReturnRows(messageRows)
+					if preview && !tc.allowed {
+						mock.ExpectQuery("SELECT user_id FROM `yu_user`").WillReturnRows(sqlmock.NewRows([]string{"user_id"}))
+					}
 				}
 				if tc.allowed {
 					mock.ExpectQuery("SELECT value FROM `yu_config`").WithArgs("fileUpload").WillReturnRows(sqlmock.NewRows([]string{"value"}).AddRow(`{"disk":"local"}`))
@@ -513,14 +517,15 @@ func TestAgentScopeFileLegacyPreviewPreservesForbiddenStatus(t *testing.T) {
 	mock.ExpectQuery("SELECT value FROM `yu_config`").WithArgs("sysInfo").WillReturnRows(sqlmock.NewRows([]string{"value"}).AddRow(`{}`))
 	mock.ExpectQuery("SELECT user_id FROM `yu_imgo_session`").WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(7))
 	mock.ExpectQuery("SELECT \\* FROM `yu_user`").WithArgs(int64(7)).WillReturnRows(sqlmock.NewRows([]string{"user_id", "admin_role_id"}).AddRow(7, 3))
-	expectAgentMemberScope(mock)
-	expectResourceUser(mock, 99, false)
+	mock.ExpectQuery("SELECT id FROM `yu_emoji`").WillReturnRows(sqlmock.NewRows([]string{"id"}))
+	mock.ExpectQuery("SELECT m.msg_id FROM `yu_message`").WillReturnRows(sqlmock.NewRows([]string{"msg_id"}))
+	mock.ExpectQuery("SELECT user_id FROM `yu_user`").WithArgs("/storage/file/test.txt").WillReturnRows(sqlmock.NewRows([]string{"user_id"}))
 	_, err := a.index(&request{app: a, c: c, p: M{"src": "/storage/file/test.txt"}})
-	if err != nil {
-		t.Fatalf("legacy preview replaced scope denial: %v", err)
+	if err == nil || err.Error() != "只允许预览已授权的文件" {
+		t.Fatalf("legacy preview authorization error=%v", err)
 	}
-	if recorder.Code != 403 {
-		t.Fatalf("status=%d", recorder.Code)
+	if c.Writer.Status() != 403 {
+		t.Fatalf("status=%d", c.Writer.Status())
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

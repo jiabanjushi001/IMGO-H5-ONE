@@ -1,0 +1,210 @@
+/* Compact, WeChat-inspired message rhythm. Loaded after all compatibility CSS. */
+.imgo-chat-design .lemon-messages,
+.sideMenu-message .lemon-messages {
+  padding: 14px 20px 18px;
+  background: #f2f4f7;
+}
+
+.imgo-chat-design .lemon-message,
+.sideMenu-message .lemon-message {
+  margin: 0 0 4px !important;
+  padding: 3px 0 !important;
+}
+
+.imgo-chat-design .lemon-message__avatar,
+.sideMenu-message .lemon-message__avatar {
+  flex: 0 0 36px;
+  border-radius: 5px;
+}
+
+.imgo-chat-design .lemon-message__avatar .lemon-avatar,
+.sideMenu-message .lemon-message__avatar .lemon-avatar {
+  border-radius: 5px !important;
+}
+
+.imgo-chat-design .lemon-message__inner,
+.sideMenu-message .lemon-message__inner {
+  min-width: 0;
+  max-width: min(72%, 680px);
+}
+
+.imgo-chat-design .lemon-message__title,
+.sideMenu-message .lemon-message__title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 17px;
+  height: auto;
+  margin: 0 0 2px;
+  padding: 0 3px;
+  overflow: hidden;
+  color: #8b949e;
+  font-size: 12px;
+  line-height: 17px;
+  white-space: nowrap;
+}
+
+.imgo-chat-design .lemon-message__title:empty,
+.sideMenu-message .lemon-message__title:empty {
+  display: none;
+  min-height: 0;
+  margin: 0;
+}
+
+.imgo-chat-design .lemon-message__title > span:first-child,
+.sideMenu-message .lemon-message__title > span:first-child {
+  max-width: 190px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.imgo-chat-design .lemon-message--reverse .lemon-message__title,
+.sideMenu-message .lemon-message--reverse .lemon-message__title {
+  justify-content: flex-end;
+}
+
+.imgo-chat-design .lemon-message__content,
+.sideMenu-message .lemon-message__content {
+  position: relative;
+  max-width: 100%;
+  min-height: 0;
+  padding: 7px 11px;
+  border: 1px solid #e8ebef;
+  border-radius: 6px;
+  background: #fff;
+  color: #25282d;
+  box-shadow: 0 1px 2px rgba(25, 35, 48, .04);
+  font-size: 14px;
+  line-height: 1.55;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.imgo-chat-design .lemon-message--reverse .lemon-message__content,
+.sideMenu-message .lemon-message--reverse .lemon-message__content {
+  border-color: #8bdc67;
+  border-radius: 6px;
+  background: #95ec69;
+  color: #1f2520;
+  box-shadow: 0 1px 2px rgba(55, 112, 31, .05);
+}
+
+.imgo-chat-design .lemon-message__content::before,
+.sideMenu-message .lemon-message__content::before {
+  content: '';
+  display: block !important;
+  position: absolute;
+  z-index: 0;
+  top: 11px;
+  left: -5px;
+  width: 9px;
+  height: 9px;
+  border: 0;
+  background: inherit;
+  transform: rotate(45deg);
+}
+
+.imgo-chat-design .lemon-message--reverse .lemon-message__content::before,
+.sideMenu-message .lemon-message--reverse .lemon-message__content::before {
+  right: -5px;
+  left: auto;
+}
+
+.imgo-chat-design .lemon-message__content::after,
+.sideMenu-message .lemon-message__content::after {
+  display: none !important;
+}
+
+.imgo-chat-design .lemon-message-image .lemon-message__content,
+.sideMenu-message .lemon-message-image .lemon-message__content {
+  padding: 0;
+  overflow: hidden;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.imgo-chat-design .lemon-message-image .lemon-message__content::before,
+.sideMenu-message .lemon-message-image .lemon-message__content::before {
+  display: none !important;
+}
+
+.imgo-chat-design .lemon-message-image .lemon-message__content img,
+.sideMenu-message .lemon-message-image .lemon-message__content img {
+  display: block;
+  border-radius: 6px;
+}
+
+.imgo-chat-design .lemon-message-event,
+.sideMenu-message .lemon-message-event {
+  min-height: 20px;
+  margin: 7px 0 !important;
+  padding: 0 !important;
+}
+
+.imgo-chat-design .lemon-message-event__content,
+.sideMenu-message .lemon-message-event__content {
+  padding: 2px 8px;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(148, 158, 171, .12);
+  color: #98a1ad;
+  font-size: 11px;
+  line-height: 18px;
+}
+
+.imgo-chat-design .lemon-message__content p,
+.sideMenu-message .lemon-message__content p {
+  margin: 0;
+}
+
+@media (max-width: 700px) {
+  .imgo-chat-design .lemon-messages,
+  .sideMenu-message .lemon-messages {
+    padding: 10px 9px 14px;
+  }
+
+  .imgo-chat-design .lemon-message,
+  .sideMenu-message .lemon-message {
+    margin-bottom: 3px !important;
+    padding: 2px 0 !important;
+  }
+
+  .imgo-chat-design .lemon-message__avatar,
+  .sideMenu-message .lemon-message__avatar {
+    flex-basis: 34px;
+  }
+
+  .imgo-chat-design .lemon-message__avatar .lemon-avatar,
+  .sideMenu-message .lemon-message__avatar .lemon-avatar {
+    width: 34px !important;
+    height: 34px !important;
+    font-size: 16px !important;
+    line-height: 34px !important;
+  }
+
+  .imgo-chat-design .lemon-message__inner,
+  .sideMenu-message .lemon-message__inner {
+    max-width: calc(100% - 50px);
+  }
+
+  .imgo-chat-design .lemon-message__title,
+  .sideMenu-message .lemon-message__title {
+    min-height: 16px;
+    margin-bottom: 1px;
+    font-size: 11px;
+    line-height: 16px;
+  }
+
+  .imgo-chat-design .lemon-message__content,
+  .sideMenu-message .lemon-message__content {
+    padding: 7px 10px;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .imgo-chat-design .lemon-message-event,
+  .sideMenu-message .lemon-message-event {
+    margin: 5px 0 !important;
+  }
+}

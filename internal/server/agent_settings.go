@@ -157,6 +157,23 @@ func agentCustomerIDs(v M) ([]int64, error) {
 	return ids(values), nil
 }
 
+// Inheritance flags arrive as booleans in JSON and strings in legacy forms.
+// Reject missing/invalid values instead of silently selecting an override.
+func agentSettingBool(value any) (bool, bool) {
+	switch value := value.(type) {
+	case bool:
+		return value, true
+	case string:
+		if value == "true" {
+			return true, true
+		}
+		if value == "false" {
+			return false, true
+		}
+	}
+	return false, false
+}
+
 func (a *App) manageAgentSetting(r *request) (any, error) {
 	agentID := r.n("agent_user_id")
 	if agentID < 1 {
@@ -189,11 +206,11 @@ func (a *App) manageAgentSetting(r *request) (any, error) {
 			"auto_add_user": user, "auto_add_group": group,
 			"global_auto_add_user": obj(chat["autoAddUser"]), "global_auto_add_group": obj(chat["autoAddGroup"])}, nil
 	case "save":
-		userInherited, ok := r.p["inherit_auto_user"].(bool)
+		userInherited, ok := agentSettingBool(r.p["inherit_auto_user"])
 		if !ok {
 			return nil, clientError{"自动客服继承标志无效", 400}
 		}
-		groupInherited, ok := r.p["inherit_auto_group"].(bool)
+		groupInherited, ok := agentSettingBool(r.p["inherit_auto_group"])
 		if !ok {
 			return nil, clientError{"自动群聊继承标志无效", 400}
 		}

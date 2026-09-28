@@ -114,3 +114,28 @@ func TestBundledIPDatabase(t *testing.T) {
 	}
 	t.Log("bundled IP database version:", d.find("255.255.255.255"))
 }
+
+func TestIPLocationUsesProvinceAndCity(t *testing.T) {
+	if got := formatQQZengLocation("亚洲|中国|湖南|邵阳|大祥|电信|430503|China|CN|111.4|27.2"); got != "湖南-邵阳" {
+		t.Fatalf("formatQQZengLocation() = %q, want 湖南-邵阳", got)
+	}
+	if got := formatLegacyLocation("中国 湖南 邵阳"); got != "湖南-邵阳" {
+		t.Fatalf("formatLegacyLocation() = %q, want 湖南-邵阳", got)
+	}
+}
+
+func TestBundledQQZengDatabase(t *testing.T) {
+	d, e := loadIPDatabase("../../data/17monipdb.dat")
+	if e != nil {
+		t.Fatal(e)
+	}
+	if d.qqzeng == nil {
+		t.Fatal("bundled QQZeng database was not loaded")
+	}
+	if got := d.find("113.104.209.240"); got != "广东-深圳" {
+		t.Fatalf("QQZeng lookup = %q, want 广东-深圳", got)
+	}
+	if got := d.find("36.157.64.1"); got != "湖南-邵阳" {
+		t.Fatalf("QQZeng lookup = %q, want 湖南-邵阳", got)
+	}
+}

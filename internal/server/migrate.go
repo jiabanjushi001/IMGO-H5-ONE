@@ -52,7 +52,7 @@ func (a *App) Migrate(ctx context.Context, initialize bool) error {
 			}
 		}
 	}
-	for _, name := range []string{"sysInfo", "chatInfo", "fileUpload", "smtp", "compass"} {
+	for _, name := range []string{"sysInfo", "chatInfo", "fileUpload", "smtp", "compass", "systemAlert"} {
 		if _, err := one(ctx, a.db, "SELECT id FROM "+a.t("config")+" WHERE name=?", name); err == sql.ErrNoRows {
 			if _, e := insert(ctx, a.db, a.t("config"), M{"name": name, "value": js(defaultConfig(name)), "status": 1, "create_time": time.Now().Unix()}); e != nil {
 				return e
@@ -101,7 +101,7 @@ func (a *App) CheckSchema(ctx context.Context) error {
 	if length.Int64 < 60 {
 		return errors.New("密码列不足以存储 bcrypt，请先备份测试库并运行 -migrate")
 	}
-	for _, name := range []string{"imgo_session", "imgo_chat_lock", "imgo_object", "imgo_online_sample", "imgo_bank_card", "imgo_check_in", "imgo_wallet", "imgo_withdrawal", "imgo_wallet_entry", "imgo_recharge_order", "imgo_referral", "imgo_referral_legacy_code", "imgo_referral_path", "imgo_agent_setting", "imgo_agent_auto_state", "imgo_agent_online_sample"} {
+	for _, name := range []string{"imgo_session", "imgo_chat_lock", "imgo_object", "imgo_online_sample", "imgo_bank_card", "imgo_check_in", "imgo_wallet", "imgo_withdrawal", "imgo_wallet_entry", "imgo_recharge_order", "imgo_referral", "imgo_referral_legacy_code", "imgo_referral_path", "imgo_agent_setting", "imgo_agent_auto_state", "imgo_agent_online_sample", "imgo_security_setting", "imgo_user_totp", "imgo_admin_audit_log"} {
 		var n int
 		if e := a.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.tables WHERE table_schema=DATABASE() AND table_name=?", a.cfg.Prefix+name).Scan(&n); e != nil || n == 0 {
 			return errors.New("缺少 Go 服务附加表，请运行 -migrate")
@@ -111,6 +111,22 @@ func (a *App) CheckSchema(ctx context.Context) error {
 		var n int
 		if e := a.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=? AND column_name=?", a.cfg.Prefix+"imgo_bank_card", column).Scan(&n); e != nil || n == 0 {
 			return errors.New("绑卡表缺少银行或支行字段，请运行 -migrate")
+		}
+	}
+	for _, required := range []struct{ table, column string }{
+		{"imgo_security_setting", "ip_whitelist_enabled"},
+		{"imgo_security_setting", "ip_whitelist"},
+		{"imgo_session", "login_ip"},
+		{"imgo_session", "admin_login"},
+		{"imgo_admin_audit_log", "target_name"},
+		{"imgo_admin_audit_log", "request_method"},
+		{"imgo_admin_audit_log", "request_path"},
+		{"imgo_admin_audit_log", "request_headers"},
+		{"imgo_admin_audit_log", "request_data"},
+	} {
+		var n int
+		if e := a.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=? AND column_name=?", a.cfg.Prefix+required.table, required.column).Scan(&n); e != nil || n == 0 {
+			return errors.New("后台 IP 白名单字段缺失，请运行 -migrate")
 		}
 	}
 	return nil

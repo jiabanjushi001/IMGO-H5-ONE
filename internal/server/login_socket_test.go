@@ -10,6 +10,9 @@ import (
 
 func TestLoginSucceedsWithDisconnectedSocket(t *testing.T) {
 	a, mock := testApp(t)
+	// H5 login does not send admin_login and must remain available even when
+	// the backend IP whitelist excludes the request IP.
+	a.storeLoginIPWhitelist(true, []string{"203.0.113.0/24"})
 	password, err := hashPassword("test-password")
 	if err != nil {
 		t.Fatal(err)
@@ -22,7 +25,7 @@ func TestLoginSucceedsWithDisconnectedSocket(t *testing.T) {
 		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), int64(2)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectExec("INSERT INTO `yu_imgo_session`").
-		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), int64(2)).
+		WithArgs(sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), sqlmock.AnyArg(), int64(2)).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	c, _ := gin.CreateTestContext(httptest.NewRecorder())

@@ -17,13 +17,14 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
-type Config struct{ ModerationToken, Addr, DSN, Prefix, JWTKey, ChatKey, PublicDir, BaseURL, QRBaseURL, H5URL, InviteURL, TrustedProxies, SMTPHost, SMTPUser, SMTPPass, SMTPFrom, APIID, APISecret string }
+type Config struct{ ModerationToken, Addr, DSN, Prefix, JWTKey, ChatKey, PublicDir, BaseURL, QRBaseURL, H5URL, InviteURL, SMTPHost, SMTPUser, SMTPPass, SMTPFrom, APIID, APISecret string }
 
 func EnvConfig() (Config, error) {
-	c := Config{ModerationToken: os.Getenv("THINKAPI_TOKEN"), Addr: env("IMGO_ADDR", "127.0.0.1:8080"), DSN: os.Getenv("MYSQL_DSN"), Prefix: env("TABLE_PREFIX", "yu_"), JWTKey: os.Getenv("JWT_KEY"), ChatKey: os.Getenv("CHAT_KEY"), PublicDir: env("PUBLIC_DIR", "public"), BaseURL: strings.TrimRight(os.Getenv("BASE_URL"), "/"), QRBaseURL: strings.TrimSpace(os.Getenv("QR_BASE_URL")), H5URL: strings.TrimSpace(os.Getenv("H5_URL")), InviteURL: strings.TrimSpace(os.Getenv("INVITE_URL")), TrustedProxies: env("TRUSTED_PROXIES", "127.0.0.1,::1"), SMTPHost: os.Getenv("SMTP_ADDR"), SMTPUser: os.Getenv("SMTP_USER"), SMTPPass: os.Getenv("SMTP_PASSWORD"), SMTPFrom: os.Getenv("SMTP_FROM"), APIID: os.Getenv("API_APP_ID"), APISecret: os.Getenv("API_SECRET")}
+	c := Config{ModerationToken: os.Getenv("THINKAPI_TOKEN"), Addr: env("IMGO_ADDR", "127.0.0.1:8080"), DSN: os.Getenv("MYSQL_DSN"), Prefix: env("TABLE_PREFIX", "yu_"), JWTKey: os.Getenv("JWT_KEY"), ChatKey: os.Getenv("CHAT_KEY"), PublicDir: env("PUBLIC_DIR", "public"), BaseURL: strings.TrimRight(os.Getenv("BASE_URL"), "/"), QRBaseURL: strings.TrimSpace(os.Getenv("QR_BASE_URL")), H5URL: strings.TrimSpace(os.Getenv("H5_URL")), InviteURL: strings.TrimSpace(os.Getenv("INVITE_URL")), SMTPHost: os.Getenv("SMTP_ADDR"), SMTPUser: os.Getenv("SMTP_USER"), SMTPPass: os.Getenv("SMTP_PASSWORD"), SMTPFrom: os.Getenv("SMTP_FROM"), APIID: os.Getenv("API_APP_ID"), APISecret: os.Getenv("API_SECRET")}
 	if len(c.JWTKey) < 32 || strings.HasPrefix(c.JWTKey, "REPLACE_") {
 		return c, errors.New("JWT_KEY 至少需要 32 字节随机密钥")
 	}
@@ -47,20 +48,31 @@ type cacheItem struct {
 	Expiry time.Time
 }
 type App struct {
-	metricsCancel context.CancelFunc
-	maintenanceMu sync.Mutex
-	avatarFont    *opentype.Font
-	outbound      *http.Client
-	ipdb          *ipDatabase
-	cancel        context.CancelFunc
-	wg            sync.WaitGroup
-	db            *sql.DB
-	cfg           Config
-	hub           *Hub
-	mu            sync.Mutex
-	cache         map[string]cacheItem
-	routes        map[string]endpoint
-	log           *slog.Logger
+	metricsCancel    context.CancelFunc
+	alertCancel      context.CancelFunc
+	batchTaskCancel  context.CancelFunc
+	batchTaskContext context.Context
+	batchTaskMu      sync.Mutex
+	batchTasks       map[string]struct{}
+	maintenanceMu    sync.Mutex
+	avatarFont       *opentype.Font
+	outbound         *http.Client
+	ipdb             *ipDatabase
+	cancel           context.CancelFunc
+	wg               sync.WaitGroup
+	db               *sql.DB
+	cfg              Config
+	hub              *Hub
+	mu               sync.Mutex
+	cache            map[string]cacheItem
+	routes           map[string]endpoint
+	log              *slog.Logger
+	googleAuthMu     sync.RWMutex
+	googleAuthOn     atomic.Bool
+	loginIPOn        atomic.Bool
+	loginIPRules     atomic.Value
+	alertQueue       chan systemAlertEvent
+	systemAlertState atomic.Value
 }
 type endpoint struct {
 	handler    func(*request) (any, error)
@@ -69,13 +81,14 @@ type endpoint struct {
 	permission string
 }
 type request struct {
-	app    *App
-	c      *gin.Context
-	p      M
-	user   M
-	claims claims
-	count  int64
-	page   int64
+	app         *App
+	c           *gin.Context
+	p           M
+	user        M
+	claims      claims
+	auditBefore M
+	count       int64
+	page        int64
 }
 
 func (r *request) ctx() context.Context { return r.c.Request.Context() }
@@ -148,6 +161,7 @@ func New(c Config) (*App, error) {
 	}
 	a.hub = newHub(a)
 	a.register()
+	a.startSystemAlerts()
 	a.startMaintenance()
 	return a, nil
 }
@@ -157,6 +171,12 @@ func (a *App) Close() error {
 	}
 	if a.cancel != nil {
 		a.cancel()
+	}
+	if a.alertCancel != nil {
+		a.alertCancel()
+	}
+	if a.batchTaskCancel != nil {
+		a.batchTaskCancel()
 	}
 	a.wg.Wait()
 	a.hub.close()
@@ -221,17 +241,8 @@ func (a *App) Router() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	g := gin.New()
 	g.Use(gin.Recovery())
-	trustedProxies := make([]string, 0, 2)
-	for _, proxy := range strings.Split(a.cfg.TrustedProxies, ",") {
-		if proxy = strings.TrimSpace(proxy); proxy != "" {
-			trustedProxies = append(trustedProxies, proxy)
-		}
-	}
-	if len(trustedProxies) == 0 {
-		trustedProxies = []string{"127.0.0.1", "::1"}
-	}
-	if e := g.SetTrustedProxies(trustedProxies); e != nil {
-		panic("invalid TRUSTED_PROXIES")
+	if e := g.SetTrustedProxies(nil); e != nil {
+		panic("disable Gin trusted proxies")
 	}
 	g.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
@@ -245,7 +256,7 @@ func (a *App) Router() *gin.Engine {
 			c.AbortWithStatus(http.StatusNoContent)
 			return
 		}
-		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, 60<<20)
+		c.Request.Body = http.MaxBytesReader(c.Writer, c.Request.Body, maxUploadRequestBodyMB<<20)
 		c.Next()
 	})
 	g.GET("/healthz", func(c *gin.Context) {
@@ -328,6 +339,9 @@ func (a *App) dispatch(c *gin.Context) {
 		if e == nil && ep.super && r.uid() != 1 {
 			e = deny()
 		}
+		if e == nil && strings.HasPrefix(p, "/manage/") && a.loginIPWhitelistEnabled() && !a.loginIPAllowed(a.clientIP(c)) {
+			e = clientError{"当前 IP 不在后台登录白名单", 403}
+		}
 		if e == nil && strings.HasPrefix(p, "/manage/") && !ep.super {
 			e = a.authorizeManage(c.Request.Context(), r.user, ep.permission)
 		}
@@ -335,6 +349,9 @@ func (a *App) dispatch(c *gin.Context) {
 	var data any
 	if e == nil {
 		data, e = ep.handler(r)
+	}
+	if strings.HasPrefix(p, "/manage/") {
+		a.recordAdminAudit(r, p, data, e)
 	}
 	if e != nil {
 		code := 500

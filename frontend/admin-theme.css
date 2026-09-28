@@ -169,3 +169,45 @@ body:has(.imgo-admin) > .el-dialog__wrapper .el-button--primary { background:#4f
 .imgo-admin .imgo-invite-code-copy { display:flex; align-items:center; gap:5px; white-space:nowrap; }
 .imgo-admin .imgo-invite-code-value { color:#34415a; font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-weight:600; letter-spacing:.3px; }
 .imgo-admin .imgo-invite-code-copy .el-button { margin-left:0; padding:3px 0; font-size:12px; }
+.imgo-broadcast-hint { margin-bottom:12px; padding:10px 12px; border-radius:8px; background:#f4f7fc; color:#68758a; font-size:12px; line-height:1.6; }
+
+/* Selectable member broadcast dialog. */
+.imgo-broadcast-toolbar { display:flex; align-items:center; gap:14px; margin-bottom:12px; }
+.imgo-broadcast-search { width:300px; }
+.imgo-broadcast-count { margin-left:auto; color:#65748b; font-size:13px; }
+.imgo-broadcast-users { min-height:180px; max-height:350px; overflow:auto; padding:12px; border:1px solid #e7ebf2; border-radius:10px; background:#f8faff; }
+.imgo-broadcast-grid { display:grid; grid-template-columns:repeat(3,minmax(0,1fr)); gap:10px; }
+.imgo-broadcast-user.el-checkbox { display:grid; grid-template-columns:20px 42px minmax(0,1fr); grid-template-rows:21px 21px; align-items:center; width:auto; margin:0; padding:9px; border:1px solid #e8edf5; border-radius:9px; background:#fff; }
+.imgo-broadcast-user.el-checkbox.is-checked { border-color:#89afff; background:#f1f6ff; }
+.imgo-broadcast-user .el-checkbox__input { grid-row:1 / span 2; }
+.imgo-broadcast-user .el-checkbox__label { display:contents; padding:0; }
+.imgo-broadcast-user .el-avatar { grid-row:1 / span 2; margin-right:9px; }
+.imgo-broadcast-user-name,.imgo-broadcast-user-account { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.imgo-broadcast-user-name { color:#2f3b52; font-weight:600; }
+.imgo-broadcast-user-account { color:#8a96aa; font-size:11px; }
+.imgo-broadcast-editor { margin-top:14px; }
+.imgo-chat-quick-replies { display:inline-flex; align-items:center; margin-right:auto; }
+.imgo-chat-quick-trigger { display:inline-flex; align-items:center; gap:5px; padding:2px 8px; border:0; border-radius:5px; background:transparent; color:#73819a; cursor:pointer; font:inherit; font-size:12px; }
+.imgo-chat-quick-trigger:hover { background:#edf3ff; color:#4074d8; }
+.imgo-chat-quick-popover { padding:0 !important; overflow:hidden; border-radius:10px !important; }
+.imgo-chat-quick-head { display:flex; align-items:center; justify-content:space-between; padding:10px 12px 8px; border-bottom:1px solid #edf0f5; color:#34415a; }
+.imgo-chat-quick-head .el-button { padding:0; }
+.imgo-chat-quick-head > span { color:#9aa5b7; font-size:11px; }
+.imgo-chat-quick-list { max-height:260px; overflow:auto; padding:8px; }
+.imgo-chat-quick-item { display:block; width:100%; overflow:hidden; padding:8px 9px; border:0; border-radius:6px; background:#fff; color:#46546c; cursor:pointer; font:inherit; font-size:12px; text-align:left; text-overflow:ellipsis; white-space:nowrap; }
+.imgo-chat-quick-item:hover { background:#f0f5ff; color:#376bd0; }
+.imgo-chat-quick-empty { padding:22px 12px; color:#9aa6b8; font-size:12px; text-align:center; }
+.imgo-chat-quick-manager { display:flex; flex-direction:column; gap:12px; }
+.imgo-chat-quick-rows { max-height:360px; overflow:auto; padding-right:4px; }
+.imgo-chat-quick-row { display:flex; align-items:center; gap:10px; margin-bottom:10px; }
+.imgo-chat-quick-row .el-input { flex:1; }
+.imgo-chat-quick-remove.el-button { flex:0 0 auto; color:#e45454; }
+.imgo-chat-quick-manager-empty { padding:30px 0; color:#9aa6b8; text-align:center; }
+.imgo-join-group-label { margin-bottom:8px; color:#3b4860; font-size:13px; font-weight:600; }
+.imgo-join-group-tip { margin:9px 0 0; color:#8b97aa; font-size:12px; line-height:1.6; }
+.imgo-group-number { display:inline-flex; align-items:center; width:max-content; margin-top:5px; padding:2px 7px; border-radius:5px; background:#f0f4fb; color:#5c6e8b; font-size:12px; font-variant-numeric:tabular-nums; }
+.imgo-group-number-join { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-top:7px; color:#65748b; font-size:11px; }
+.imgo-group-number-join-copy { display:flex; min-width:0; flex-direction:column; gap:2px; }
+.imgo-group-number-join-copy small { color:#9aa5b6; font-size:10px; line-height:1.2; white-space:nowrap; }
+.imgo-group-number-join .el-switch { transform:scale(.82); transform-origin:right center; }
+@media (max-width:800px) { .imgo-broadcast-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }

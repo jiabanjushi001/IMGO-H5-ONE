@@ -90,7 +90,7 @@ func (a *App) contact(r *request, id string) (M, error) {
 			key = id
 		}
 	} else {
-		u, e := r.one("SELECT user_id,realname,avatar,name_py,last_login_ip FROM "+a.t("user")+" WHERE user_id=? AND status=1 AND delete_time=0", uid)
+		u, e := r.one("SELECT user_id,account,realname,avatar,name_py,last_login_ip FROM "+a.t("user")+" WHERE user_id=? AND status=1 AND delete_time=0", uid)
 		if e != nil {
 			return nil, e
 		}
@@ -142,7 +142,7 @@ func (a *App) contacts(r *request, uid int64, scopes ...adminScope) (any, error)
 		args = append(args, params...)
 		args = append(args, uid, uid)
 	}
-	users, e := r.list("SELECT u.user_id,u.realname,u.avatar,u.name_py,u.last_login_ip,f.nickname,f.is_notice,f.is_top FROM "+a.t("user")+" u LEFT JOIN "+a.t("friend")+" f ON f.friend_user_id=u.user_id AND f.create_user=? WHERE "+where+" ORDER BY u.user_id", args...)
+	users, e := r.list("SELECT u.user_id,u.account,u.realname,u.avatar,u.name_py,u.last_login_ip,f.nickname,f.is_notice,f.is_top FROM "+a.t("user")+" u LEFT JOIN "+a.t("friend")+" f ON f.friend_user_id=u.user_id AND f.create_user=? WHERE "+where+" ORDER BY u.user_id", args...)
 	if e != nil {
 		return nil, e
 	}
@@ -197,6 +197,7 @@ func (a *App) contacts(r *request, uid int64, scopes ...adminScope) (any, error)
 			return nil, e
 		}
 		v["name_py"] = u["name_py"]
+		v["account"] = u["account"]
 		v["index"] = nameIndex(str(u["name_py"]))
 		v["location"] = a.location(u["last_login_ip"])
 		v["unread"] = unreadMap[id]

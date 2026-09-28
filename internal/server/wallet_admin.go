@@ -3,12 +3,16 @@ package server
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	"github.com/go-sql-driver/mysql"
 )
+
+const withdrawalStatusFrozen int64 = 3
 
 func (a *App) manageWalletAccount(r *request) (any, error) {
 	uid := r.n("user_id")
@@ -102,6 +106,7 @@ func (a *App) manageWalletCredit(r *request, scope adminScope) (any, error) {
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
+	a.queueSystemAlert(systemAlertEvent{Type: "balance_adjustment", OccurredAt: time.Now(), IP: a.clientIP(r.c), Actor: systemAlertUserIdentity(r.user), ActorID: r.uid(), TargetID: uid, AmountCents: cents, Detail: fmt.Sprintf("余额调整流水 #%d；%s", id, note)})
 	return M{"credited": true, "entry_id": id}, nil
 }
 
@@ -135,6 +140,9 @@ func (a *App) manageWalletReview(r *request, scope adminScope, expectedUserID in
 	if current := number(withdrawal["status"]); current != 0 {
 		if current == status {
 			return M{"processed": true, "status": current}, nil
+		}
+		if current == withdrawalStatusFrozen {
+			return nil, clientError{"该提现订单已冻结，请先解除冻结", 409}
 		}
 		return nil, clientError{"该提现申请已经处理", 409}
 	}
@@ -177,7 +185,82 @@ func (a *App) manageWalletReview(r *request, scope adminScope, expectedUserID in
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
+	resultText := "审核通过"
+	if status == 2 {
+		resultText = "审核拒绝并退回余额"
+	}
+	a.queueSystemAlert(systemAlertEvent{Type: "withdraw_review", OccurredAt: time.Now(), IP: a.clientIP(r.c), Actor: systemAlertUserIdentity(r.user), ActorID: r.uid(), TargetID: uid, AmountCents: cents, Detail: fmt.Sprintf("提现单 #%d；%s；%s", id, resultText, remark)})
 	return M{"processed": true, "status": status}, nil
+}
+
+func (a *App) manageWalletFreeze(r *request, scope adminScope, expectedUserID int64) (any, error) {
+	id := r.n("withdrawal_id")
+	freezeValue, parseErr := strconv.ParseInt(r.s("frozen"), 10, 64)
+	remark := strings.TrimSpace(r.s("remark"))
+	if id < 1 || parseErr != nil || (freezeValue != 0 && freezeValue != 1) || utf8.RuneCountInString(remark) > 500 || (freezeValue == 1 && utf8.RuneCountInString(remark) < 2) {
+		return nil, r.fail("提现冻结参数无效，冻结时须填写至少 2 个字的原因")
+	}
+	ctx := r.ctx()
+	tx, err := a.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if !scope.Global {
+		if err := a.requireScopedUser(ctx, tx, scope, expectedUserID); err != nil {
+			return nil, err
+		}
+	}
+	withdrawal, err := one(ctx, tx, "SELECT user_id,amount_cents,status FROM "+a.t("imgo_withdrawal")+" WHERE withdrawal_id=? FOR UPDATE", id)
+	if err != nil {
+		return nil, err
+	}
+	uid, cents := number(withdrawal["user_id"]), number(withdrawal["amount_cents"])
+	if !scope.Global && uid != expectedUserID {
+		return nil, deny()
+	}
+
+	current := number(withdrawal["status"])
+	target, requiredCurrent := int64(0), withdrawalStatusFrozen
+	if freezeValue == 1 {
+		target, requiredCurrent = withdrawalStatusFrozen, 0
+	}
+	if current == target {
+		return M{"processed": true, "status": current, "frozen": freezeValue == 1}, nil
+	}
+	if current != requiredCurrent {
+		if freezeValue == 1 {
+			return nil, clientError{"仅待处理的提现订单可以冻结", 409}
+		}
+		return nil, clientError{"该提现订单未处于冻结状态", 409}
+	}
+
+	now := time.Now().Unix()
+	var result sql.Result
+	if freezeValue == 1 {
+		result, err = tx.ExecContext(ctx, "UPDATE "+a.t("imgo_withdrawal")+" SET status=?,processed_at=?,processed_by=?,remark=? WHERE withdrawal_id=? AND status=0", withdrawalStatusFrozen, now, r.uid(), remark, id)
+	} else {
+		result, err = tx.ExecContext(ctx, "UPDATE "+a.t("imgo_withdrawal")+" SET status=0,processed_at=0,processed_by=0,remark='' WHERE withdrawal_id=? AND status=?", id, withdrawalStatusFrozen)
+	}
+	if err != nil {
+		return nil, err
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return nil, clientError{"提现订单状态已变化，请刷新后重试", 409}
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	actionText := "解除冻结"
+	if freezeValue == 1 {
+		actionText = "冻结"
+	}
+	detail := fmt.Sprintf("提现单 #%d；%s", id, actionText)
+	if remark != "" {
+		detail += "；" + remark
+	}
+	a.queueSystemAlert(systemAlertEvent{Type: "withdraw_review", OccurredAt: time.Now(), IP: a.clientIP(r.c), Actor: systemAlertUserIdentity(r.user), ActorID: r.uid(), TargetID: uid, AmountCents: cents, Detail: detail})
+	return M{"processed": true, "status": target, "frozen": freezeValue == 1}, nil
 }
 
 func (a *App) manageWallet(r *request) (any, error) {
@@ -192,7 +275,7 @@ func (a *App) manageWallet(r *request) (any, error) {
 			if err := a.requireScopedUser(r.ctx(), a.db, scope, r.n("user_id")); err != nil {
 				return nil, err
 			}
-		case "detail", "review":
+		case "detail", "review", "freeze":
 			item, err := r.one("SELECT user_id FROM "+a.t("imgo_withdrawal")+" WHERE withdrawal_id=?", r.n("withdrawal_id"))
 			if errors.Is(err, sql.ErrNoRows) {
 				return nil, deny()
@@ -246,6 +329,8 @@ func (a *App) manageWallet(r *request) (any, error) {
 		return a.manageWalletCredit(r, scope)
 	case "review":
 		return a.manageWalletReview(r, scope, reviewUserID)
+	case "freeze":
+		return a.manageWalletFreeze(r, scope, reviewUserID)
 	case "index":
 		where, args := "u.delete_time=0", []any{}
 		if !scope.Global {
@@ -259,6 +344,9 @@ func (a *App) manageWallet(r *request) (any, error) {
 		}
 		if _, provided := r.p["status"]; provided && r.s("status") != "" {
 			status, valid := bankStatus(r.p["status"])
+			if !valid && r.s("status") == strconv.FormatInt(withdrawalStatusFrozen, 10) {
+				status, valid = withdrawalStatusFrozen, true
+			}
 			if !valid {
 				return nil, r.fail("状态无效")
 			}

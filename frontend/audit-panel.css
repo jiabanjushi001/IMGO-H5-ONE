@@ -1,0 +1,17 @@
+.imgo-audit-page { padding:24px; color:#2f3d54; }
+.imgo-audit-heading { display:flex; align-items:center; justify-content:space-between; margin-bottom:18px; }
+.imgo-audit-heading h1 { margin:0 0 5px; font-size:22px; }
+.imgo-audit-heading p { margin:0; color:#8b97aa; font-size:13px; }
+.imgo-audit-filters { display:grid; grid-template-columns:minmax(240px,1fr) 150px 140px 130px auto; gap:10px; margin-bottom:16px; }
+.imgo-audit-sub { display:block; margin-top:3px; color:#9aa5b6; font-size:11px; font-weight:400; }
+.imgo-audit-action { display:inline-flex; align-items:center; gap:6px; }
+.imgo-audit-action b { color:#3f68c7; }
+.imgo-audit-action i { color:#abb4c3; font-style:normal; }
+.imgo-audit-table code { color:#596980; font-family:SFMono-Regular,Consolas,"Liberation Mono",monospace; }
+.imgo-audit-pagination { display:flex; justify-content:flex-end; margin-top:18px; }
+.imgo-audit-request-line { display:flex; align-items:center; gap:10px; margin-bottom:16px; }
+.imgo-audit-request-line code { color:#42526a; font-family:SFMono-Regular,Consolas,"Liberation Mono",monospace; }
+.imgo-audit-request-block { margin-bottom:16px; }
+.imgo-audit-request-block h3 { margin:0 0 8px; color:#53627a; font-size:13px; }
+.imgo-audit-request-block pre { max-height:260px; margin:0; padding:14px; overflow:auto; border:1px solid #e1e7f0; border-radius:8px; background:#f7f9fc; color:#34445d; font:12px/1.65 SFMono-Regular,Consolas,"Liberation Mono",monospace; white-space:pre-wrap; overflow-wrap:anywhere; }
+@media (max-width:1000px) { .imgo-audit-filters { grid-template-columns:1fr 1fr; } }

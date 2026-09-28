@@ -2,6 +2,7 @@ package server
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"net/http/httptest"
 	"testing"
@@ -89,6 +90,84 @@ func TestEditGroupAvatarAccess(t *testing.T) {
 			}
 			if tc.allowed && str(result.(M)["avatar"]) == "" {
 				t.Fatal("missing avatar URL", result)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestSetNoSpeakOwnerAndManager(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		role    int
+		allowed bool
+	}{
+		{"owner allowed", 1, true},
+		{"manager allowed", 2, true},
+		{"member denied", 3, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, mock := testApp(t)
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest("POST", "/enterprise/group/setNoSpeak", nil)
+			mock.ExpectQuery("SELECT \\* FROM `yu_group`").WithArgs(int64(5)).WillReturnRows(sqlmock.NewRows([]string{"group_id", "owner_id"}).AddRow(5, 2))
+			mock.ExpectQuery("SELECT gu.\\*").WithArgs(int64(5), int64(2)).WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow(tc.role))
+			if tc.allowed {
+				mock.ExpectQuery("SELECT gu.\\*").WithArgs(int64(5), int64(9)).WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow(3))
+				mock.ExpectExec("UPDATE `yu_group_user` SET `no_speak_time`=\\? WHERE group_id=\\? AND user_id=\\?").WithArgs(sqlmock.AnyArg(), int64(5), int64(9)).WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectQuery("SELECT user_id FROM `yu_group_user`").WithArgs(int64(5)).WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(2).AddRow(9))
+			}
+			_, err := a.group(&request{app: a, c: c, p: M{"id": "group-5", "user_id": 9, "noSpeakTimer": 1}, user: M{"user_id": 2}})
+			if (err == nil) != tc.allowed {
+				t.Fatalf("allowed=%v, err=%v", tc.allowed, err)
+			}
+			if !tc.allowed {
+				var denied clientError
+				if !errors.As(err, &denied) || denied.code != 403 {
+					t.Fatalf("ordinary member should receive 403, err=%v", err)
+				}
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestGroupMuteSettingOwnerAndManager(t *testing.T) {
+	current := `{"manage":1,"invite":0,"nospeak":0,"history":1,"number_join":2}`
+	for _, tc := range []struct {
+		name    string
+		role    int
+		setting M
+		allowed bool
+	}{
+		{"owner allowed", 1, M{"manage": 1, "invite": 0, "nospeak": 1, "history": 1}, true},
+		{"manager mute allowed", 2, M{"manage": 1, "invite": 0, "nospeak": 1, "history": 1, "number_join": 2}, true},
+		{"manager other setting denied", 2, M{"manage": 0, "invite": 0, "nospeak": 1, "history": 1, "number_join": 2}, false},
+		{"member denied", 3, M{"manage": 1, "invite": 0, "nospeak": 1, "history": 1, "number_join": 2}, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, mock := testApp(t)
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest("POST", "/enterprise/group/groupSetting", nil)
+			mock.ExpectQuery("SELECT \\* FROM `yu_group`").WithArgs(int64(5)).WillReturnRows(sqlmock.NewRows([]string{"group_id", "owner_id", "setting"}).AddRow(5, 2, current))
+			mock.ExpectQuery("SELECT gu.\\*").WithArgs(int64(5), int64(2)).WillReturnRows(sqlmock.NewRows([]string{"role"}).AddRow(tc.role))
+			if tc.allowed {
+				mock.ExpectExec("UPDATE `yu_group` SET `setting`=\\? WHERE group_id=\\?").WithArgs(sqlmock.AnyArg(), int64(5)).WillReturnResult(sqlmock.NewResult(0, 1))
+				mock.ExpectQuery("SELECT user_id FROM `yu_group_user`").WithArgs(int64(5)).WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(2))
+			}
+			_, err := a.group(&request{app: a, c: c, p: M{"group_id": "group-5", "setting": tc.setting}, user: M{"user_id": 2}})
+			if (err == nil) != tc.allowed {
+				t.Fatalf("allowed=%v, err=%v", tc.allowed, err)
+			}
+			if !tc.allowed {
+				var denied clientError
+				if !errors.As(err, &denied) || denied.code != 403 {
+					t.Fatalf("expected 403, err=%v", err)
+				}
 			}
 			if err := mock.ExpectationsWereMet(); err != nil {
 				t.Fatal(err)

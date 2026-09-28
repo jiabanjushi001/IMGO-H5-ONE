@@ -1,0 +1,1102 @@
+/* IMGO_MOBILE_COMPAT_BEGIN
+   Shared phone layout for the management shell, management quick chat and
+   standalone chat. Desktop rules remain in their original stylesheets. */
+
+.imgo-mobile-chat-back {
+  display: none;
+}
+
+@media (max-width: 760px) {
+  html:has(.imgo-admin),
+  body:has(.imgo-admin) {
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+    overflow: hidden;
+  }
+
+  .imgo-admin.main-container,
+  .imgo-admin > .el-container {
+    width: 100%;
+    min-width: 0;
+    height: 100dvh !important;
+    min-height: 0 !important;
+    overflow: hidden;
+  }
+
+  .imgo-admin > .el-container > .el-header {
+    height: 54px !important;
+    flex: 0 0 54px;
+    padding: 0 10px;
+  }
+
+  .imgo-admin .el-header .logo {
+    min-width: 0;
+    height: 54px;
+    overflow: hidden;
+  }
+
+  .imgo-admin .el-header .logo .image,
+  .imgo-admin .el-header .logo img {
+    width: 30px;
+    height: 30px;
+    flex: 0 0 30px;
+  }
+
+  .imgo-admin .el-header .logo .f-20 {
+    max-width: 100px;
+    overflow: hidden;
+    font-size: 13px;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .imgo-admin .el-header .text-right {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    height: 54px;
+    min-width: 0;
+    white-space: nowrap;
+  }
+
+  .imgo-admin .el-header .text-right > a,
+  .imgo-admin .el-header .text-right > .el-link {
+    max-width: 74px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .imgo-admin .el-header .username {
+    display: none !important;
+  }
+
+  .imgo-admin > .el-container > .el-container {
+    min-width: 0;
+    min-height: 0;
+    flex: 1 1 auto;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .imgo-admin .main-aside {
+    order: 2;
+    width: 100% !important;
+    height: 60px !important;
+    min-height: 60px;
+    flex: 0 0 60px;
+    overflow: hidden;
+    border-top: 1px solid var(--admin-border);
+    border-right: 0;
+    box-shadow: 0 -3px 16px #28395a10;
+    z-index: 20;
+  }
+
+  .imgo-admin .aside-menu {
+    width: 100%;
+    height: 60px;
+    padding: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .imgo-admin .aside-menu::-webkit-scrollbar {
+    display: none;
+  }
+
+  .imgo-admin .aside-menu .el-scrollbar,
+  .imgo-admin .aside-menu .el-scrollbar__wrap,
+  .imgo-admin .aside-menu .el-scrollbar__view {
+    width: 100%;
+    height: 60px;
+  }
+
+  .imgo-admin .aside-menu .el-scrollbar__wrap {
+    overflow-x: auto !important;
+    overflow-y: hidden !important;
+    margin: 0 !important;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .imgo-admin .aside-menu .el-scrollbar__view > .el-menu,
+  .imgo-admin .aside-menu .el-scrollbar__view > .el-menu.el-menu--collapse {
+    display: flex;
+    width: max-content;
+    min-width: 100%;
+    height: 60px;
+    padding: 0 4px;
+    border-right: 0;
+    box-sizing: border-box;
+  }
+
+  .imgo-admin .aside-menu .el-scrollbar__view > .el-menu > .el-menu-item,
+  .imgo-admin .aside-menu .el-scrollbar__view > .el-menu > .el-submenu {
+    width: 64px;
+    min-width: 64px;
+    height: 60px;
+    margin: 0;
+    flex: 0 0 64px;
+  }
+
+  .imgo-admin .aside-menu .el-menu-item,
+  .imgo-admin .aside-menu .el-submenu__title,
+  .imgo-admin .el-menu--collapse .el-menu-item,
+  .imgo-admin .el-menu--collapse .el-submenu__title {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 3px;
+    width: 64px;
+    height: 60px;
+    margin: 0;
+    padding: 4px 3px !important;
+    border-radius: 0;
+    box-sizing: border-box;
+    line-height: 1.1;
+  }
+
+  .imgo-admin .aside-menu .el-menu-item i,
+  .imgo-admin .aside-menu .el-submenu__title > span > i {
+    margin: 0;
+    font-size: 19px;
+  }
+
+  .imgo-admin .aside-menu .el-menu-item span,
+  .imgo-admin .aside-menu .el-submenu__title > span {
+    position: static;
+    display: block;
+    width: auto;
+    height: auto;
+    max-width: 58px;
+    overflow: hidden;
+    font-size: 10px;
+    line-height: 13px;
+    text-overflow: ellipsis;
+    visibility: visible;
+    white-space: nowrap;
+  }
+
+  .imgo-admin .aside-menu .el-submenu__title > span {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .imgo-admin .aside-menu .el-submenu__icon-arrow,
+  .imgo-admin .aside-bottom {
+    display: none !important;
+  }
+
+  .imgo-admin .aside-menu .el-submenu.imgo-mobile-submenu-open > .el-menu--vertical {
+    position: fixed !important;
+    z-index: 2001;
+    right: 8px;
+    bottom: 68px;
+    left: 8px;
+    display: block !important;
+    width: auto;
+  }
+
+  .imgo-admin .aside-menu .el-submenu.imgo-mobile-submenu-open > .el-menu--vertical > .el-menu--popup,
+  .imgo-admin .aside-menu .el-submenu.imgo-mobile-submenu-open > .el-menu--inline {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    min-width: 0;
+    margin: 0;
+    padding: 8px;
+    border: 1px solid #dfe5ef;
+    border-radius: 12px;
+    background: #fff;
+    box-sizing: border-box;
+    box-shadow: 0 -8px 28px #22365624;
+  }
+
+  .imgo-admin .aside-menu .el-submenu.imgo-mobile-submenu-open > .el-menu--vertical > .el-menu--popup {
+    position: static !important;
+    width: 100%;
+  }
+
+  .imgo-admin .aside-menu .el-submenu.imgo-mobile-submenu-open > .el-menu--inline {
+    position: fixed !important;
+    z-index: 2001;
+    right: 8px;
+    bottom: 68px;
+    left: 8px;
+    width: auto;
+  }
+
+  .imgo-admin .aside-menu .el-submenu.imgo-mobile-submenu-open > .el-menu--vertical > .el-menu--popup::before,
+  .imgo-admin .aside-menu .el-submenu.imgo-mobile-submenu-open > .el-menu--vertical > .el-menu--popup::after,
+  .imgo-admin .aside-menu .el-submenu.imgo-mobile-submenu-open > .el-menu--inline::before,
+  .imgo-admin .aside-menu .el-submenu.imgo-mobile-submenu-open > .el-menu--inline::after {
+    display: none;
+  }
+
+  .imgo-admin .aside-menu .el-submenu.imgo-mobile-submenu-open .el-menu--popup > .el-menu-item,
+  .imgo-admin .aside-menu .el-submenu.imgo-mobile-submenu-open > .el-menu--inline > .el-menu-item {
+    display: flex;
+    width: 100%;
+    height: 44px;
+    min-width: 0;
+    margin: 0;
+    padding: 0 12px !important;
+    flex-direction: row;
+    gap: 7px;
+    border-radius: 8px;
+    line-height: 44px;
+  }
+
+  .imgo-admin .aside-menu .el-submenu.imgo-mobile-submenu-open .el-menu--popup > .el-menu-item span,
+  .imgo-admin .aside-menu .el-submenu.imgo-mobile-submenu-open > .el-menu--inline > .el-menu-item span {
+    max-width: none;
+    font-size: 13px;
+    line-height: 1;
+  }
+
+  .imgo-admin .el-main {
+    order: 1;
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    flex: 1 1 auto;
+    padding: 10px !important;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .imgo-admin .el-main > .pd-20,
+  .imgo-admin .pd-20.imgo-overview,
+  .imgo-admin .imgo-overview {
+    padding: 0 !important;
+  }
+
+  .imgo-admin .el-card {
+    border-radius: 10px;
+  }
+
+  .imgo-admin .el-card__header,
+  .imgo-admin .el-card__body {
+    padding: 12px;
+  }
+
+  .imgo-admin .el-card__body > .lz-flex,
+  .imgo-admin .el-main .lz-flex.lz-space-between {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .imgo-admin .el-card__body > .lz-flex > div,
+  .imgo-admin .el-card__body > .lz-flex > form {
+    min-width: 0;
+  }
+
+  .imgo-admin .el-main:has(.imgo-member-referral-filter) .el-card__body {
+    padding: 10px;
+  }
+
+  .imgo-admin .el-main:has(.imgo-member-referral-filter) .lz-flex:has(.imgo-member-referral-filter) {
+    align-items: stretch;
+  }
+
+  .imgo-admin .imgo-member-referral-filter,
+  .imgo-admin .imgo-member-referral-filter > .el-input,
+  .imgo-admin .imgo-member-referral-filter .el-select {
+    width: 100%;
+  }
+
+  .imgo-admin .lz-flex:has(> div > .imgo-member-referral-filter) > div {
+    width: 100%;
+  }
+
+  .imgo-admin .lz-flex:has(> div > .imgo-member-referral-filter) > div > .el-button.mr-15 {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .imgo-admin .el-table {
+    width: 100% !important;
+    max-width: 100%;
+    border-radius: 8px;
+  }
+
+  .imgo-admin .el-table__fixed,
+  .imgo-admin .el-table__fixed-right {
+    display: none !important;
+  }
+
+  .imgo-admin .el-table__body-wrapper {
+    overflow-x: auto !important;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .imgo-admin .el-table td,
+  .imgo-admin .el-table th {
+    padding-top: 9px;
+    padding-bottom: 9px;
+  }
+
+  .imgo-admin .el-pagination,
+  body:has(.imgo-admin) .el-pagination {
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 12px 0 2px;
+    white-space: nowrap;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .imgo-admin .el-tabs__nav-wrap {
+    overflow: hidden;
+  }
+
+  .imgo-admin .el-tabs__nav-scroll {
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+
+  .imgo-admin .el-tabs__nav-scroll::-webkit-scrollbar {
+    display: none;
+  }
+
+  .imgo-admin .el-tabs__nav {
+    float: none;
+    width: max-content;
+  }
+
+  .imgo-admin .el-tabs__item {
+    padding: 0 14px;
+  }
+
+  .imgo-admin .imgo-stats {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .imgo-admin .imgo-overview-middle,
+  .imgo-admin .imgo-charts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 10px;
+  }
+
+  .imgo-admin .imgo-page-heading,
+  .imgo-page-heading {
+    align-items: flex-start;
+    flex-direction: column;
+    margin-bottom: 14px;
+  }
+
+  .imgo-page-heading h1 {
+    font-size: 20px;
+  }
+
+  /* The group page is a desktop split pane. On a phone both panes stay
+     reachable in one vertical scroll instead of collapsing the member pane. */
+  .imgo-admin .pd-20:has(> .el-container > .el-aside > .group-box) > .el-container {
+    display: flex;
+    width: 100%;
+    height: auto !important;
+    min-height: 0;
+    flex-direction: column;
+    overflow: visible;
+  }
+
+  .imgo-admin .pd-20:has(> .el-container > .el-aside > .group-box) > .el-container > .el-aside {
+    width: 100% !important;
+    height: min(42dvh, 350px);
+    min-height: 230px;
+    flex: none;
+    border-right: 0;
+    border-bottom: 1px solid #e8edf5;
+  }
+
+  .imgo-admin .pd-20:has(> .el-container > .el-aside > .group-box) > .el-container > .el-aside > .group-box {
+    width: 100%;
+    height: 100% !important;
+  }
+
+  .imgo-admin .pd-20:has(> .el-container > .el-aside > .group-box) > .el-container > .el-main {
+    width: 100%;
+    min-height: 360px;
+    padding: 10px 0 0 !important;
+    overflow: visible;
+  }
+
+  .imgo-admin .group-user-box {
+    width: 100% !important;
+    min-width: 0;
+    min-height: 360px;
+    box-sizing: border-box;
+  }
+
+  .imgo-admin .group-user-box > div,
+  .imgo-admin .group-user-box .el-table {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  body:has(.imgo-admin) > .el-dialog__wrapper {
+    padding: 8px;
+    box-sizing: border-box;
+    overflow: auto;
+  }
+
+  body:has(.imgo-admin) .el-dialog:not(.sideMenu-message) {
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 16px);
+    margin: 8px auto !important;
+    display: flex;
+    flex-direction: column;
+  }
+
+  body:has(.imgo-admin) .el-dialog:not(.sideMenu-message) .el-dialog__header,
+  body:has(.imgo-admin) .el-dialog:not(.sideMenu-message) .el-dialog__footer {
+    flex: none;
+    padding: 14px 16px;
+  }
+
+  body:has(.imgo-admin) .el-dialog:not(.sideMenu-message) .el-dialog__body {
+    min-height: 0;
+    padding: 14px 16px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .imgo-admin .el-form:not(.el-form--inline) .el-form-item__label,
+  body:has(.imgo-admin) .el-dialog .el-form:not(.el-form--inline) .el-form-item__label {
+    float: none;
+    width: auto !important;
+    padding: 0 0 7px;
+    line-height: 1.4;
+    text-align: left;
+  }
+
+  .imgo-admin .el-form:not(.el-form--inline) .el-form-item__content,
+  body:has(.imgo-admin) .el-dialog .el-form:not(.el-form--inline) .el-form-item__content {
+    margin-left: 0 !important;
+  }
+
+  .imgo-admin .el-form:not(.el-form--inline) .el-select,
+  .imgo-admin .el-form:not(.el-form--inline) .el-input,
+  body:has(.imgo-admin) .el-dialog .el-form:not(.el-form--inline) .el-select,
+  body:has(.imgo-admin) .el-dialog .el-form:not(.el-form--inline) .el-input {
+    max-width: 100%;
+  }
+
+  body:has(.imgo-admin) .el-transfer {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  body:has(.imgo-admin) .el-transfer-panel {
+    width: 100%;
+  }
+
+  body:has(.imgo-admin) .el-transfer__buttons {
+    display: flex;
+    justify-content: center;
+    padding: 0;
+    transform: rotate(90deg);
+  }
+
+  .imgo-broadcast-toolbar {
+    align-items: stretch;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  .imgo-broadcast-search,
+  .imgo-broadcast-count {
+    width: 100%;
+    margin-left: 0;
+  }
+
+  .imgo-broadcast-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (max-width: 700px) {
+  html:has(.imgo-chat-design),
+  body:has(.imgo-chat-design) {
+    width: 100%;
+    min-width: 0;
+    overflow: hidden;
+  }
+
+  .main-container:has(.imgo-chat-design):not(.imgo-admin),
+  .main-container:has(.imgo-chat-design):not(.imgo-admin) > div:has(> .imgo-chat-design) {
+    width: 100%;
+    min-width: 0;
+    height: 100dvh;
+    padding: 0;
+    overflow: hidden;
+  }
+
+  .main-container:not(.imgo-admin) .imgo-chat-design,
+  .sideMenu-message .imgo-chat-design,
+  .sideMenu-message .chat-box {
+    width: 100%;
+    min-width: 0;
+    height: 100% !important;
+    max-height: none !important;
+    border: 0;
+    border-radius: 0;
+  }
+
+  .imgo-chat-design .lemon-wrapper,
+  .sideMenu-message .lemon-wrapper {
+    position: relative;
+    width: 100% !important;
+    min-width: 0 !important;
+    min-height: 0 !important;
+    padding-bottom: 58px;
+    box-sizing: border-box;
+    overflow: hidden;
+  }
+
+  .imgo-chat-design .lemon-menu,
+  .sideMenu-message .lemon-menu {
+    position: absolute;
+    z-index: 30;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    display: flex;
+    flex-direction: row !important;
+    align-items: center;
+    justify-content: space-around;
+    width: 100% !important;
+    height: 58px;
+    min-height: 58px;
+    padding: 3px max(4px, env(safe-area-inset-right)) 3px max(4px, env(safe-area-inset-left));
+    border-top: 1px solid #dfe5ee;
+    border-right: 0;
+    box-sizing: border-box;
+    box-shadow: 0 -4px 16px #25395812;
+  }
+
+  .imgo-chat-design .lemon-menu__avatar,
+  .sideMenu-message .lemon-menu__avatar {
+    width: 36px !important;
+    height: 36px !important;
+    margin: 0 4px !important;
+    flex: 0 0 36px;
+  }
+
+  .imgo-chat-design .lemon-menu__list,
+  .sideMenu-message .lemon-menu__list {
+    display: flex;
+    align-items: center;
+    justify-content: space-around;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .imgo-chat-design .lemon-menu__item,
+  .sideMenu-message .lemon-menu__item {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 42px;
+    height: 42px;
+    margin: 0 2px;
+    padding: 7px 5px;
+    flex: 0 0 42px;
+    box-sizing: border-box;
+  }
+
+  /* Fullscreen and desktop-client download are desktop-only actions. */
+  .imgo-chat-design .lemon-menu__item[title="全屏/窗口"],
+  .imgo-chat-design .lemon-menu__item[title="客户端下载"],
+  .sideMenu-message .lemon-menu__item[title="全屏/窗口"],
+  .sideMenu-message .lemon-menu__item[title="客户端下载"] {
+    display: none !important;
+  }
+
+  .imgo-chat-design .lemon-menu__bottom,
+  .sideMenu-message .lemon-menu__bottom {
+    position: static;
+    display: flex;
+    width: auto;
+    height: 42px;
+    flex-direction: row !important;
+    align-items: center;
+    flex: 0 0 auto;
+  }
+
+  .imgo-chat-design .lemon-sidebar,
+  .sideMenu-message .lemon-sidebar {
+    display: flex;
+    width: 100% !important;
+    min-width: 0;
+    height: 100%;
+    flex: 1 1 100%;
+    border-right: 0;
+  }
+
+  .imgo-chat-design .lemon-container,
+  .sideMenu-message .lemon-container {
+    display: none;
+    width: 100% !important;
+    min-width: 0;
+    height: 100%;
+    flex: 1 1 100%;
+  }
+
+  /* The file manager is another Lemon content pane. The generic mobile
+     shell hides content panes until a conversation is opened, so expose the
+     active file pane and turn its desktop two-column layout into a compact
+     vertical layout. Vue's inline display:none still wins for inactive panes. */
+  .imgo-chat-design .lemon-container:has(.file-header),
+  .sideMenu-message .lemon-container:has(.file-header) {
+    display: flex;
+    overflow: hidden;
+    background: #fff;
+  }
+
+  .imgo-chat-design .lemon-wrapper:has(> .lemon-container:has(.file-header):not([style*="display: none"])) > .lemon-sidebar,
+  .sideMenu-message .lemon-wrapper:has(> .lemon-container:has(.file-header):not([style*="display: none"])) > .lemon-sidebar {
+    display: none;
+  }
+
+  .imgo-chat-design .lemon-container:has(.file-header) > .el-container,
+  .sideMenu-message .lemon-container:has(.file-header) > .el-container {
+    width: 100%;
+    min-width: 0;
+    height: 100%;
+  }
+
+  .imgo-chat-design .lemon-container:has(.file-header) .slider-aside,
+  .sideMenu-message .lemon-container:has(.file-header) .slider-aside {
+    flex: 0 0 50px;
+  }
+
+  .imgo-chat-design .lemon-container:has(.file-header) .file-header,
+  .sideMenu-message .lemon-container:has(.file-header) .file-header {
+    height: auto !important;
+    min-height: 82px;
+    padding: 10px 12px;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    gap: 8px;
+    box-sizing: border-box;
+  }
+
+  .imgo-chat-design .lemon-container:has(.file-header) .file-header-title,
+  .sideMenu-message .lemon-container:has(.file-header) .file-header-title,
+  .imgo-chat-design .lemon-container:has(.file-header) .file-header-search,
+  .sideMenu-message .lemon-container:has(.file-header) .file-header-search {
+    width: 100%;
+  }
+
+  .imgo-chat-design .lemon-container:has(.file-header) .file-header-search .el-input,
+  .sideMenu-message .lemon-container:has(.file-header) .file-header-search .el-input {
+    width: 100% !important;
+  }
+
+  .imgo-chat-design .lemon-container:has(.file-header) .file-header + .el-container,
+  .sideMenu-message .lemon-container:has(.file-header) .file-header + .el-container {
+    min-width: 0;
+    min-height: 0;
+    flex-direction: column;
+  }
+
+  .imgo-chat-design .lemon-container:has(.file-header) aside.group-box,
+  .sideMenu-message .lemon-container:has(.file-header) aside.group-box {
+    width: 100% !important;
+    height: auto;
+    min-height: 44px;
+    flex: 0 0 auto;
+    overflow-x: auto;
+    border-right: 1px solid #e6e6e6;
+    box-sizing: border-box;
+  }
+
+  .imgo-chat-design .lemon-container:has(.file-header) aside.group-box .group-box-list,
+  .sideMenu-message .lemon-container:has(.file-header) aside.group-box .group-box-list {
+    display: flex;
+    min-width: max-content;
+    overflow: visible;
+  }
+
+  .imgo-chat-design .lemon-container:has(.file-header) aside.group-box .chat-item,
+  .sideMenu-message .lemon-container:has(.file-header) aside.group-box .chat-item {
+    flex: 0 0 auto;
+    padding: 11px 14px;
+    white-space: nowrap;
+  }
+
+  .imgo-chat-design .lemon-container:has(.file-header) .group-user-box,
+  .sideMenu-message .lemon-container:has(.file-header) .group-user-box {
+    width: 100%;
+    min-width: 0;
+    min-height: 0;
+    flex: 1 1 auto;
+    border-left: 1px solid #e6e6e6;
+    overflow-y: auto;
+  }
+
+  .imgo-chat-design .lemon-container:has(.file-header) .file-list,
+  .sideMenu-message .lemon-container:has(.file-header) .file-list {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 12px;
+    padding: 12px;
+  }
+
+  .imgo-chat-design .lemon-container:has(.file-header) .file-item,
+  .sideMenu-message .lemon-container:has(.file-header) .file-item {
+    width: auto;
+    min-width: 0;
+    margin: 0;
+    box-sizing: border-box;
+  }
+
+  /* Settings is rendered in a Lemon container alongside the conversation.
+     Vue uses an inline display:none on inactive panes, so this rule exposes
+     only the active settings pane while keeping inactive panes hidden. */
+  .imgo-chat-design .lemon-container:has(.setting-switch),
+  .sideMenu-message .lemon-container:has(.setting-switch) {
+    display: flex;
+    overflow: hidden;
+    background: #fff;
+  }
+
+  .imgo-chat-design .lemon-wrapper:has(> .lemon-container:has(.setting-switch):not([style*="display: none"])) > .lemon-sidebar,
+  .sideMenu-message .lemon-wrapper:has(> .lemon-container:has(.setting-switch):not([style*="display: none"])) > .lemon-sidebar {
+    display: none;
+  }
+
+  .imgo-chat-design .lemon-container:has(.setting-switch) > .el-tabs--left,
+  .sideMenu-message .lemon-container:has(.setting-switch) > .el-tabs--left {
+    display: flex;
+    width: 100%;
+    min-width: 0;
+    height: 100% !important;
+    flex-direction: column;
+  }
+
+  .imgo-chat-design .lemon-container:has(.setting-switch) .el-tabs__header.is-left,
+  .sideMenu-message .lemon-container:has(.setting-switch) .el-tabs__header.is-left {
+    float: none;
+    width: 100%;
+    margin: 0;
+    flex: 0 0 48px;
+    border-bottom: 1px solid #e7ebf2;
+  }
+
+  .imgo-chat-design .lemon-container:has(.setting-switch) .el-tabs__nav-wrap.is-left,
+  .sideMenu-message .lemon-container:has(.setting-switch) .el-tabs__nav-wrap.is-left {
+    padding: 0;
+  }
+
+  .imgo-chat-design .lemon-container:has(.setting-switch) .el-tabs__nav-wrap.is-left::after,
+  .imgo-chat-design .lemon-container:has(.setting-switch) .el-tabs__active-bar.is-left,
+  .sideMenu-message .lemon-container:has(.setting-switch) .el-tabs__nav-wrap.is-left::after,
+  .sideMenu-message .lemon-container:has(.setting-switch) .el-tabs__active-bar.is-left {
+    display: none;
+  }
+
+  .imgo-chat-design .lemon-container:has(.setting-switch) .el-tabs__nav.is-left,
+  .sideMenu-message .lemon-container:has(.setting-switch) .el-tabs__nav.is-left {
+    display: flex;
+    width: 100%;
+    transform: none !important;
+  }
+
+  .imgo-chat-design .lemon-container:has(.setting-switch) .el-tabs__item.is-left,
+  .sideMenu-message .lemon-container:has(.setting-switch) .el-tabs__item.is-left {
+    height: 48px;
+    padding: 0 18px;
+    flex: 1 1 50%;
+    border-bottom: 2px solid transparent;
+    line-height: 48px;
+    text-align: center;
+  }
+
+  .imgo-chat-design .lemon-container:has(.setting-switch) .el-tabs__item.is-left.is-active,
+  .sideMenu-message .lemon-container:has(.setting-switch) .el-tabs__item.is-left.is-active {
+    border-bottom-color: #409eff;
+  }
+
+  .imgo-chat-design .lemon-container:has(.setting-switch) .el-tabs__content,
+  .sideMenu-message .lemon-container:has(.setting-switch) .el-tabs__content {
+    min-width: 0;
+    min-height: 0;
+    flex: 1 1 auto;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .imgo-chat-design .lemon-container:has(.setting-switch) .el-tab-pane.pd-20,
+  .sideMenu-message .lemon-container:has(.setting-switch) .el-tab-pane.pd-20 {
+    padding: 16px !important;
+    box-sizing: border-box;
+  }
+
+  .imgo-chat-design .lemon-container:has(.setting-switch) .user-center,
+  .sideMenu-message .lemon-container:has(.setting-switch) .user-center {
+    height: auto;
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .imgo-chat-design .lemon-container:has(.setting-switch) .user-avatar,
+  .sideMenu-message .lemon-container:has(.setting-switch) .user-avatar {
+    width: 100%;
+    margin-bottom: 20px;
+  }
+
+  .imgo-chat-design .lemon-container:has(.setting-switch) .user-info,
+  .sideMenu-message .lemon-container:has(.setting-switch) .user-info {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .imgo-chat-design .lemon-container:has(.setting-switch) .el-form-item__label,
+  .sideMenu-message .lemon-container:has(.setting-switch) .el-form-item__label {
+    float: none;
+    width: auto !important;
+    padding: 0 0 7px;
+    line-height: 1.4;
+    text-align: left;
+  }
+
+  .imgo-chat-design .lemon-container:has(.setting-switch) .el-form-item__content,
+  .sideMenu-message .lemon-container:has(.setting-switch) .el-form-item__content {
+    margin-left: 0 !important;
+  }
+
+  .imgo-chat-design .lemon-container:has(.setting-switch) .el-input,
+  .imgo-chat-design .lemon-container:has(.setting-switch) .el-textarea,
+  .sideMenu-message .lemon-container:has(.setting-switch) .el-input,
+  .sideMenu-message .lemon-container:has(.setting-switch) .el-textarea {
+    width: 100% !important;
+    max-width: 100%;
+  }
+
+  .imgo-chat-design .lemon-container:has(.setting-switch) .el-radio-group,
+  .sideMenu-message .lemon-container:has(.setting-switch) .el-radio-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .imgo-chat-design .lemon-container:has(.setting-switch) .el-radio.is-bordered,
+  .sideMenu-message .lemon-container:has(.setting-switch) .el-radio.is-bordered {
+    margin: 0;
+  }
+
+  .imgo-chat-design .lemon-container:has(.setting-switch) .setting-switch,
+  .sideMenu-message .lemon-container:has(.setting-switch) .setting-switch {
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+    margin: 0 0 16px;
+    line-height: 1.5;
+  }
+
+  .imgo-chat-design .lemon-container:has(.setting-switch) .el-dialog__wrapper,
+  .sideMenu-message .lemon-container:has(.setting-switch) .el-dialog__wrapper {
+    padding: 12px;
+    box-sizing: border-box;
+    overflow: auto;
+  }
+
+  .imgo-chat-design .lemon-container:has(.setting-switch) .el-dialog,
+  .sideMenu-message .lemon-container:has(.setting-switch) .el-dialog {
+    width: 100% !important;
+    max-width: calc(100vw - 24px);
+    margin: max(12px, 8dvh) auto !important;
+  }
+
+  .imgo-chat-design.imgo-mobile-conversation .lemon-sidebar,
+  .sideMenu-message .imgo-mobile-conversation .lemon-sidebar {
+    display: none;
+  }
+
+  .imgo-chat-design.imgo-mobile-conversation .lemon-container,
+  .sideMenu-message .imgo-mobile-conversation .lemon-container {
+    display: flex;
+  }
+
+  .imgo-mobile-chat-back {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 34px;
+    margin: 0 8px 0 0;
+    padding: 0;
+    flex: 0 0 34px;
+    border: 0;
+    border-radius: 8px;
+    background: #f0f3f8;
+    color: #52627c;
+    font-size: 18px;
+  }
+
+  .message-title-box {
+    min-width: 0;
+  }
+
+  .message-title-box > div:not(.message-title-tools) {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .imgo-chat-design .lemon-container__title,
+  .sideMenu-message .lemon-container__title {
+    min-height: 52px;
+    padding: 8px 10px;
+  }
+
+  .imgo-chat-design .message-title-tools,
+  .sideMenu-message .message-title-tools {
+    flex: 0 0 auto;
+  }
+
+  .imgo-chat-design .slot-group-list,
+  .sideMenu-message .slot-group-list {
+    display: none !important;
+  }
+
+  .imgo-chat-design .lemon-messages,
+  .sideMenu-message .lemon-messages {
+    padding: 10px;
+  }
+
+  .imgo-chat-design .lemon-message,
+  .sideMenu-message .lemon-message {
+    margin-bottom: 14px;
+  }
+
+  .imgo-chat-design .lemon-message__content,
+  .sideMenu-message .lemon-message__content {
+    max-width: min(76vw, 520px);
+    padding: 8px 10px;
+    font-size: 13px;
+  }
+
+  .imgo-chat-design .lemon-editor,
+  .sideMenu-message .lemon-editor {
+    height: 156px;
+  }
+
+  .imgo-chat-design .lemon-editor__tool,
+  .sideMenu-message .lemon-editor__tool {
+    height: 38px;
+    padding: 3px 7px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    white-space: nowrap;
+  }
+
+  .imgo-chat-design .lemon-editor__inner,
+  .sideMenu-message .lemon-editor__inner {
+    padding: 2px 8px;
+  }
+
+  .imgo-chat-design .lemon-editor__footer,
+  .sideMenu-message .lemon-editor__footer {
+    height: 42px;
+    padding: 5px 8px 8px;
+  }
+
+  .imgo-chat-design .lemon-editor__tip,
+  .sideMenu-message .lemon-editor__tip {
+    display: none;
+  }
+
+  .imgo-chat-design .imgo-chat-quick-trigger,
+  .sideMenu-message .imgo-chat-quick-trigger {
+    padding: 2px 5px;
+  }
+
+  .imgo-chat-design .imgo-profile-actions,
+  .sideMenu-message .imgo-profile-actions {
+    gap: 5px;
+  }
+
+  .imgo-chat-design .imgo-profile-trigger,
+  .sideMenu-message .imgo-profile-trigger {
+    padding: 4px 6px;
+  }
+
+  body:has(.imgo-admin) .el-dialog.sideMenu-message {
+    width: calc(100vw - 12px) !important;
+    max-width: calc(100vw - 12px) !important;
+    height: calc(100dvh - 12px);
+    margin: 6px auto !important;
+    border-radius: 10px;
+  }
+
+  body:has(.imgo-admin) .sideMenu-message > .el-dialog__header {
+    height: 48px;
+    padding: 0 14px;
+  }
+
+  body:has(.imgo-admin) .sideMenu-message > .el-dialog__body {
+    overflow: hidden !important;
+  }
+
+  body:has(.imgo-chat-design) > .el-dialog__wrapper .el-dialog:not(.sideMenu-message) {
+    width: calc(100vw - 16px) !important;
+    max-width: calc(100vw - 16px) !important;
+    max-height: calc(100dvh - 16px);
+    margin: 8px auto !important;
+    display: flex;
+    flex-direction: column;
+  }
+
+  body:has(.imgo-chat-design) > .el-dialog__wrapper .el-dialog__body {
+    min-height: 0;
+    padding: 14px;
+    overflow-y: auto;
+  }
+
+  body:has(.imgo-chat-design) .el-transfer {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+
+  body:has(.imgo-chat-design) .el-transfer-panel {
+    width: 100%;
+  }
+}
+
+@media (max-width: 420px) {
+  .imgo-admin .el-header .logo .f-20 {
+    max-width: 72px;
+    font-size: 12px;
+  }
+
+  .imgo-admin .el-header .text-right > a,
+  .imgo-admin .el-header .text-right > .el-link {
+    max-width: 58px;
+    font-size: 12px;
+  }
+
+  .imgo-admin .el-button + .el-button {
+    margin-left: 4px;
+  }
+
+  .imgo-chat-design .lemon-menu__item,
+  .sideMenu-message .lemon-menu__item {
+    width: 38px;
+    flex-basis: 38px;
+  }
+}
+/* IMGO_MOBILE_COMPAT_END */

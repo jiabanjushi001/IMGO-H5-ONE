@@ -82,6 +82,10 @@ func (a *App) canChat(r *request, to, group int64, write bool) error {
 }
 func (a *App) im(r *request) (any, error) {
 	switch action(r) {
+	case "getquickreplies":
+		return a.manageQuickReplies(r)
+	case "savequickreplies":
+		return a.saveQuickReplies(r)
 	case "sendmessage":
 		return a.sendMessage(r, r.p)
 	case "getmessagelist":
@@ -105,18 +109,25 @@ func (a *App) im(r *request) (any, error) {
 		}
 		v := a.safeUser(u)
 		v["account"] = u["account"]
-		v["create_time"] = u["create_time"]
-		v["register_ip"] = u["register_ip"]
-		v["reg_location"] = a.location(u["register_ip"])
-		v["last_login_time"] = u["last_login_time"]
-		v["last_login_ip"] = u["last_login_ip"]
-		v["last_chat_time"] = u["last_chat_time"]
-		v["last_chat_ip"] = u["last_chat_ip"]
-		v["chat_location"] = a.location(u["last_chat_ip"])
+		canViewNetworkInfo, e := a.canViewUserNetworkInfo(r.ctx(), r.user, uid)
+		if e != nil {
+			return nil, e
+		}
+		v["can_view_network_info"] = canViewNetworkInfo
+		if canViewNetworkInfo {
+			v["create_time"] = u["create_time"]
+			v["register_ip"] = u["register_ip"]
+			v["reg_location"] = a.location(u["register_ip"])
+			v["last_login_time"] = u["last_login_time"]
+			v["last_login_ip"] = u["last_login_ip"]
+			v["last_chat_time"] = u["last_chat_time"]
+			v["last_chat_ip"] = u["last_chat_ip"]
+			v["chat_location"] = a.location(u["last_chat_ip"])
+			v["location"] = a.location(u["last_login_ip"])
+		}
 		f, _ := r.one("SELECT friend_id,nickname,status FROM "+a.t("friend")+" WHERE create_user=? AND friend_user_id=?", r.uid(), uid)
 		v["friendInfo"] = f
 		v["friend"] = f
-		v["location"] = a.location(u["last_login_ip"])
 		return v, nil
 	case "searchuser", "userlist":
 		return a.searchUsers(r)
@@ -363,7 +374,7 @@ func (a *App) serialize(ctx context.Context, m M) (M, error) {
 	if g == 1 {
 		to = "group-" + str(m["to_user"])
 	}
-	u, e := one(ctx, a.db, "SELECT user_id,realname,avatar,sex,motto,name_py,role FROM "+a.t("user")+" WHERE user_id=?", m["from_user"])
+	u, e := one(ctx, a.db, "SELECT user_id,account,realname,avatar,sex,motto,name_py,role FROM "+a.t("user")+" WHERE user_id=?", m["from_user"])
 	if e == sql.ErrNoRows {
 		u = M{"user_id": m["from_user"], "realname": "已注销用户"}
 	} else if e != nil {

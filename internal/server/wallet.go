@@ -3,6 +3,7 @@ package server
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"regexp"
 	"strconv"
 	"strings"
@@ -61,7 +62,21 @@ func (a *App) walletBalance(r *request, userID int64) (M, error) {
 	return M{"available_cents": number(wallet["available_cents"]), "pending_cents": number(wallet["pending_cents"]), "currency": "CNY"}, nil
 }
 
-func (a *App) walletStatus(r *request) (M, error) { return a.walletBalance(r, r.uid()) }
+func (a *App) walletStatus(r *request) (M, error) {
+	balance, err := a.walletBalance(r, r.uid())
+	if err != nil {
+		return nil, err
+	}
+	frozen, err := r.one(
+		"SELECT COALESCE(SUM(amount_cents),0) frozen_cents FROM "+a.t("imgo_withdrawal")+" WHERE user_id=? AND status=?",
+		r.uid(), withdrawalStatusFrozen,
+	)
+	if err != nil {
+		return nil, err
+	}
+	balance["frozen_cents"] = number(frozen["frozen_cents"])
+	return balance, nil
+}
 
 func (a *App) previousWithdrawal(r *request, requestID string, cents int64) (M, error) {
 	previous, err := r.one("SELECT withdrawal_id,amount_cents,status FROM "+a.t("imgo_withdrawal")+" WHERE user_id=? AND request_id=?", r.uid(), requestID)
@@ -147,6 +162,7 @@ func (a *App) walletWithdraw(r *request) (any, error) {
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
+	a.queueSystemAlert(systemAlertEvent{Type: "user_withdraw", OccurredAt: time.Now(), IP: a.clientIP(r.c), Actor: systemAlertUserIdentity(r.user), ActorID: r.uid(), Target: systemAlertUserIdentity(r.user), TargetID: r.uid(), AmountCents: cents, Detail: fmt.Sprintf("提现单 #%d（用户端提交）", id)})
 	return M{"withdrawal_id": id, "status": 0, "amount_cents": cents}, nil
 }
 

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/DATA-DOG/go-sqlmock"
@@ -102,6 +103,44 @@ func TestAgentSettingSavePersistsNullAndExplicitDisabledJSON(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAgentSettingSaveAcceptsFormBooleanFlags(t *testing.T) {
+	a, mock := testApp(t)
+	mock.ExpectQuery("SELECT .* FROM `yu_user`.*`yu_imgo_admin_role`").WithArgs(int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(7))
+	mock.ExpectExec("INSERT INTO `yu_imgo_agent_setting`").
+		WithArgs(int64(7), nil, `{"status":"0"}`, int64(1), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	r := settingRequest(a, "/manage/agentSetting/save", nil)
+	r.c.Request = httptest.NewRequest("POST", "/manage/agentSetting/save", strings.NewReader("agent_user_id=7&inherit_auto_user=true&inherit_auto_group=false&auto_add_group[status]=0"))
+	r.c.Request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	var err error
+	r.p, err = parseParams(r.c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = a.manageAgentSetting(r); err != nil {
+		t.Fatal(err)
+	}
+	if err = mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAgentSettingBool(t *testing.T) {
+	for _, tc := range []struct {
+		value       any
+		want, valid bool
+	}{
+		{true, true, true}, {false, false, true}, {"true", true, true}, {"false", false, true},
+		{nil, false, false}, {"", false, false}, {"no", false, false}, {"1", false, false},
+		{1, false, false}, {[]any{true}, false, false}, {M{}, false, false},
+	} {
+		if got, valid := agentSettingBool(tc.value); got != tc.want || valid != tc.valid {
+			t.Errorf("agentSettingBool(%#v) = %v, %v", tc.value, got, valid)
+		}
 	}
 }
 

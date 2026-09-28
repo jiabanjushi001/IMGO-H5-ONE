@@ -130,16 +130,21 @@ func bankRequest(a *App, path string, uid int64, params M) *request {
 	return &request{app: a, c: c, user: M{"user_id": uid}, p: params}
 }
 
-func TestUserBankCardOnlyReturnsMaskedNumber(t *testing.T) {
+func TestUserBankCardReturnsOwnFullNumber(t *testing.T) {
 	a, mock := testApp(t)
-	mock.ExpectQuery("SELECT user_id,receipt_name,bank_name,branch_name,account_last4,status,remark,version,created_at,updated_at FROM `yu_imgo_bank_card` WHERE user_id").WithArgs(int64(7)).
-		WillReturnRows(sqlmock.NewRows([]string{"user_id", "receipt_name", "bank_name", "branch_name", "account_last4", "status", "remark", "version", "created_at", "updated_at"}).AddRow(7, "测试用户", "中国银行", "北京朝阳支行", "0202", 0, "", 1, 10, 20))
-	result, err := a.bankCard(bankRequest(a, "/enterprise/bank/get", 7, M{}))
+	account := "6222020202020202"
+	encrypted, err := encryptBankAccount(a.cfg.JWTKey, account)
+	if err != nil {
+		t.Fatal(err)
+	}
+	mock.ExpectQuery("SELECT user_id,receipt_name,bank_name,branch_name,account_cipher,account_last4,status,remark,version,created_at,updated_at FROM `yu_imgo_bank_card` WHERE user_id").WithArgs(int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"user_id", "receipt_name", "bank_name", "branch_name", "account_cipher", "account_last4", "status", "remark", "version", "created_at", "updated_at"}).AddRow(7, "测试用户", "中国银行", "北京朝阳支行", encrypted, "0202", 0, "", 1, 10, 20))
+	result, err := a.bankCard(bankRequest(a, "/enterprise/bank/get", 7, M{"user_id": 99}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	card := result.(M)
-	if card["receipt_account_masked"] != "•••• •••• •••• 0202" || card["account_cipher"] != nil || card["account_last4"] != nil || card["bank_name"] != "中国银行" || card["branch_name"] != "北京朝阳支行" {
+	if card["receipt_account"] != account || card["account_cipher"] != nil || card["account_last4"] != nil || card["bank_name"] != "中国银行" || card["branch_name"] != "北京朝阳支行" {
 		t.Fatalf("unexpected card response: %#v", card)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {

@@ -19,10 +19,17 @@ func TestAddonDDLIncludesAgentTables(t *testing.T) {
 	joinedDDL := strings.Join(a.addonTableDDL(), "\n")
 	for _, name := range []string{
 		"imgo_agent_setting", "imgo_agent_auto_state", "imgo_agent_online_sample",
+		"imgo_batch_user_task",
 	} {
 		if !strings.Contains(joinedDDL, name) {
 			t.Fatalf("missing %s", name)
 		}
+	}
+	if !strings.Contains(joinedDDL, "quick_replies JSON NULL") {
+		t.Fatal("agent settings must include per-mentor quick replies")
+	}
+	if !strings.Contains(joinedDDL, "request_cipher LONGTEXT") || !strings.Contains(joinedDDL, "active_actor_user_id BIGINT NULL") {
+		t.Fatal("batch tasks must persist encrypted input and enforce one active task per actor")
 	}
 }
 

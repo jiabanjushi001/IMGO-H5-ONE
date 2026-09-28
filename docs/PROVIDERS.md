@@ -53,7 +53,7 @@
 - `THINKAPI_TOKEN`：原 ThinkAPI AppCode，启用昵称、签名、群公告、文本聊天审核；未配置时不调用，配置后服务故障拒绝提交。
 - `FFMPEG_BIN`、`FFPROBE_BIN`：受信任二进制绝对路径。未配置沿用默认视频占位图；配置后读取时长、抽帧并生成受原视频权限约束的封面。
 - `sysInfo.runMode=2` 社区模式时，沿用 `chatInfo.autoAddUser` 的 status/user_ids/welcome，以及 `autoAddGroup` 的 status/owner_uid/name/userMax。启用自动添加好友后，新注册用户与轮询分配的客服会建立双向好友关系，再由客服私聊发送欢迎语。`autoTask` 保存轮询/群序号。用户、好友关系、欢迎消息和自动规则在同一事务内提交。
-- `IP_DATABASE`：读取随项目提供的旧 17mon 格式数据，原说明保存在 `data/IP_DATABASE_NOTICE.txt`。它不是实时属地服务。
+- `IP_DATABASE`：继续指向随项目提供的 `data/17monipdb.dat`。程序会自动优先加载同目录的 `qqzeng-ip-utf8.dat` 获取省市信息，显示为“省-市”（例如“湖南-邵阳”）；查询不到时回退 17mon 数据。无需增加配置。这些都是离线属地库，不是实时属地服务。
 
 ## 适配参考
 

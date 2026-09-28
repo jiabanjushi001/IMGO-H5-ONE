@@ -21,19 +21,34 @@ import (
 	"time"
 )
 
+const (
+	maxFileUploadMB        int64 = 50
+	defaultVideoUploadMB   int64 = 200
+	maxVideoUploadMB       int64 = 200
+	maxUploadRequestBodyMB int64 = maxVideoUploadMB + 10
+)
+
+func uploadLimitMB(config M, kind string) int64 {
+	if kind == "video" {
+		limit := number(config["videoSize"])
+		if limit < 1 || limit > maxVideoUploadMB {
+			return defaultVideoUploadMB
+		}
+		return limit
+	}
+	limit := number(config["size"])
+	if limit < 1 || limit > maxFileUploadMB {
+		return maxFileUploadMB
+	}
+	return limit
+}
+
 func (a *App) upload(r *request) (any, error) {
 	config := a.config(r.ctx(), "fileUpload")
 	disk := str(config["disk"])
 	file, e := r.c.FormFile("file")
 	if e != nil {
 		return nil, r.fail("缺少上传文件")
-	}
-	max := number(config["size"])
-	if max < 1 || max > 50 {
-		max = 50
-	}
-	if file.Size > max<<20 {
-		return nil, r.fail("文件超过大小限制")
 	}
 	message := obj(r.p["message"])
 	if filepath.Ext(file.Filename) == "" {
@@ -70,6 +85,14 @@ func (a *App) upload(r *request) (any, error) {
 		return nil, r.fail("不允许上传此文件类型")
 	}
 	cate, kind := fileCategory(ext, str(message["type"]) == "voice")
+	limitMB := uploadLimitMB(config, kind)
+	if file.Size > limitMB<<20 {
+		label := "文件"
+		if kind == "video" {
+			label = "视频"
+		}
+		return nil, r.fail(fmt.Sprintf("%s超过大小限制（最大 %d MB）", label, limitMB))
+	}
 	metadata := M{}
 	act := action(r)
 	if act == "uploadavatar" || act == "uploademoji" || act == "uploadimage" {
@@ -109,8 +132,8 @@ func (a *App) upload(r *request) (any, error) {
 	}
 	defer out.Close()
 	hash := md5.New()
-	written, e := io.Copy(io.MultiWriter(out, hash), io.LimitReader(in, (max<<20)+1))
-	if e != nil || written > max<<20 {
+	written, e := io.Copy(io.MultiWriter(out, hash), io.LimitReader(in, (limitMB<<20)+1))
+	if e != nil || written > limitMB<<20 {
 		_ = os.Remove(full)
 		return nil, r.fail("文件写入失败或超出限制")
 	}
@@ -319,9 +342,6 @@ func (a *App) download(c *gin.Context) {
 	uid, authErr := a.mediaUser(c)
 	if authErr != nil {
 		c.Status(401)
-		return
-	}
-	if !a.scopedMediaAccess(c, f) {
 		return
 	}
 	if uid != 1 && !a.canReadFile(c.Request.Context(), uid, f) {

@@ -156,10 +156,39 @@ CREATE TABLE `yu_imgo_admin_role` (
   INDEX imgo_admin_role_status(status)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
+CREATE TABLE `yu_imgo_admin_audit_log` (
+  audit_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  actor_user_id BIGINT NOT NULL,
+  actor_account VARCHAR(64) NOT NULL DEFAULT '',
+  actor_name VARCHAR(100) NOT NULL DEFAULT '',
+  actor_role VARCHAR(64) NOT NULL DEFAULT '',
+  category VARCHAR(32) NOT NULL,
+  action VARCHAR(64) NOT NULL,
+  risk_level VARCHAR(16) NOT NULL,
+  target_type VARCHAR(32) NOT NULL DEFAULT '',
+  target_id VARCHAR(64) NOT NULL DEFAULT '',
+  target_name VARCHAR(64) NOT NULL DEFAULT '',
+  detail VARCHAR(500) NOT NULL DEFAULT '',
+  ip VARCHAR(45) NOT NULL DEFAULT '',
+  user_agent VARCHAR(255) NOT NULL DEFAULT '',
+  request_method VARCHAR(10) NOT NULL DEFAULT '',
+  request_path VARCHAR(191) NOT NULL DEFAULT '',
+  request_headers LONGTEXT NULL,
+  request_data LONGTEXT NULL,
+  status TINYINT NOT NULL DEFAULT 1,
+  error_message VARCHAR(255) NOT NULL DEFAULT '',
+  created_at BIGINT NOT NULL,
+  INDEX imgo_audit_actor(actor_user_id,audit_id),
+  INDEX imgo_audit_category(category,audit_id),
+  INDEX imgo_audit_risk(risk_level,audit_id),
+  INDEX imgo_audit_created(created_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
 CREATE TABLE `yu_imgo_agent_setting` (
   agent_user_id BIGINT PRIMARY KEY,
   auto_add_user JSON NULL,
   auto_add_group JSON NULL,
+  quick_replies JSON NULL,
   updated_by BIGINT NOT NULL,
   updated_at BIGINT NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

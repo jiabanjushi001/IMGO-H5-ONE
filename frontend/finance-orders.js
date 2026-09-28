@@ -6,6 +6,12 @@ function imgoFinanceDate(seconds) {
     ? new Date(Number(seconds) * 1000).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false })
     : '—'
 }
+function imgoWithdrawalStatusName(value) {
+  return ({ 0: '待处理', 1: '已打款', 2: '已拒绝', 3: '已冻结' })[Number(value)] || '未知'
+}
+function imgoWithdrawalStatusColor(value) {
+  return ({ 0: 'warning', 1: 'success', 2: 'danger', 3: 'info' })[Number(value)] || 'info'
+}
 function imgoFinanceSearchInput(h, value, onInput, onSearch) {
   return h('el-input', {
     props: { value, placeholder: '搜索成员账号或姓名', clearable: true },
@@ -73,9 +79,10 @@ const ImgoWithdrawalDetail = {
   props: { visible: Boolean, detail: { type: Object, default: () => ({}) }, processing: Boolean },
   render(h) {
     const detail = this.detail || {}
+    const status = Number(detail.status)
     const info = (label, value) => h('div', [h('span', label), value || '—'])
     return h('el-dialog', {
-      props: { title: '提现订单详情', visible: this.visible, width: '560px', closeOnClickModal: false, appendToBody: true },
+      props: { title: status === 0 || status === 3 ? '编辑提现订单' : '提现订单详情', visible: this.visible, width: '560px', closeOnClickModal: false, appendToBody: true, customClass: 'imgo-finance-withdraw-dialog' },
       on: { close: () => this.$emit('close') }
     }, this.visible ? [
       h('div', { class: 'imgo-finance-detail' }, [
@@ -83,24 +90,28 @@ const ImgoWithdrawalDetail = {
         info('成员', `${detail.account || '—'}（ID ${detail.user_id || '—'}）`),
         info('金额', h('strong', imgoFinanceMoney(detail.amount_cents))),
         info('申请时间', imgoFinanceDate(detail.created_at)),
-        info('状态', ['待处理', '已打款', '已拒绝'][Number(detail.status)] || '未知'),
+        info('状态', imgoWithdrawalStatusName(status)),
         info('收款姓名', detail.receipt_name),
         info('收款银行', detail.bank_name),
         info('支行名称', detail.branch_name),
         info('收款卡号', h('strong', { class: 'imgo-finance-account' }, detail.receipt_account || '—'))
       ]),
       h('div', { class: 'imgo-finance-remark' }, [
-        h('label', '处理备注 / 拒绝原因'),
+        h('label', status === 3 ? '冻结原因' : '处理备注 / 冻结或拒绝原因'),
         h('el-input', {
-          props: { type: 'textarea', rows: 3, value: detail.remark || '', disabled: Number(detail.status) !== 0, showWordLimit: true },
-          attrs: { maxlength: 500, placeholder: '拒绝时须填写原因；确认打款可填写转账备注' },
+          props: { type: 'textarea', rows: 3, value: detail.remark || '', disabled: status !== 0, showWordLimit: true },
+          attrs: { maxlength: 500, placeholder: '冻结或拒绝时须填写原因；确认打款可填写转账备注' },
           on: { input: value => this.$emit('remark-change', value) }
         })
       ]),
-      h('span', { slot: 'footer' }, Number(detail.status) === 0 ? [
+      h('span', { slot: 'footer', class: 'imgo-finance-dialog-actions' }, status === 0 ? [
         h('el-button', { on: { click: () => this.$emit('close') } }, '关闭'),
+        h('el-button', { props: { type: 'warning', plain: true, loading: this.processing }, on: { click: () => this.$emit('freeze', true) } }, '冻结订单'),
         h('el-button', { props: { type: 'danger', loading: this.processing }, on: { click: () => this.$emit('review', 2) } }, '拒绝并退款'),
         h('el-button', { props: { type: 'primary', loading: this.processing }, on: { click: () => this.$emit('review', 1) } }, '确认已线下打款')
+      ] : status === 3 ? [
+        h('el-button', { on: { click: () => this.$emit('close') } }, '关闭'),
+        h('el-button', { props: { type: 'primary', loading: this.processing }, on: { click: () => this.$emit('freeze', false) } }, '解除冻结')
       ] : [h('el-button', { on: { click: () => this.$emit('close') } }, '关闭')])
     ] : [])
   }
@@ -113,7 +124,7 @@ const ImgoWithdrawalOrders = {
   },
   mounted() { this.refresh() },
   methods: {
-    statusName(value) { return ['待处理', '已打款', '已拒绝'][Number(value)] || '未知' },
+    statusName(value) { return imgoWithdrawalStatusName(value) },
     async refresh() {
       this.loading = true
       try {
@@ -154,6 +165,27 @@ const ImgoWithdrawalOrders = {
         await this.refresh()
       } catch (error) { this.$message.error(error.message || '处理失败，请重试') }
       finally { this.processing = false }
+    },
+    async freeze(frozen) {
+      if (!this.detail.withdrawal_id || this.processing) return
+      const remark = String(this.detail.remark || '').trim()
+      if (frozen && remark.length < 2) { this.$message.warning('冻结时请填写至少 2 个字的原因'); return }
+      if (remark.length > 500) { this.$message.warning('冻结原因不能超过 500 字'); return }
+      try {
+        await this.$confirm(frozen
+          ? '冻结后订单不能打款或拒绝，提现金额仍保留在冻结余额中。'
+          : '解除后订单恢复待处理，提现金额仍保持冻结，等待打款或拒绝。',
+        frozen ? '确认冻结订单' : '确认解除冻结', { type: 'warning', confirmButtonText: frozen ? '确认冻结' : '解除冻结', cancelButtonText: '取消' })
+      } catch (_) { return }
+      this.processing = true
+      try {
+        const result = await this.$api.walletApi.freeze({ withdrawal_id: this.detail.withdrawal_id, frozen: frozen ? 1 : 0, remark: frozen ? remark : '' })
+        if (result.code !== 0) throw Error(result.msg || '操作失败')
+        this.$message.success(frozen ? '提现订单已冻结' : '提现订单已解除冻结')
+        this.close()
+        await this.refresh()
+      } catch (error) { this.$message.error(error.message || '操作失败，请重试') }
+      finally { this.processing = false }
     }
   },
   render(h) {
@@ -167,7 +199,7 @@ const ImgoWithdrawalOrders = {
           imgoFinanceSearchInput(h, this.keywords, value => { this.keywords = value }, this.search),
           h('el-select', { props: { value: this.status }, on: { input: value => { this.status = value; this.search() } } }, [
             h('el-option', { props: { label: '全部状态', value: '' } }),
-            [0, 1, 2].map(value => h('el-option', { key: value, props: { label: this.statusName(value), value: String(value) } }))
+            [0, 1, 2, 3].map(value => h('el-option', { key: value, props: { label: this.statusName(value), value: String(value) } }))
           ]),
           h('el-button', { props: { type: 'primary' }, on: { click: this.search } }, '查询'),
           h('el-button', { props: { icon: 'el-icon-refresh', loading: this.loading }, on: { click: this.refresh } }, '刷新')
@@ -177,17 +209,17 @@ const ImgoWithdrawalOrders = {
           col('成员账号', 'account', '145'),
           h('el-table-column', { props: { label: '订单金额', width: '135' }, scopedSlots: { default: scope => h('strong', imgoFinanceMoney(scope.row.amount_cents)) } }),
           h('el-table-column', { props: { label: '时间', width: '190' }, scopedSlots: { default: scope => imgoFinanceDate(scope.row.created_at) } }),
-          h('el-table-column', { props: { label: '状态', width: '105' }, scopedSlots: { default: scope => h('el-tag', { props: { type: ['warning', 'success', 'danger'][Number(scope.row.status)] || 'info', size: 'small' } }, this.statusName(scope.row.status)) } }),
+          h('el-table-column', { props: { label: '状态', width: '105' }, scopedSlots: { default: scope => h('el-tag', { props: { type: imgoWithdrawalStatusColor(scope.row.status), size: 'small' } }, this.statusName(scope.row.status)) } }),
           col('收款银行', 'bank_name', '160'),
           h('el-table-column', { props: { label: '卡号末四位', width: '130' }, scopedSlots: { default: scope => '•••• ' + scope.row.account_last4 } }),
           col('处理备注', 'remark'),
-          h('el-table-column', { props: { label: '操作', width: '115', fixed: 'right', align: 'center' }, scopedSlots: { default: scope => h('el-button', { props: { type: 'text' }, on: { click: () => this.open(scope.row) } }, Number(scope.row.status) === 0 ? '查看处理' : '查看详情') } })
+          h('el-table-column', { props: { label: '操作', width: '115', fixed: 'right', align: 'center' }, scopedSlots: { default: scope => h('el-button', { props: { type: 'text' }, on: { click: () => this.open(scope.row) } }, [0, 3].includes(Number(scope.row.status)) ? '编辑处理' : '查看详情') } })
         ]),
         imgoFinancePagination(h, this)
       ]),
       h(ImgoWithdrawalDetail, {
         props: { visible: this.visible, detail: this.detail, processing: this.processing },
-        on: { close: this.close, 'remark-change': value => { this.$set(this.detail, 'remark', value) }, review: this.review }
+        on: { close: this.close, 'remark-change': value => { this.$set(this.detail, 'remark', value) }, review: this.review, freeze: this.freeze }
       })
     ])
   }

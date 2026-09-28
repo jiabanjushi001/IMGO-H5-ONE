@@ -40,37 +40,6 @@ func (a *App) mediaUser(c *gin.Context) (int64, error) {
 	return number(u["user_id"]), nil
 }
 
-// Media keeps the existing chat authorization and adds the current agent's uploader scope.
-func (a *App) scopedMediaAccess(c *gin.Context, f M) bool {
-	value, ok := c.Get("mediaUser")
-	if !ok {
-		c.AbortWithStatus(403)
-		return false
-	}
-	user, ok := value.(M)
-	if !ok {
-		c.AbortWithStatus(403)
-		return false
-	}
-	if number(user["user_id"]) == 1 || number(user["admin_role_id"]) == 0 {
-		return true
-	}
-	// Agent scope excludes the agent account itself for management writes. Media
-	// uploaded by that same account (including its profile avatar) remains theirs.
-	if number(f["user_id"]) == number(user["user_id"]) {
-		return true
-	}
-	scope, err := a.adminScope(c.Request.Context(), user)
-	if err == nil && !scope.Global {
-		err = a.requireScopedUser(c.Request.Context(), a.db, scope, number(f["user_id"]))
-	}
-	if err != nil {
-		c.AbortWithStatus(403)
-		return false
-	}
-	return true
-}
-
 func (a *App) canReadFile(ctx context.Context, uid int64, f M) bool {
 	if number(f["parent_id"]) > 0 {
 		parent, e := one(ctx, a.db, "SELECT * FROM "+a.t("file")+" WHERE file_id=? AND parent_id=0 AND status=1", f["parent_id"])
@@ -116,11 +85,9 @@ func (a *App) authorizeStorage(c *gin.Context, p string) bool {
 		c.Status(401)
 		return false
 	}
-	if !a.scopedMediaAccess(c, f) {
-		return false
-	}
 	// The system super administrator moderates all messages. Other accounts
-	// still need chat/file access, with the existing avatar exception below.
+	// use chat/file access regardless of their administrative data scope. Admin
+	// scope controls management listings and writes, not media in a valid chat.
 	if uid != 1 && !a.canReadFile(c.Request.Context(), uid, f) { // Profile avatars are visible to authenticated users.
 		_, err := one(c.Request.Context(), a.db, "SELECT user_id FROM "+a.t("user")+" WHERE avatar=? AND status=1 AND delete_time=0 LIMIT 1", "/"+p)
 		if err != nil {

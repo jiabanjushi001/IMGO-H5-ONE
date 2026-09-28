@@ -55,6 +55,7 @@ func main() {
 		slog.Error("schema", "error", e)
 		os.Exit(1)
 	}
+	app.StartBatchUserTasks()
 	app.StartOverviewMetrics()
 	httpServer := &http.Server{Addr: cfg.Addr, Handler: app.Router(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 90 * time.Second, WriteTimeout: 90 * time.Second, IdleTimeout: 90 * time.Second, MaxHeaderBytes: 1 << 20}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

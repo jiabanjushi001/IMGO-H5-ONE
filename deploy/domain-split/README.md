@@ -27,10 +27,9 @@
 ```sh
 IMGO_ADDR=127.0.0.1:8088
 BASE_URL=https://imgo.myad.top
-TRUSTED_PROXIES=127.0.0.1,::1
 ```
 
-Go 默认只信任同机 Nginx，并从 Nginx 设置的 `X-Forwarded-For` 读取客户端 IP。旧版本如果把该项留空，会把所有登录 IP 记录成 `127.0.0.1`。
+Go 从 Nginx 传入的 `X-Forwarded-For` 读取第一个合法 IP 作为客户端 IP，可自动适配多层反向代理，无需维护代理服务器 IP 列表。代理层应始终传递真实的 `X-Forwarded-For`。
 
 HTTP 跨域采用 *，仅支持显式 Authorization Token，不开放 Cookie 凭证跨域；不读取 ALLOWED_ORIGINS，见 docs/CORS.md。H5 apiUrl 使用 `https://imgo.myad.top`，WebSocket 使用 `wss://imgo.myad.top/wss`。后台页面的管理请求可通过自己的域名转发；不要在 API 域名直接禁止 `/manage/`，以免现有前端显式配置 API 域名时中断管理功能。修改 Go 环境配置后用原进程管理方式重启。
 

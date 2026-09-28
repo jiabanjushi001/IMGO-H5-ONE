@@ -3,6 +3,7 @@ package server
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 )
@@ -88,6 +89,7 @@ func (a *App) manageWalletRecharge(r *request, scope adminScope) (any, error) {
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
+	a.queueSystemAlert(systemAlertEvent{Type: "recharge", OccurredAt: time.Now(), IP: a.clientIP(r.c), Actor: systemAlertUserIdentity(r.user), ActorID: r.uid(), TargetID: uid, AmountCents: total, Detail: fmt.Sprintf("充值订单 #%d；本金 ¥%d.%02d，赠送 ¥%d.%02d", id, principal/100, principal%100, bonus/100, bonus%100)})
 	return M{"order_id": id, "total_cents": total, "bonus_cents": bonus, "status": 1}, nil
 }
 
@@ -165,5 +167,6 @@ func (a *App) manageWalletWithdraw(r *request, scope adminScope) (any, error) {
 	if err = tx.Commit(); err != nil {
 		return nil, err
 	}
+	a.queueSystemAlert(systemAlertEvent{Type: "admin_withdraw", OccurredAt: time.Now(), IP: a.clientIP(r.c), Actor: systemAlertUserIdentity(r.user), ActorID: r.uid(), TargetID: uid, AmountCents: amount, Detail: fmt.Sprintf("提现单 #%d（后台提交）", id)})
 	return M{"withdrawal_id": id, "amount_cents": amount, "status": 0}, nil
 }

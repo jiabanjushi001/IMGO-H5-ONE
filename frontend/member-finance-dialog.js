@@ -163,7 +163,7 @@ const ImgoMemberFinanceDialog = {
       history('最近提现订单', this.withdrawals, [
         h('el-table-column', { props: { label: '订单号', width: '145' }, scopedSlots: { default: scope => 'TX-' + String(scope.row.withdrawal_id).padStart(8, '0') } }),
         h('el-table-column', { props: { label: '金额', width: '110' }, scopedSlots: { default: scope => this.money(scope.row.amount_cents) } }),
-        h('el-table-column', { props: { label: '状态', width: '100' }, scopedSlots: { default: scope => ['待处理', '已打款', '已拒绝'][Number(scope.row.status)] || '未知' } }),
+        h('el-table-column', { props: { label: '状态', width: '100' }, scopedSlots: { default: scope => ({ 0: '待处理', 1: '已打款', 2: '已拒绝', 3: '已冻结' })[Number(scope.row.status)] || '未知' } }),
         h('el-table-column', { props: { label: '时间', width: '170' }, scopedSlots: { default: scope => this.date(scope.row.created_at) } })
       ]),
       history('最近余额账变', this.entries, [
