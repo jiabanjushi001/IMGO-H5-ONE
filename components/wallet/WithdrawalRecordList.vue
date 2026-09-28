@@ -1,6 +1,7 @@
 <script setup>
 const props = defineProps({ records: { type: Array, default: () => [] } })
-const statusName = status => ['待处理', '已打款', '已拒绝'][Number(status)] || '未知'
+const withdrawalStatuses = Object.freeze({ 0: '待处理', 1: '已打款', 2: '已拒绝', 3: '已冻结' })
+const statusName = status => withdrawalStatuses[Number(status)] || '未知'
 const dateText = timestamp => {
 	const seconds = Number(timestamp)
 	return seconds > 0 ? new Date(seconds * 1000).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : '—'

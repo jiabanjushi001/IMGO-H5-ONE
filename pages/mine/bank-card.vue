@@ -16,7 +16,7 @@
 			<view v-else>
 				<view v-if="bound" class="bank-current">
 					<view class="bank-current-top"><text>当前银行卡</text><text class="bank-status" :class="statusClass">{{ statusText }}</text></view>
-					<view class="bank-number">{{ maskedAccount }}</view>
+					<view class="bank-number">{{ savedAccount }}</view>
 						<view class="bank-owner">收款姓名：{{ savedName }}</view>
 						<view v-if="savedBankName" class="bank-owner">收款银行：{{ savedBankName }}</view>
 						<view v-if="savedBranchName" class="bank-owner">支行名称：{{ savedBranchName }}</view>
@@ -40,7 +40,7 @@
 						<text class="bank-label">支行名称</text>
 						<input v-model.trim="branchName" maxlength="120" placeholder="请输入支行名称" autocomplete="off" />
 					</view>
-					<view v-if="bound" class="bank-hint">为保护卡号，已绑定卡号只显示末四位。修改姓名时可将卡号留空；修改卡号请填写完整新卡号。</view>
+					<view v-if="bound" class="bank-hint">修改其他资料时可将卡号留空；修改卡号请填写完整新卡号。</view>
 					<button class="bank-submit" :disabled="saving" @tap="save">{{ saving ? '保存中…' : (bound ? '保存修改' : '提交绑卡') }}</button>
 				</view>
 				<view v-else class="bank-locked">
@@ -69,7 +69,7 @@ const savedBankName = shallowRef('')
 const branchName = shallowRef('')
 const savedBranchName = shallowRef('')
 const cardNumber = shallowRef('')
-const maskedAccount = shallowRef('')
+const savedAccount = shallowRef('')
 const status = shallowRef(0)
 const remark = shallowRef('')
 const statusText = computed(() => ['未处理', '同意', '拒绝'][status.value] || '未处理')
@@ -89,7 +89,7 @@ async function load() {
 		savedBankName.value = card.bank_name || ''
 		branchName.value = card.branch_name || ''
 		savedBranchName.value = card.branch_name || ''
-		maskedAccount.value = card.receipt_account_masked || ''
+		savedAccount.value = card.receipt_account || '暂无完整卡号'
 		status.value = Number(card.status || 0)
 		remark.value = card.remark || ''
 		cardNumber.value = ''
@@ -173,7 +173,7 @@ onShow(load)
 .bank-status.pending { background: rgba(255,204,68,.24); color: #ffe08a; }
 .bank-status.approved { background: rgba(96,229,176,.25); color: #a1ffd3; }
 .bank-status.rejected { background: rgba(255,130,130,.28); color: #ffb7b7; }
-.bank-number { margin: 42rpx 0 28rpx; font-size: 37rpx; letter-spacing: 2rpx; font-weight: 600; }
+.bank-number { margin: 42rpx 0 28rpx; font-size: 37rpx; letter-spacing: 2rpx; font-weight: 600; overflow-wrap: anywhere; }
 .bank-owner, .bank-remark { font-size: 25rpx; color: #e3eaff; line-height: 1.7; }
 .bank-remark { border-top: 1px solid rgba(255,255,255,.2); margin-top: 15rpx; padding-top: 15rpx; }
 .bank-form-title { font-size: 30rpx; font-weight: 700; margin-bottom: 12rpx; }

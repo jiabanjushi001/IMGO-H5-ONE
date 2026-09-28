@@ -20,20 +20,42 @@ function resolveApiUrl() {
   return runtimeEndpoint(window.httpUrl, ['http:', 'https:']) ||
     runtimeEndpoint(configuredServer?.httpUrl, ['http:', 'https:']);
 }
+function deriveWssUrl(apiBase) {
+  const validApiBase = runtimeEndpoint(apiBase, ['http:', 'https:']);
+  return validApiBase ? validApiBase.replace(/^http/, 'ws') + '/wss' : '';
+}
+function normalizeWssUrl(apiBase, candidate) {
+  const fallback = deriveWssUrl(apiBase);
+  const configured = runtimeEndpoint(candidate, ['ws:', 'wss:']);
+  if (!configured) return fallback;
+  try {
+    const apiEndpoint = new URL(apiBase);
+    const socketEndpoint = new URL(configured);
+    // 同一主机和端口必须与 API 使用相同的 TLS 模式：HTTP→WS，HTTPS→WSS。
+    // 独立的 WebSocket 网关允许保留自己的协议配置。
+    if (apiEndpoint.host === socketEndpoint.host) {
+      socketEndpoint.protocol = apiEndpoint.protocol === 'https:' ? 'wss:' : 'ws:';
+      return socketEndpoint.href.replace(/\/+$/, '');
+    }
+    return configured;
+  } catch (error) {
+    return fallback;
+  }
+}
 function resolveWssUrl(apiBase) {
   const configuredServer = Array.isArray(window.apiServers)
     ? window.apiServers.find(server => runtimeEndpoint(server?.httpUrl, ['http:', 'https:']) === apiBase) ||
       window.apiServers.find(server => runtimeEndpoint(server?.wsUrl, ['ws:', 'wss:']))
     : null;
-  return runtimeEndpoint(window.wsUrl, ['ws:', 'wss:']) ||
-    runtimeEndpoint(configuredServer?.wsUrl, ['ws:', 'wss:']) ||
-    (apiBase ? apiBase.replace(/^http/, 'ws') + '/wss' : '');
+  const configuredWssUrl = runtimeEndpoint(window.wsUrl, ['ws:', 'wss:']) ||
+    runtimeEndpoint(configuredServer?.wsUrl, ['ws:', 'wss:']);
+  return normalizeWssUrl(apiBase, configuredWssUrl);
 }
 const configuredApiUrl = resolveApiUrl();
 if (!configuredApiUrl) throw new Error('缺少有效的 config.js API 配置，H5 已停止启动');
 apiUrl = configuredApiUrl;
 // #endif
-let wssUrl = apiUrl.replace(/^http/, 'ws') + '/wss';
+let wssUrl = deriveWssUrl(apiUrl);
 // #ifdef H5
 wssUrl = resolveWssUrl(apiUrl) || wssUrl;
 // #endif

@@ -11,6 +11,7 @@
 			<WalletSummaryCard
 				:available-cents="walletAvailableCents"
 				:pending-cents="walletPendingCents"
+				:frozen-cents="walletFrozenCents"
 				:loading="walletLoading"
 				:error="walletError"
 				@refresh="loadWallet"
@@ -84,7 +85,8 @@ export default {
 			walletLoading: true,
 			walletError: false,
 			walletAvailableCents: 0,
-			walletPendingCents: 0
+			walletPendingCents: 0,
+			walletFrozenCents: 0
 		}
 	},
 	computed: {
@@ -129,6 +131,7 @@ export default {
 				if (res.code !== 0) throw new Error(res.msg || '获取钱包余额失败')
 				this.walletAvailableCents = Number(res.data.available_cents) || 0
 				this.walletPendingCents = Number(res.data.pending_cents) || 0
+				this.walletFrozenCents = Number(res.data.frozen_cents) || 0
 			} catch (error) {
 				this.walletError = true
 			} finally {

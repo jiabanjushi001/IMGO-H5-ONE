@@ -7,8 +7,10 @@ window.appLogo = ''
 // 备用站可继续在数组中添加；不要填写尚未部署或仅本机可用的地址。
 // 注意：不要把 127.0.0.1 / localhost 写进正式包，否则探测失败会误切到本地导致 wss 连不上。
 window.apiServers = [
+    { httpUrl: 'http://127.0.0.1:8088', wsUrl: 'ws://127.0.0.1:8088/wss' },
+
   //{ httpUrl: 'https://imgo.myad.top', wsUrl: 'wss://imgo.myad.top/wss' },
-  { httpUrl: 'https://ipa.1bxms.hynbn.com', wsUrl: 'wss://ipa.1bxms.hynbn.com/wss' },
-  { httpUrl: 'https://ipa.imbxms.com', wsUrl: 'wss://ipa.imbxms.com/wss' },
-  { httpUrl: 'https://ipa.imbxmscf.com', wsUrl: 'wss://ipa.imbxmscf.com/wss' },
+  // { httpUrl: 'https://ipa.1bxms.hynbn.com', wsUrl: 'wss://ipa.1bxms.hynbn.com/wss' },
+  // { httpUrl: 'https://ipa.imbxms.com', wsUrl: 'wss://ipa.imbxms.com/wss' },
+  // { httpUrl: 'https://ipa.imbxmscf.com', wsUrl: 'wss://ipa.imbxmscf.com/wss' },
 ]
