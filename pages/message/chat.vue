@@ -131,12 +131,6 @@
 		<view class="cu-modal bottom-modal" :class="modelName=='moreOpt'?'show':''" @tap="modelName=''">
 			<view class="cu-dialog" v-if="curMsg">
 				<view class="cu-list menu bg-white">
-					<view class="cu-item" @tap="undoMsg()" v-if="(getTime() - curMsg.sendTime < globalConfig.chatInfo.redoTime*1000 && curMsg.fromUser.id==user.user_id) || contact.role<3">
-						<view class="content padding-tb-sm">
-							<text class="cuIcon-repeal"></text>
-							<text>撤回消息</text>
-						</view>
-					</view>
 					<view class="cu-item" @tap="copyMsg()">
 						<view class="content padding-tb-sm">
 							<text class="cuIcon-copy"></text>
