@@ -136,6 +136,129 @@ func TestSetNoSpeakOwnerAndManager(t *testing.T) {
 	}
 }
 
+func TestCanInviteGroupMember(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		role          int64
+		managerInvite int64
+		allowed       bool
+	}{
+		{"owner remains allowed when switch is off", 1, 0, true},
+		{"owner remains allowed when switch is on", 1, 1, true},
+		{"manager allowed when enabled", 2, 1, true},
+		{"manager denied when disabled", 2, 0, false},
+		{"ordinary member denied when enabled", 3, 1, false},
+		{"ordinary member denied when disabled", 3, 0, false},
+		{"outsider denied", 0, 1, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := canInviteGroupMember(tc.role, tc.managerInvite); got != tc.allowed {
+				t.Fatalf("canInviteGroupMember(%d, %d)=%v, want %v", tc.role, tc.managerInvite, got, tc.allowed)
+			}
+		})
+	}
+}
+
+func TestCanViewGroupMemberAccount(t *testing.T) {
+	tests := []struct {
+		name      string
+		role      int64
+		adminRead bool
+		want      bool
+	}{
+		{"group owner", 1, false, true},
+		{"group manager", 2, false, true},
+		{"ordinary member", 3, false, false},
+		{"system administrator", 0, true, true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := canViewGroupMemberAccount(tt.role, tt.adminRead); got != tt.want {
+				t.Fatalf("canViewGroupMemberAccount(%d, %v) = %v, want %v", tt.role, tt.adminRead, got, tt.want)
+			}
+		})
+	}
+}
+
+func TestManageGroupOwnerCanSetAnyMemberAsManager(t *testing.T) {
+	a, mock := testApp(t)
+	c, _ := gin.CreateTestContext(httptest.NewRecorder())
+	c.Request = httptest.NewRequest("POST", "/manage/Group/setManager", nil)
+
+	expectAgentMemberScope(mock)
+	mock.ExpectQuery("SELECT owner_id FROM `yu_group`").WithArgs(int64(5)).WillReturnRows(
+		sqlmock.NewRows([]string{"owner_id"}).AddRow(7),
+	)
+	expectResourceUser(mock, 9, false)
+	mock.ExpectQuery("SELECT owner_id FROM `yu_group`").WithArgs(int64(5)).WillReturnRows(
+		sqlmock.NewRows([]string{"owner_id"}).AddRow(7),
+	)
+	mock.ExpectQuery("SELECT \\* FROM `yu_group`").WithArgs(int64(5)).WillReturnRows(
+		sqlmock.NewRows([]string{"group_id", "owner_id", "setting", "status"}).AddRow(5, 7, `{}`, 1),
+	)
+	mock.ExpectQuery("SELECT gu.\\*").WithArgs(int64(5), int64(7)).WillReturnRows(
+		sqlmock.NewRows([]string{"role"}).AddRow(1),
+	)
+	mock.ExpectExec("UPDATE `yu_group_user` SET .*role.*WHERE group_id=\\? AND user_id=\\? AND status=1").
+		WithArgs(int64(2), int64(5), int64(9)).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectQuery("SELECT user_id FROM `yu_group_user`").WithArgs(int64(5)).WillReturnRows(
+		sqlmock.NewRows([]string{"user_id"}).AddRow(7).AddRow(9),
+	)
+
+	_, err := a.manageGroup(&request{
+		app:  a,
+		c:    c,
+		p:    M{"group_id": 5, "user_id": 9, "role": 2},
+		user: M{"user_id": 7, "admin_role_id": 3},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAddGroupUserRejectsUnauthorizedInviters(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		role    int
+		setting string
+	}{
+		{"ordinary member cannot invite", 3, `{"manager_invite":1}`},
+		{"manager cannot invite when disabled", 2, `{"manager_invite":0}`},
+		{"legacy invite flag does not enable managers", 2, `{"invite":1}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, mock := testApp(t)
+			c, _ := gin.CreateTestContext(httptest.NewRecorder())
+			c.Request = httptest.NewRequest("POST", "/enterprise/group/addGroupUser", nil)
+			mock.ExpectQuery("SELECT \\* FROM `yu_group`").WithArgs(int64(5)).WillReturnRows(
+				sqlmock.NewRows([]string{"group_id", "owner_id", "setting"}).
+					AddRow(5, 8, tc.setting),
+			)
+			mock.ExpectQuery("SELECT gu.\\*").WithArgs(int64(5), int64(2)).WillReturnRows(
+				sqlmock.NewRows([]string{"role"}).AddRow(tc.role),
+			)
+
+			_, err := a.group(&request{
+				app:  a,
+				c:    c,
+				p:    M{"group_id": "group-5", "user_ids": []int64{9}},
+				user: M{"user_id": 2},
+			})
+			var denied clientError
+			if !errors.As(err, &denied) || denied.code != 403 {
+				t.Fatalf("expected 403, err=%v", err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
 func TestGroupMuteSettingOwnerAndManager(t *testing.T) {
 	current := `{"manage":1,"invite":0,"nospeak":0,"history":1,"number_join":2}`
 	for _, tc := range []struct {

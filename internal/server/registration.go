@@ -128,7 +128,7 @@ func (a *App) applyRegistrationAutomation(ctx context.Context, tx *sql.Tx, uid i
 				name = "群聊"
 			}
 			name += fmt.Sprint(seq)
-			gid, e = insert(ctx, tx, a.t("group"), M{"name": name, "name_py": namePinyin(name), "create_user": owner, "owner_id": owner, "create_time": time.Now().Unix(), "status": 1, "setting": `{"manage":0,"invite":1,"nospeak":0,"history":1}`})
+			gid, e = insert(ctx, tx, a.t("group"), M{"name": name, "name_py": namePinyin(name), "create_user": owner, "owner_id": owner, "create_time": time.Now().Unix(), "status": 1, "setting": `{"manage":0,"invite":1,"manager_invite":0,"nospeak":0,"history":1}`})
 			if e != nil {
 				return 0, e
 			}

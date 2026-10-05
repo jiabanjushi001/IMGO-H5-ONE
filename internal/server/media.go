@@ -88,7 +88,7 @@ func (a *App) authorizeStorage(c *gin.Context, p string) bool {
 	// The system super administrator moderates all messages. Other accounts
 	// use chat/file access regardless of their administrative data scope. Admin
 	// scope controls management listings and writes, not media in a valid chat.
-	if uid != 1 && !a.canReadFile(c.Request.Context(), uid, f) { // Profile avatars are visible to authenticated users.
+	if uid != 1 && !a.canReadFile(c.Request.Context(), uid, f) && !a.canReadIdentityFile(c.Request.Context(), uid, f) { // Profile avatars are visible to authenticated users.
 		_, err := one(c.Request.Context(), a.db, "SELECT user_id FROM "+a.t("user")+" WHERE avatar=? AND status=1 AND delete_time=0 LIMIT 1", "/"+p)
 		if err != nil {
 			c.Status(403)

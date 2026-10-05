@@ -12,6 +12,26 @@ import (
 	"time"
 )
 
+const (
+	httpReadHeaderTimeout = 10 * time.Second
+	httpRequestTimeout    = 30 * time.Minute
+	httpIdleTimeout       = 90 * time.Second
+)
+
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: httpReadHeaderTimeout,
+		// A permitted 200 MB video can take well over 90 seconds on a normal
+		// uplink. The request body remains capped by Router's MaxBytesReader.
+		ReadTimeout:    httpRequestTimeout,
+		WriteTimeout:   httpRequestTimeout,
+		IdleTimeout:    httpIdleTimeout,
+		MaxHeaderBytes: 1 << 20,
+	}
+}
+
 func main() {
 	migrate := flag.Bool("migrate", false, "apply additive migration to existing database")
 	initialize := flag.Bool("init", false, "initialize an empty database")
@@ -57,7 +77,7 @@ func main() {
 	}
 	app.StartBatchUserTasks()
 	app.StartOverviewMetrics()
-	httpServer := &http.Server{Addr: cfg.Addr, Handler: app.Router(), ReadHeaderTimeout: 10 * time.Second, ReadTimeout: 90 * time.Second, WriteTimeout: 90 * time.Second, IdleTimeout: 90 * time.Second, MaxHeaderBytes: 1 << 20}
+	httpServer := newHTTPServer(cfg.Addr, app.Router())
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go func() {

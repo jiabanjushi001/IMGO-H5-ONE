@@ -10,9 +10,9 @@ import (
 func TestAgentNewGroupMemberPickerOnlyListsDescendants(t *testing.T) {
 	a, mock := testApp(t)
 	expectAgentMemberScope(mock)
-	mock.ExpectQuery("SELECT user_id,realname,avatar,name_py FROM `yu_user` u.*scope_path").
+	mock.ExpectQuery("SELECT user_id,account,realname,avatar,name_py FROM `yu_user` u.*scope_path").
 		WithArgs(int64(7), int64(0), int64(7), int64(7)).
-		WillReturnRows(sqlmock.NewRows([]string{"user_id", "realname", "avatar", "name_py"}).AddRow(8, "直属成员", "", "zhishu"))
+		WillReturnRows(sqlmock.NewRows([]string{"user_id", "account", "realname", "avatar", "name_py"}).AddRow(8, "child8", "直属成员", "", "zhishu"))
 
 	result, err := a.group(agentMemberRequest(a, "/enterprise/group/getAllUser", M{}))
 	if err != nil {
@@ -21,6 +21,9 @@ func TestAgentNewGroupMemberPickerOnlyListsDescendants(t *testing.T) {
 	users := result.([]M)
 	if len(users) != 1 || number(users[0]["user_id"]) != 8 {
 		t.Fatalf("member picker result = %#v", result)
+	}
+	if users[0]["member_label"] != "直属成员（child8）" {
+		t.Fatalf("member picker label = %#v", users[0]["member_label"])
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)

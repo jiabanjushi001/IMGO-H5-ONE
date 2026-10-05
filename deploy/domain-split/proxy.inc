@@ -7,6 +7,7 @@ proxy_set_header X-Forwarded-Proto $scheme;
 proxy_set_header Upgrade $http_upgrade;
 # No global map needed when pasting into a BaoTa site configuration.
 proxy_set_header Connection "upgrade";
-proxy_read_timeout 120s;
-proxy_send_timeout 120s;
+client_body_timeout 1800s;
+proxy_read_timeout 1800s;
+proxy_send_timeout 1800s;
 proxy_buffering off;

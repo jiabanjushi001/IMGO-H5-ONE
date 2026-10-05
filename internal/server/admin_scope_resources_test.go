@@ -115,6 +115,9 @@ func TestAgentScopeGroupRejectsForeignOwnerAndTargets(t *testing.T) {
 			mock.ExpectQuery("SELECT owner_id FROM `yu_group` WHERE group_id=").WithArgs(int64(9)).WillReturnRows(sqlmock.NewRows([]string{"owner_id"}).AddRow(12))
 			expectResourceUser(mock, 12, true)
 			expectResourceUser(mock, 99, false)
+			if act == "setManager" {
+				mock.ExpectQuery("SELECT owner_id FROM `yu_group` WHERE group_id=").WithArgs(int64(9)).WillReturnRows(sqlmock.NewRows([]string{"owner_id"}).AddRow(12))
+			}
 			_, err := a.manageGroup(agentMemberRequest(a, "/manage/group/"+act, M{"group_id": 9, "user_id": 99, "user_ids": []any{99}, "role": 2}))
 			assertDenied(t, err)
 			if err := mock.ExpectationsWereMet(); err != nil {
@@ -454,7 +457,7 @@ func TestAgentScopeGroupCandidateListContainsOnlyDescendants(t *testing.T) {
 	expectAgentMemberScope(mock)
 	mock.ExpectQuery("SELECT owner_id FROM `yu_group`").WithArgs(int64(9)).WillReturnRows(sqlmock.NewRows([]string{"owner_id"}).AddRow(12))
 	expectResourceUser(mock, 12, true)
-	mock.ExpectQuery("SELECT user_id,realname,avatar,name_py FROM `yu_user`.*scope_path.descendant_user_id=u.user_id").WithArgs(int64(7), int64(9), int64(7), int64(7)).WillReturnRows(sqlmock.NewRows([]string{"user_id", "realname"}).AddRow(13, "下级"))
+	mock.ExpectQuery("SELECT user_id,account,realname,avatar,name_py FROM `yu_user`.*scope_path.descendant_user_id=u.user_id").WithArgs(int64(7), int64(9), int64(7), int64(7)).WillReturnRows(sqlmock.NewRows([]string{"user_id", "account", "realname"}).AddRow(13, "child13", "下级"))
 	result, err := a.group(agentMemberRequest(a, "/enterprise/group/getAllUser", M{"group_id": 9}))
 	if err != nil || len(result.([]M)) != 1 {
 		t.Fatalf("result=%v error=%v", result, err)

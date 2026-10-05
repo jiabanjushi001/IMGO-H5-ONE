@@ -84,8 +84,18 @@ func (a *App) public(r *request) (any, error) {
 		e := r.exec("DELETE FROM "+a.t("imgo_session")+" WHERE sid=?", r.claims.SID)
 		a.hub.disconnectSession(r.claims.SID)
 		return nil, e
-	case "binduid", "bindgroup":
+	case "binduid":
 		return nil, a.hub.bind(r.s("client_id"), r.uid(), r.claims)
+	case "bindgroup":
+		// Legacy clients call bindGroup after the group transaction has already
+		// committed and the addGroup event has been delivered. A reconnect can
+		// replace client_id between those two steps, so a missing peer is a
+		// harmless synchronization race rather than a group-creation failure.
+		e := a.hub.bind(r.s("client_id"), r.uid(), r.claims)
+		if errors.Is(e, errSocketDisconnected) {
+			return nil, nil
+		}
+		return nil, e
 	case "offline":
 		a.hub.disconnectClient(r.s("client_id"), r.uid())
 		return nil, nil

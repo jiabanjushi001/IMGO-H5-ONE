@@ -52,6 +52,7 @@ var adminAuditDefinitions = map[string]auditDefinition{
 	"/manage/role/setstatus":        {"角色", "修改状态", "high", "角色"},
 	"/manage/role/del":              {"角色", "删除角色", "critical", "角色"},
 	"/manage/bank/edit":             {"绑卡", "审核绑卡", "high", "用户"},
+	"/manage/identity/review":       {"实名认证", "审核实名认证", "high", "用户"},
 	"/manage/wallet/credit":         {"财务", "调整余额", "critical", "用户"},
 	"/manage/wallet/review":         {"财务", "审核提现", "critical", "提现单"},
 	"/manage/wallet/freeze":         {"财务", "冻结提现", "critical", "提现单"},

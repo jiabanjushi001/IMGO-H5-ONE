@@ -17,5 +17,9 @@ execFileSync(process.execPath, ['scripts/build-maintenance.cjs'], {cwd: root, st
 const app = fs.readFileSync(path.join(root, 'public/assets/js/app.85372e4e.js'), 'utf8');
 assert.ok(app.includes('imgoUploadLimitMB(t,this.globalConfig.fileUpload)'), 'video-aware upload limit must be built into the chat bundle');
 assert.ok(app.includes('上传的内容不能大于'), 'upload error copy must be corrected');
+assert.ok(
+  app.includes('Rs.sendFileAPI=t=>Ti({url:"common/upload/uploadFile",method:"post",data:t,timeout:0,headers:{"Content-Type":"multipart/form-data"}})'),
+  'chat file and video uploads must not inherit the global 60-second timeout'
+);
 
 console.log('Chat video upload tests passed');

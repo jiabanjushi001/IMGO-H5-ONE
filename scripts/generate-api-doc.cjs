@@ -42,7 +42,7 @@ const actionNames = {
   dealmsg: '处理消息', gettasklog: '任务日志', setnumberjoin: '群号加入开关', delgroupuser: '移除群成员', createuser: '创建用户', binduid: '绑定 WebSocket 用户',
   bindgroup: '绑定群连接', offline: '离线通知', avatar: '头像', download: '下载', scanqr: '扫码解析', downloadapp: '下载客户端', downapp: '下载客户端'
 }
-const areaNames = { config: '设置', index: '概况', user: '成员', group: '群聊', message: '消息', task: '任务', role: '角色', audit: '日志', wallet: '钱包', bank: '银行卡', files: '文件', agentsetting: '导师设置', im: '聊天', friend: '好友', emoji: '表情', checkin: '签到', invite: '邀请' }
+const areaNames = { config: '设置', index: '概况', user: '成员', identity: '实名认证', group: '群聊', message: '消息', task: '任务', role: '角色', audit: '日志', wallet: '钱包', bank: '银行卡', files: '文件', agentsetting: '导师设置', im: '聊天', friend: '好友', emoji: '表情', checkin: '签到', invite: '邀请' }
 const describe = route => {
   const parts = route.path.split('/').filter(Boolean)
   const action = parts[parts.length - 1]

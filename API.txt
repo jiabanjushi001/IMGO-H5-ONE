@@ -1,5 +1,5 @@
 IMGO API 接口清单
-生成日期：2026-09-28
+生成日期：2026-10-06
 
 说明：
 - 普通 HTTP 接口推荐使用 POST；下载、健康检查、验证码和 WebSocket 按表中方法调用。
@@ -7,7 +7,7 @@ IMGO API 接口清单
 - 后台 IP 白名单只限制后台登录和 /manage/*；H5/用户端接口与 WebSocket 不受影响。
 - 本文件由 scripts/generate-api-doc.cjs 根据 internal/server/routes.go 生成。
 
-一、后台 API（74 个）
+一、后台 API（77 个）
 METHOD | PATH | 鉴权 | 功能
 POST | /manage/agentsetting/detail | 登录 + manage.users | 导师设置 - 详情
 POST | /manage/agentsetting/save | 登录 + manage.users | 导师设置 - 保存
@@ -35,6 +35,9 @@ POST | /manage/group/delgroupuser | 登录 + manage.groups | 群聊 - 移除群�
 POST | /manage/group/index | 登录 + manage.groups | 群聊 - 列表/首页
 POST | /manage/group/setmanager | 登录 + manage.groups | 群聊 - 设置群管理员
 POST | /manage/group/setnumberjoin | 登录 + manage.groups | 群聊 - 群号加入开关
+POST | /manage/identity/detail | 登录 + manage.users | 实名认证 - 详情
+POST | /manage/identity/index | 登录 + manage.users | 实名认证 - 列表/首页
+POST | /manage/identity/review | 登录 + manage.users | 实名认证 - 提现审核
 POST | /manage/index/clearmessage | 登录 + manage.overview | 概况 - 清空消息
 POST | /manage/index/delnotice | 登录 + manage.overview | 概况 - 删除公告
 POST | /manage/index/noticelist | 登录 + manage.overview | 概况 - 公告列表
@@ -84,7 +87,7 @@ POST | /manage/wallet/recharges | 登录 + manage.finance | 钱包 - 充值记�
 POST | /manage/wallet/review | 登录 + manage.finance | 钱包 - 提现审核
 POST | /manage/wallet/withdraw | 登录 + manage.finance | 钱包 - 提现
 
-二、H5 / 用户端 API（91 个）
+二、H5 / 用户端 API（93 个）
 METHOD | PATH | 鉴权 | 功能
 POST | /common/api/createuser | 公开 | common/api - 创建用户
 POST | /common/api/login | 公开 | common/api - 登录
@@ -134,6 +137,8 @@ POST | /enterprise/group/removeuser | 登录 | 群聊 - 移除群成员
 POST | /enterprise/group/setmanager | 登录 | 群聊 - 设置群管理员
 POST | /enterprise/group/setnospeak | 登录 | 群聊 - 群禁言
 POST | /enterprise/group/setnotice | 登录 | 群聊 - 群公告
+POST | /enterprise/identity/get | 登录 | 实名认证 - 读取
+POST | /enterprise/identity/save | 登录 | 实名认证 - 保存
 POST | /enterprise/im/delchat | 登录 | 聊天 - 删除会话
 POST | /enterprise/im/delmessage | 登录 | 聊天 - 删除消息
 POST | /enterprise/im/editaccount | 登录 | 聊天 - 修改账号
@@ -188,4 +193,4 @@ GET | /captcha/:config | 公开 | 指定配置图形验证码
 GET | /wss | WebSocket Token | WebSocket 连接
 GET | /ws | WebSocket Token | WebSocket 兼容地址
 
-合计：172 个接口。
+合计：177 个接口。

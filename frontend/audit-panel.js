@@ -5,7 +5,7 @@ const ImgoAuditPanel = {
       loading: false, rows: [], total: 0,
       requestVisible: false, activeRequest: null,
       query: { page: 1, limit: 20, category: '', risk_level: '', status: '', keywords: '' },
-      categories: ['登录', '成员', '群聊', '设置', '概况', '消息', '任务', '角色', '绑卡', '财务']
+      categories: ['登录', '成员', '实名认证', '群聊', '设置', '概况', '消息', '任务', '角色', '绑卡', '财务']
     }
   },
   mounted() { this.load() },

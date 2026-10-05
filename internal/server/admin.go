@@ -376,6 +376,18 @@ func (a *App) manageGroup(r *request) (any, error) {
 		}
 		for _, uid := range targets {
 			if err := a.requireScopedUser(r.ctx(), a.db, scope, uid); err != nil {
+				// A group owner may promote any member of that group even when the
+				// member is outside the owner's referral tree. The normal group
+				// handler rechecks both ownership and target membership.
+				if action(r) == "setmanager" {
+					group, groupErr := r.one("SELECT owner_id FROM "+a.t("group")+" WHERE group_id=? AND status=1 AND COALESCE(delete_time,0)=0", gid)
+					if groupErr != nil {
+						return nil, groupErr
+					}
+					if number(group["owner_id"]) == r.uid() {
+						return a.group(r)
+					}
+				}
 				return nil, err
 			}
 		}
@@ -569,6 +581,9 @@ func (a *App) manageConfig(r *request) (any, error) {
 			}
 		}
 		if name == "chatInfo" {
+			if role, ok := v["groupCreateRole"]; ok && str(role) != groupCreateRoleAll && str(role) != groupCreateRoleMentor {
+				return nil, r.fail("建群权限配置无效")
+			}
 			if limit, ok := obj(v["autoAddGroup"])["userMax"]; ok {
 				if err := validateAutoGroupUserMax(limit); err != nil {
 					return nil, err

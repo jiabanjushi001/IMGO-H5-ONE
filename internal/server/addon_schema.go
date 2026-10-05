@@ -61,6 +61,17 @@ func (a *App) ensureAddonTables(ctx context.Context, db *sql.Conn) error {
 			}
 		}
 	}
+	// is_auth now means an approved government-ID verification. Older builds
+	// used the same column for phone/email account binding, so reconcile it from
+	// the authoritative verification table on every startup.
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM information_schema.columns WHERE table_schema=DATABASE() AND table_name=? AND column_name='is_auth'", a.cfg.Prefix+"user").Scan(&count); err != nil {
+		return err
+	}
+	if count > 0 {
+		if _, err := db.ExecContext(ctx, "UPDATE "+a.t("user")+" u LEFT JOIN "+a.t("imgo_identity_verification")+" v ON v.user_id=u.user_id SET u.is_auth=IF(v.status=1,1,0) WHERE u.is_auth<>IF(v.status=1,1,0)"); err != nil {
+			return fmt.Errorf("同步实名认证状态失败: %w", err)
+		}
+	}
 	auditTargetNameAdded := false
 	for _, column := range []struct{ table, name, sqlType string }{
 		{"imgo_security_setting", "ip_whitelist_enabled", "TINYINT NOT NULL DEFAULT 0"},
@@ -188,6 +199,7 @@ func (a *App) addonTableDDL() []string {
 		"CREATE TABLE IF NOT EXISTS " + a.t("imgo_session") + " (sid VARCHAR(64) PRIMARY KEY,user_id INT NOT NULL,expires_at BIGINT NOT NULL,login_ip VARCHAR(45) NOT NULL DEFAULT '',admin_login TINYINT NOT NULL DEFAULT 0,INDEX(user_id),INDEX(expires_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 		"CREATE TABLE IF NOT EXISTS " + a.t("imgo_chat_lock") + " (chat_identify VARCHAR(64) PRIMARY KEY) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 		"CREATE TABLE IF NOT EXISTS " + a.t("imgo_bank_card") + " (user_id INT PRIMARY KEY,receipt_name VARCHAR(100) NOT NULL,bank_name VARCHAR(120) NOT NULL DEFAULT '',branch_name VARCHAR(120) NOT NULL DEFAULT '',account_cipher VARCHAR(255) NOT NULL,account_last4 CHAR(4) NOT NULL,status TINYINT NOT NULL DEFAULT 0,remark VARCHAR(500) NOT NULL DEFAULT '',version INT NOT NULL DEFAULT 1,created_at BIGINT NOT NULL,updated_at BIGINT NOT NULL,INDEX(status,updated_at)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
+		"CREATE TABLE IF NOT EXISTS " + a.t("imgo_identity_verification") + " (user_id INT PRIMARY KEY,real_name VARCHAR(100) NOT NULL,id_number_cipher VARCHAR(255) NOT NULL,id_number_hash CHAR(64) CHARACTER SET ascii COLLATE ascii_bin NOT NULL,id_number_masked CHAR(18) NOT NULL,front_file_id INT NOT NULL,back_file_id INT NOT NULL,status TINYINT NOT NULL DEFAULT 0,remark VARCHAR(500) NOT NULL DEFAULT '',version INT NOT NULL DEFAULT 1,submitted_at BIGINT NOT NULL,reviewed_at BIGINT NOT NULL DEFAULT 0,reviewed_by INT NOT NULL DEFAULT 0,created_at BIGINT NOT NULL,updated_at BIGINT NOT NULL,UNIQUE KEY imgo_identity_number(id_number_hash),INDEX imgo_identity_status(status,updated_at),INDEX imgo_identity_front(front_file_id),INDEX imgo_identity_back(back_file_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 		"CREATE TABLE IF NOT EXISTS " + a.t("imgo_check_in") + " (user_id INT NOT NULL,sign_date DATE NOT NULL,created_at BIGINT NOT NULL,PRIMARY KEY(user_id,sign_date)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 		"CREATE TABLE IF NOT EXISTS " + a.t("imgo_wallet") + " (user_id INT PRIMARY KEY,available_cents BIGINT NOT NULL DEFAULT 0,pending_cents BIGINT NOT NULL DEFAULT 0,updated_at BIGINT NOT NULL) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",
 		"CREATE TABLE IF NOT EXISTS " + a.t("imgo_withdrawal") + " (withdrawal_id BIGINT AUTO_INCREMENT PRIMARY KEY,user_id INT NOT NULL,request_id VARCHAR(80) NOT NULL,amount_cents BIGINT NOT NULL,status TINYINT NOT NULL DEFAULT 0,receipt_name VARCHAR(100) NOT NULL,bank_name VARCHAR(120) NOT NULL,branch_name VARCHAR(120) NOT NULL,account_cipher VARCHAR(255) NOT NULL,account_last4 CHAR(4) NOT NULL,created_at BIGINT NOT NULL,processed_at BIGINT NOT NULL DEFAULT 0,processed_by INT NOT NULL DEFAULT 0,remark VARCHAR(500) NOT NULL DEFAULT '',UNIQUE KEY imgo_withdraw_request(user_id,request_id),INDEX imgo_withdraw_status(status,created_at),INDEX imgo_withdraw_user(user_id,withdrawal_id)) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4",

@@ -15,6 +15,11 @@ func groupID(r *request) int64 {
 	}
 	return number(strings.TrimPrefix(s, "group-"))
 }
+
+func canViewGroupMemberAccount(role int64, adminRead bool) bool {
+	return adminRead || role == 1 || role == 2
+}
+
 func (a *App) group(r *request) (any, error) {
 	act := action(r)
 	gid := groupID(r)
@@ -41,7 +46,7 @@ func (a *App) group(r *request) (any, error) {
 				args = append(args, params...)
 			}
 		}
-		list, e := r.list("SELECT user_id,realname,avatar,name_py FROM "+a.t("user")+" u WHERE status=1 AND delete_time=0 AND user_id<>? AND user_id NOT IN (SELECT user_id FROM "+a.t("group_user")+" WHERE group_id=? AND status=1)"+scopeWhere+" ORDER BY user_id LIMIT 2000", args...)
+		list, e := r.list("SELECT user_id,account,realname,avatar,name_py FROM "+a.t("user")+" u WHERE status=1 AND delete_time=0 AND user_id<>? AND user_id NOT IN (SELECT user_id FROM "+a.t("group_user")+" WHERE group_id=? AND status=1)"+scopeWhere+" ORDER BY user_id LIMIT 2000", args...)
 		if e != nil {
 			return nil, e
 		}
@@ -52,7 +57,9 @@ func (a *App) group(r *request) (any, error) {
 		out := []M{}
 		for _, u := range list {
 			if !exclude[number(u["user_id"])] {
-				out = append(out, a.safeUser(u))
+				item := a.safeUser(u)
+				item["member_label"] = str(u["realname"]) + "（" + str(u["account"]) + "）"
+				out = append(out, item)
 			}
 		}
 		return out, nil
@@ -142,7 +149,21 @@ func (a *App) group(r *request) (any, error) {
 		}
 		return v, nil
 	case "groupuserlist":
-		n, e := r.one("SELECT COUNT(*) n FROM "+a.t("group_user")+" WHERE group_id=? AND status=1", gid)
+		showMemberAccount := canViewGroupMemberAccount(role, adminRead)
+		keyword := strings.TrimSpace(r.s("keywords"))
+		like := "%" + keyword + "%"
+		countSQL := "SELECT COUNT(*) n FROM " + a.t("group_user") + " WHERE group_id=? AND status=1"
+		countArgs := []any{gid}
+		if keyword != "" {
+			countSQL += " AND EXISTS (SELECT 1 FROM " + a.t("user") + " member_user WHERE member_user.user_id=" + a.t("group_user") + ".user_id AND (member_user.realname LIKE ?"
+			countArgs = append(countArgs, like)
+			if showMemberAccount {
+				countSQL += " OR member_user.account LIKE ?"
+				countArgs = append(countArgs, like)
+			}
+			countSQL += "))"
+		}
+		n, e := r.one(countSQL, countArgs...)
 		if e != nil {
 			return nil, e
 		}
@@ -151,19 +172,34 @@ func (a *App) group(r *request) (any, error) {
 		if r.n("limit") == 0 {
 			limit = 2000
 		}
-		list, e := r.list("SELECT * FROM "+a.t("group_user")+" WHERE group_id=? AND status=1 ORDER BY role,user_id LIMIT ? OFFSET ?", gid, limit, offset)
+		listSQL := "SELECT * FROM " + a.t("group_user") + " WHERE group_id=? AND status=1"
+		listArgs := append([]any{}, countArgs...)
+		if keyword != "" {
+			listSQL += " AND EXISTS (SELECT 1 FROM " + a.t("user") + " member_user WHERE member_user.user_id=" + a.t("group_user") + ".user_id AND (member_user.realname LIKE ?"
+			if showMemberAccount {
+				listSQL += " OR member_user.account LIKE ?"
+			}
+			listSQL += "))"
+		}
+		listSQL += " ORDER BY role,user_id LIMIT ? OFFSET ?"
+		listArgs = append(listArgs, limit, offset)
+		list, e := r.list(listSQL, listArgs...)
 		if e != nil {
 			return nil, e
 		}
 		for _, m := range list {
-			u, e := r.one("SELECT user_id,realname,avatar,name_py FROM "+a.t("user")+" WHERE user_id=?", m["user_id"])
+			u, e := r.one("SELECT user_id,account,realname,avatar,name_py FROM "+a.t("user")+" WHERE user_id=?", m["user_id"])
 			if e == nil {
-				m["userInfo"] = a.safeUser(u)
+				userInfo := a.safeUser(u)
+				if !showMemberAccount {
+					delete(userInfo, "account")
+				}
+				m["userInfo"] = userInfo
 			}
 		}
 		return list, nil
 	case "addgroupuser":
-		if role > 2 && number(obj(g["setting"])["invite"]) == 0 {
+		if !canInviteGroupMember(role, number(obj(g["setting"])["manager_invite"])) {
 			return nil, deny()
 		}
 		return nil, a.addMembers(r, g, ids(r.p["user_ids"]))
@@ -278,11 +314,11 @@ func (a *App) group(r *request) (any, error) {
 			return nil, deny()
 		}
 		requested := obj(r.p["setting"])
-		settings := pick(requested, "manage", "invite", "nospeak", "history")
+		settings := pick(requested, "manage", "invite", "manager_invite", "nospeak", "history")
 		current := obj(g["setting"])
 		settings["number_join"] = number(current["number_join"])
 		if role == 2 {
-			for _, key := range []string{"manage", "invite", "history", "profile", "number_join"} {
+			for _, key := range []string{"manage", "invite", "manager_invite", "history", "profile", "number_join"} {
 				if value, exists := requested[key]; exists && number(value) != number(current[key]) {
 					return nil, deny()
 				}
@@ -316,6 +352,11 @@ func (a *App) group(r *request) (any, error) {
 	a.groupEvent(r.ctx(), gid, groupEventName(act), data)
 	return nil, nil
 }
+
+func canInviteGroupMember(role, managerInvite int64) bool {
+	return role == 1 || role == 2 && managerInvite == 1
+}
+
 func groupEventName(act string) string {
 	for _, s := range []string{"editGroupName", "editGroupAvatar", "setManager", "removeUser", "setNoSpeak", "setNotice", "groupSetting", "changeOwner"} {
 		if strings.ToLower(s) == act {
@@ -325,8 +366,12 @@ func groupEventName(act string) string {
 	return act
 }
 func (a *App) createGroup(r *request) (any, error) {
-	if number(a.config(r.ctx(), "chatInfo")["groupChat"]) == 0 {
+	chatConfig := a.config(r.ctx(), "chatInfo")
+	if number(chatConfig["groupChat"]) == 0 {
 		return nil, deny()
+	}
+	if err := a.requireGroupCreatePermission(r.ctx(), r.user, chatConfig); err != nil {
+		return nil, err
 	}
 	requestedUsers := ids(r.p["user_ids"])
 	if len(requestedUsers) > 100 {
@@ -341,7 +386,7 @@ func (a *App) createGroup(r *request) (any, error) {
 	for u := range unique {
 		users = append(users, u)
 	}
-	max := number(a.config(r.ctx(), "chatInfo")["groupUserMax"])
+	max := number(chatConfig["groupUserMax"])
 	if max > 0 && int64(len(users)) > max {
 		return nil, r.fail("超过群人数上限")
 	}
@@ -385,7 +430,7 @@ func (a *App) createGroup(r *request) (any, error) {
 	if len(valid) != len(users) {
 		return nil, r.fail("存在无效成员")
 	}
-	gid, e := insert(r.ctx(), tx, a.t("group"), M{"name": name, "name_py": namePinyin(name), "owner_id": r.uid(), "create_user": r.uid(), "create_time": time.Now().Unix(), "setting": `{"manage":0,"invite":1,"nospeak":0,"history":1,"number_join":0}`, "status": 1})
+	gid, e := insert(r.ctx(), tx, a.t("group"), M{"name": name, "name_py": namePinyin(name), "owner_id": r.uid(), "create_user": r.uid(), "create_time": time.Now().Unix(), "setting": `{"manage":0,"invite":1,"manager_invite":0,"nospeak":0,"history":1,"number_join":0}`, "status": 1})
 	if e != nil {
 		return nil, e
 	}
@@ -412,6 +457,32 @@ func (a *App) createGroup(r *request) (any, error) {
 	event["role"] = 3
 	a.hub.send(users, "addGroup", event)
 	return contact, nil
+}
+
+const (
+	groupCreateRoleAll    = "all"
+	groupCreateRoleMentor = "mentor"
+)
+
+// requireGroupCreatePermission is the server-side boundary for group creation.
+// A missing setting is intentionally restrictive so an upgraded installation
+// cannot be bypassed by clients that call the endpoint directly.
+func (a *App) requireGroupCreatePermission(ctx context.Context, user M, chatConfig M) error {
+	if str(chatConfig["groupCreateRole"]) == groupCreateRoleAll {
+		return nil
+	}
+	if number(user["user_id"]) == 1 {
+		return nil
+	}
+	roleID := number(user["admin_role_id"])
+	if number(user["user_id"]) < 1 || roleID < 1 {
+		return clientError{"权限不足", 403}
+	}
+	role, err := one(ctx, a.db, "SELECT agent_mode FROM "+a.t("imgo_admin_role")+" WHERE role_id=? AND status=1", roleID)
+	if err == sql.ErrNoRows || err == nil && number(role["agent_mode"]) != 1 {
+		return clientError{"权限不足", 403}
+	}
+	return err
 }
 
 func (a *App) requireCreateGroupUsers(ctx context.Context, db DB, scope adminScope, creatorID int64, users []int64) error {

@@ -2,6 +2,7 @@ const imgoAdminPermissionByPath = {
   '/manage/index': 'manage.overview',
   '/manage/setting': 'manage.settings',
   '/manage/user': 'manage.users',
+  '/manage/identity': 'manage.users',
   '/manage/message': 'manage.messages',
   '/manage/group': 'manage.groups',
   '/manage/files': 'manage.files',

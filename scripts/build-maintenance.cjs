@@ -23,6 +23,7 @@ const anchor = 'd=r.exports';
 if (!text.includes(anchor)) throw Error('Management chunk changed; review adapter before rebuilding');
 const overview = read('frontend/overview-chart.js') + '\n' + read('frontend/overview-panel.js');
 const bankPanel = read('frontend/bank-panel.js');
+const identityPanel = read('frontend/identity-panel.js');
 const financeOrders = read('frontend/finance-orders.js');
 const rolePanel = read('frontend/role-panel.js');
 const auditPanel = read('frontend/audit-panel.js');
@@ -30,6 +31,36 @@ const auditPanel = read('frontend/audit-panel.js');
 // The management group picker must send the selected group id so existing
 // members are excluded while an agent adds people from their own team.
 let managementGroups = read('public/assets/js/173.9e08cf23.js');
+const managementGroupPlainMemberName = 'e("span",{staticClass:"member-name"},[t._v(t._s(s.userInfo.displayName))])';
+const managementGroupAccountMemberName = 'e("span",{staticClass:"member-name"},[t._v(t._s(s.userInfo.displayName)+(s.userInfo.account?"（"+t._s(s.userInfo.account)+"）":""))])';
+if (!managementGroups.includes(managementGroupAccountMemberName)) {
+ if (!managementGroups.includes(managementGroupPlainMemberName)) throw Error('Management group member name anchor changed');
+ managementGroups = managementGroups.replace(managementGroupPlainMemberName, managementGroupAccountMemberName);
+}
+const managementGroupMemberTitle = 'e("div",[t._v("群成员")])';
+const managementGroupMemberSearch = 'e("div",{staticClass:"imgo-group-member-heading"},[e("span",[t._v("群成员")]),0!=t.active?e("el-input",{staticStyle:{width:"220px"},attrs:{size:"small",clearable:"",placeholder:"搜索昵称或账号","prefix-icon":"el-icon-search"},on:{input:t.searchGroupMembers},model:{value:t.memberKeywords,callback:function(e){t.memberKeywords=e},expression:"memberKeywords"}}):t._e()],1)';
+if (!managementGroups.includes(managementGroupMemberSearch)) {
+ if (!managementGroups.includes(managementGroupMemberTitle)) throw Error('Management group member title anchor changed');
+ managementGroups = managementGroups.replace(managementGroupMemberTitle, managementGroupMemberSearch);
+}
+const managementGroupData = 'members:[]}},mounted(){this.getGroupList()}';
+const managementGroupSearchData = 'members:[],memberKeywords:"",memberSearchTimer:null}},mounted(){this.getGroupList()}';
+if (!managementGroups.includes(managementGroupSearchData)) {
+ if (!managementGroups.includes(managementGroupData)) throw Error('Management group search data anchor changed');
+ managementGroups = managementGroups.replace(managementGroupData, managementGroupSearchData);
+}
+const managementGroupOpen = 'openGroup(t){this.active=t.group_id,t.id="group-"+t.group_id,t.is_group=1,this.currentChat=t,this.getGroupUser(t.group_id)}';
+const managementGroupSearchOpen = 'openGroup(t){this.active=t.group_id,this.memberKeywords="",t.id="group-"+t.group_id,t.is_group=1,this.currentChat=t,this.getGroupUser(t.group_id)}';
+if (!managementGroups.includes(managementGroupSearchOpen)) {
+ if (!managementGroups.includes(managementGroupOpen)) throw Error('Management group open anchor changed');
+ managementGroups = managementGroups.replace(managementGroupOpen, managementGroupSearchOpen);
+}
+const managementGroupGetUsers = 'getGroupUser(t){this.$api.imApi.groupUserListAPI({group_id:"group-"+t}).then((t=>{0==t.code&&(this.members=t.data)}))}';
+const managementGroupSearchUsers = 'getGroupUser(t){this.$api.imApi.groupUserListAPI({group_id:"group-"+t,keywords:this.memberKeywords}).then((t=>{0==t.code&&(this.members=t.data)}))},searchGroupMembers(){clearTimeout(this.memberSearchTimer),this.memberSearchTimer=setTimeout((()=>{this.active&&this.getGroupUser(this.active)}),250)}';
+if (!managementGroups.includes(managementGroupSearchUsers)) {
+ if (!managementGroups.includes(managementGroupGetUsers)) throw Error('Management group member request anchor changed');
+ managementGroups = managementGroups.replace(managementGroupGetUsers, managementGroupSearchUsers);
+}
 const managementGroupOwner = 'e("p",{staticClass:"chat-message c-999"},[t._v(" 创建人："+t._s(s.owner_id_info.realname))])';
 const managementGroupNumber = 'e("p",{staticClass:"chat-message c-999"},[t._v("群号："+t._s(s.group_id)+" · 创建人："+t._s(s.owner_id_info.realname))])';
 if (!managementGroups.includes(managementGroupNumber)) {
@@ -75,7 +106,7 @@ if (!managementGroups.includes('/* IMGO_GROUP_BROADCAST_BEGIN */')) {
 }
 const managementGroupsHash = crypto.createHash('sha256').update(managementGroups).digest('hex').slice(0,12);
 write(`public/assets/js/173.imgo${managementGroupsHash}.js`, managementGroups);
-const extension = `;${begin}\n${read('frontend/notice-actions.js')};\n${panel};\n${overview};\n${bankPanel};\n${financeOrders};\n${rolePanel};\n${auditPanel};\nconst LegacyManagement = d; d = { name: 'ImgoManagement', render(h) { const bank = this.$route.path === '/manage/bank', finance = this.$route.path.startsWith('/manage/finance/'), role = this.$route.path === '/manage/role', audit = this.$route.path === '/manage/audit', superAdmin=Number((this.$store.state.userInfo||{}).user_id)===1; return h('div', {class: 'imgo-management'}, [audit ? h(ImgoAuditPanel) : role ? h(ImgoRolePanel) : finance ? h(ImgoFinanceShell) : bank ? h(ImgoBankPanel) : h(ImgoOverview, superAdmin?[h(LegacyManagement),h(ImgoMaintenancePanel)]:[])]); } };\n${end}`;
+const extension = `;${begin}\n${read('frontend/notice-actions.js')};\n${panel};\n${overview};\n${bankPanel};\n${identityPanel};\n${financeOrders};\n${rolePanel};\n${auditPanel};\nconst LegacyManagement = d; d = { name: 'ImgoManagement', render(h) { const bank = this.$route.path === '/manage/bank', identity = this.$route.path === '/manage/identity', finance = this.$route.path.startsWith('/manage/finance/'), role = this.$route.path === '/manage/role', audit = this.$route.path === '/manage/audit', superAdmin=Number((this.$store.state.userInfo||{}).user_id)===1; return h('div', {class: 'imgo-management'}, [audit ? h(ImgoAuditPanel) : role ? h(ImgoRolePanel) : finance ? h(ImgoFinanceShell) : identity ? h(ImgoIdentityPanel) : bank ? h(ImgoBankPanel) : h(ImgoOverview, superAdmin?[h(LegacyManagement),h(ImgoMaintenancePanel)]:[])]); } };\n${end}`;
 text = text.replace(anchor, anchor + extension);
 write(chunk, text);
 let app = read('public/assets/js/app.85372e4e.js');
@@ -156,7 +187,7 @@ for (const [name, variable, source] of [
  }
  const anchor = name === 'CHAT' ? '_e=Ae,' : 'be=ve,';
  if (!app.includes(anchor)) throw Error('Invitation component anchor changed: ' + name);
- app = app.replace(anchor, anchor.split('=')[0] + '=(function(component){' + start + '\n' + read(source) + (name === 'CHAT' ? '\n' + read('frontend/chat-profile.js') + '\n' + read('frontend/chat-context-remark.js') + '\n' + read('frontend/group-avatar-chat.js') + '\n' + read('frontend/chat-quick-replies.js') + '\n' + read('frontend/chat-join-group.js') + '\n' + read('frontend/chat-account-switcher.js') + '\n' + read('frontend/contact-search.js') + '\n' + read('frontend/group-mute-chat.js') + '\n' + read('frontend/mobile-chat.js') + '\n' + read('frontend/socket-recovery.js') : '') +
+ app = app.replace(anchor, anchor.split('=')[0] + '=(function(component){' + start + '\n' + read(source) + (name === 'CHAT' ? '\n' + read('frontend/chat-profile.js') + '\n' + read('frontend/chat-context-remark.js') + '\n' + read('frontend/group-avatar-chat.js') + '\n' + read('frontend/chat-quick-replies.js') + '\n' + read('frontend/chat-join-group.js') + '\n' + read('frontend/chat-account-switcher.js') + '\n' + read('frontend/contact-search.js') + '\n' + read('frontend/group-mute-chat.js') + '\n' + read('frontend/group-invite-permission.js') + '\n' + read('frontend/mobile-chat.js') + '\n' + read('frontend/socket-recovery.js') : '') +
   '\nreturn component;' + end + '})(' + variable + '),');
 }
 const legacyUploadLimit = 'if(i.size>1024*this.globalConfig.fileUpload.size*1024)return s.removeMessage(t.id),this.$message.error("上传的内容不等大于"+this.globalConfig.fileUpload.size+"MB！");';
@@ -164,6 +195,16 @@ const mediaUploadLimit = 'if(i.size>1024*imgoUploadLimitMB(t,this.globalConfig.f
 if (!app.includes(mediaUploadLimit)) {
  if (!app.includes(legacyUploadLimit)) throw Error('Chat upload-size guard changed');
  app = app.replace(legacyUploadLimit, mediaUploadLimit);
+}
+// Ordinary API calls keep the global 60-second timeout. File and video uploads
+// must not inherit it: on slower connections a valid 200 MB upload can easily
+// take longer than one minute. Nginx and the Go handler still enforce request
+// timeouts and the configured size ceiling.
+const legacySendFileAPI = 'Rs.sendFileAPI=t=>Ti({url:"common/upload/uploadFile",method:"post",data:t,headers:{"Content-Type":"multipart/form-data"}})';
+const resilientSendFileAPI = 'Rs.sendFileAPI=t=>Ti({url:"common/upload/uploadFile",method:"post",data:t,timeout:0,headers:{"Content-Type":"multipart/form-data"}})';
+if (!app.includes(resilientSendFileAPI)) {
+ if (!app.includes(legacySendFileAPI)) throw Error('Chat file-upload API anchor changed');
+ app = app.replace(legacySendFileAPI, resilientSendFileAPI);
 }
 const contactSearchInput = 'attrs:{placeholder:"\u641c\u7d22\u8054\u7cfb\u4eba","prefix-icon":"el-icon-search"}';
 const improvedContactSearchInput = 'attrs:{placeholder:"\u641c\u7d22\u8d26\u53f7\u3001\u6635\u79f0\u6216\u7fa4聊","prefix-icon":"el-icon-search",autocomplete:"one-time-code",name:"imgo-contact-search"}';
@@ -205,6 +246,52 @@ app = app.replaceAll(joinGroupMenu, '');
 const createGroupMenu = 't.globalConfig.chatInfo.groupChat?e("el-dropdown-item",{attrs:{command:"addGroup"}},[t._v("创建群聊")]):t._e()';
 if (!app.includes(createGroupMenu)) throw Error('Chat plus menu anchor changed');
 app = app.replace(createGroupMenu, joinGroupMenu + createGroupMenu);
+const openCreateGroup = 'openCreateGroup(){this.isAdd=1,this.dialogTitle="创建群聊",this.userIds=[],this.createChatBox=!0}';
+const guardedOpenCreateGroup = 'openCreateGroup(){if(!imgoCanCreateGroup(this.userInfo,this.globalConfig.chatInfo))return this.$message.error("权限不足");this.isAdd=1,this.dialogTitle="创建群聊",this.userIds=[],this.createChatBox=!0}';
+if (!app.includes(guardedOpenCreateGroup)) {
+ if (!app.includes(openCreateGroup)) throw Error('Create group action anchor changed');
+ app = app.replace(openCreateGroup, guardedOpenCreateGroup);
+}
+// The legacy invite flag used to allow all members and was enabled by default.
+// Manager invitations therefore use a separate, restrictive-by-default field.
+const ordinaryGroupInviteButton = 'i.role<3||1==i.setting.invite?e("span",{staticClass:"el-icon-circle-plus-outline f-18 cur-handle",on:{click:t.openAddGroupUser}}):t._e()';
+const legacyManagerGroupInviteButton = '1==i.role||2==i.role&&1==i.setting.invite?e("span",{staticClass:"el-icon-circle-plus-outline f-18 cur-handle",on:{click:t.openAddGroupUser}}):t._e()';
+const managerGroupInviteButton = '1==i.role||2==i.role&&1==i.setting.manager_invite?e("span",{staticClass:"el-icon-circle-plus-outline f-18 cur-handle",on:{click:t.openAddGroupUser}}):t._e()';
+if (!app.includes(managerGroupInviteButton)) {
+ if (app.includes(legacyManagerGroupInviteButton)) app = app.replace(legacyManagerGroupInviteButton, managerGroupInviteButton);
+ else if (app.includes(ordinaryGroupInviteButton)) app = app.replace(ordinaryGroupInviteButton, managerGroupInviteButton);
+ else throw Error('Group member invite button anchor changed');
+}
+// Display the account beside each group member. Nicknames are not unique and
+// otherwise a group owner can accidentally promote the wrong same-name user.
+const plainGroupMemberNames = 'i.userInfo.id==t.user.id?e("span",{staticClass:"fc-danger"},[t._v(t._s(i.userInfo.displayName)+"（我）")]):t._e(),i.userInfo.id!=t.user.id?e("span",[t._v(t._s(i.userInfo.displayName))]):t._e()';
+const accountGroupMemberNames = 'i.userInfo.id==t.user.id?e("span",{staticClass:"fc-danger"},[t._v(t._s(i.userInfo.displayName)+(i.userInfo.account?"（"+t._s(i.userInfo.account)+"）":"")+"（我）")]):t._e(),i.userInfo.id!=t.user.id?e("span",[t._v(t._s(i.userInfo.displayName)+(i.userInfo.account?"（"+t._s(i.userInfo.account)+"）":""))]):t._e()';
+if (!app.includes(accountGroupMemberNames)) {
+ if (!app.includes(plainGroupMemberNames)) throw Error('Group member account label anchor changed');
+ app = app.replace(plainGroupMemberNames, accountGroupMemberNames);
+}
+const plainGroupPickerProps = 'defaultProps:{key:"user_id",label:"realname",pinyin:"name_py"}';
+const accountGroupPickerProps = 'defaultProps:{key:"user_id",label:"member_label",pinyin:"name_py"}';
+if (!app.includes(accountGroupPickerProps)) {
+ if (!app.includes(plainGroupPickerProps)) throw Error('Group member picker label anchor changed');
+ app = app.replace(plainGroupPickerProps, accountGroupPickerProps);
+}
+const legacyManagerInviteModel = 'model:{value:t.setting.invite,callback:function(e){t.$set(t.setting,"invite",e)},expression:"setting.invite"}';
+const managerInviteModel = 'model:{value:t.setting.manager_invite,callback:function(e){t.$set(t.setting,"manager_invite",e)},expression:"setting.manager_invite"}';
+if (!app.includes(managerInviteModel)) {
+ if (!app.includes(legacyManagerInviteModel)) throw Error('Group manager invite setting model changed');
+ app = app.replace(legacyManagerInviteModel, managerInviteModel);
+}
+for (const [from, to, label] of [
+ ['t._v("群成员邀请：")', 't._v("管理员邀请：")', 'group invite setting title'],
+ ['t._v("允许群成员邀请")', 't._v("允许管理员邀请")', 'group invite description title'],
+ ['t._v("启用后，其他成员可以邀请其他人加入群聊")', 't._v("启用后，群管理员可以邀请其他人加入群聊；群主始终可以邀请")', 'group invite description']
+]) {
+ if (!app.includes(to)) {
+  if (!app.includes(from)) throw Error(label + ' changed');
+  app = app.replace(from, to);
+ }
+}
 const joinGroupDialog = 'e("imgo-join-group",{ref:"ImgoJoinGroup",on:{joined:t.imgoJoinedGroup}}),';
 app = app.replaceAll(joinGroupDialog, '');
 // Sender names are essential in group conversations. Keep the renderer enabled
@@ -215,13 +302,18 @@ if (!app.includes(visibleMessageNameProp)) {
  if (!app.includes(hiddenMessageNameProp)) throw Error('Chat message-name visibility anchor changed');
  app = app.replace(hiddenMessageNameProp, visibleMessageNameProp);
 }
-// Incoming group messages identify the sender as account(nickname). The
+// Incoming group messages expose the account only to super administrators and
+// backend administrators. Ordinary users see only the sender's nickname. The
 // current user's reversed messages intentionally omit this redundant label.
 const plainMessageSender = '0==this.hideName&&e("span",{on:{click:function(e){t._emitClick(e,"displayName")}}},[s.displayName])';
 const qualifiedMessageSender = '0==this.hideName&&!this.reverse&&e("span",{on:{click:function(e){t._emitClick(e,"displayName")}}},[s.account&&s.displayName&&s.account!==s.displayName?s.account+"("+s.displayName+")":s.account||s.displayName])';
-if (!app.includes(qualifiedMessageSender)) {
- if (!app.includes(plainMessageSender)) throw Error('Chat message sender-label anchor changed');
- app = app.replace(plainMessageSender, qualifiedMessageSender);
+const scopedPrivateMessageSender = '0==this.hideName&&!this.reverse&&e("span",{on:{click:function(e){t._emitClick(e,"displayName")}}},[imgoMessageSenderLabel(s,t.$store.state.userInfo)])';
+const privateMessageSender = '0==this.hideName&&!this.reverse&&e("span",{on:{click:function(e){t._emitClick(e,"displayName")}}},[window.imgoMessageSenderLabel(s,t.$store.state.userInfo)])';
+if (!app.includes(privateMessageSender)) {
+ if (app.includes(scopedPrivateMessageSender)) app = app.replace(scopedPrivateMessageSender, privateMessageSender);
+ else if (app.includes(qualifiedMessageSender)) app = app.replace(qualifiedMessageSender, privateMessageSender);
+ else if (app.includes(plainMessageSender)) app = app.replace(plainMessageSender, privateMessageSender);
+ else throw Error('Chat message sender-label anchor changed');
 }
 const chatGroupDialog = 'e("Group",{attrs:{visible:t.createChatBox,title:t.dialogTitle,isAdd:t.isAdd,userIds:t.userIds,groupId:t.group_id}';
 if (!app.includes(chatGroupDialog)) throw Error('Chat group dialog anchor changed');
@@ -241,7 +333,7 @@ if (app.includes(groupAvatarWrapper)) {
  app = app.slice(0, from) + 'W' + app.slice(to + groupAvatarEnd.length + '})(W)'.length);
 }
 if (!app.includes('Z=W,X=')) throw Error('Group settings component changed');
-app = app.replace('Z=W,X=', 'Z=(function(component){' + groupAvatarStart + '\n' + read('frontend/group-avatar.js') + '\n' + read('frontend/group-mute-settings.js') + '\nreturn component;' + groupAvatarEnd + '})(W),X=');
+app = app.replace('Z=W,X=', 'Z=(function(component){' + groupAvatarStart + '\n' + read('frontend/group-avatar.js') + '\n' + read('frontend/group-mute-settings.js') + '\n' + read('frontend/group-invite-settings.js') + '\nreturn component;' + groupAvatarEnd + '})(W),X=');
 if (!app.includes('Rs.editGroupAvatarAPI=')) app = app.replace('Rs.editGroupNameAPI=', 'Rs.editGroupAvatarAPI=t=>Ti({url:"enterprise/group/editGroupAvatar",method:"post",data:t}),Rs.editGroupNameAPI=');
 app = app.replace('i.is_group&&1==t.currentChat.role?', 'i.is_group&&(1==t.currentChat.role||2==t.currentChat.role||Number(t.userInfo.user_id)===1||Number(t.userInfo.role)>0)?');
 app = app.replace('on:{changeOwner:t.changeOwner}', 'on:{changeOwner:t.changeOwner,avatarChanged:t.imgoGroupAvatarChanged}');
@@ -309,6 +401,11 @@ if (!app.includes('path:"/manage/bank",name:"bank"')) {
  if (!app.includes(nextRoute)) throw Error('Management route list changed');
  app = app.replace(nextRoute, '},{path:"/manage/bank",name:"bank",component:()=>i.e(585).then(i.bind(i,4585)),meta:{title:"绑卡",icon:"el-icon-bank-card"}'+nextRoute);
 }
+if (!app.includes('path:"/manage/identity",name:"identity"')) {
+ const nextRoute = '},{path:"/manage/bank",name:"bank"';
+ if (!app.includes(nextRoute)) throw Error('Identity route anchor changed');
+ app = app.replace(nextRoute, '},{path:"/manage/identity",name:"identity",component:()=>i.e(585).then(i.bind(i,4585)),meta:{title:"实名认证",icon:"el-icon-postcard"}'+nextRoute);
+}
 if (!app.includes('path:"/manage/role",name:"role"')) {
  const nextRoute = '},{path:"/manage/setting",name:"setting"';
  if (!app.includes(nextRoute)) throw Error('Role route anchor changed');
@@ -359,6 +456,11 @@ if (!app.includes('const ImgoBankApi=')) {
  if (!app.includes(apiAnchor)) throw Error('Admin API registry changed');
  app = app.replace(apiAnchor, 'const ImgoBankApi={index:t=>Ti({url:"/manage/bank/index",method:"post",data:t}),detail:t=>Ti({url:"/manage/bank/detail",method:"post",data:t}),edit:t=>Ti({url:"/manage/bank/edit",method:"post",data:t})};'+apiAnchor.replace('taskApi:Ms,','taskApi:Ms,bankApi:ImgoBankApi,'));
 }
+const identityApi = 'const ImgoIdentityApi={index:t=>Ti({url:"/manage/identity/index",method:"post",data:t}),detail:t=>Ti({url:"/manage/identity/detail",method:"post",data:t}),review:t=>Ti({url:"/manage/identity/review",method:"post",data:t})};';
+app = app.replace(/const ImgoIdentityApi=\{[^;]+\};/, '');
+app = app.replaceAll('identityApi:ImgoIdentityApi,', '');
+if (!app.includes('var Vs=Hs,Gs={')) throw Error('Identity API registry anchor changed');
+app = app.replace('var Vs=Hs,Gs={', identityApi + 'var Vs=Hs,Gs={identityApi:ImgoIdentityApi,');
 const walletApi = 'const ImgoWalletApi={index:t=>Ti({url:"/manage/wallet/index",method:"post",data:t}),detail:t=>Ti({url:"/manage/wallet/detail",method:"post",data:t}),account:t=>Ti({url:"/manage/wallet/account",method:"post",data:t}),credit:t=>Ti({url:"/manage/wallet/credit",method:"post",data:t}),review:t=>Ti({url:"/manage/wallet/review",method:"post",data:t}),freeze:t=>Ti({url:"/manage/wallet/freeze",method:"post",data:t}),entries:t=>Ti({url:"/manage/wallet/entries",method:"post",data:t}),recharges:t=>Ti({url:"/manage/wallet/recharges",method:"post",data:t}),recharge:t=>Ti({url:"/manage/wallet/recharge",method:"post",data:t}),withdraw:t=>Ti({url:"/manage/wallet/withdraw",method:"post",data:t})};';
 if (!app.includes('const ImgoWalletApi=')) {
  const walletApiAnchor = 'var Vs=Hs,Gs={taskApi:Ms,bankApi:ImgoBankApi,';
@@ -774,6 +876,13 @@ settings = settings.slice(0, invitePanelFrom) + settings.slice(invitePanelTo + i
 const noticeDefaultAnchor = 'multipleLogin:"0"},chatInfo:';
 if (!settings.includes(noticeDefaultAnchor)) throw Error('System settings defaults changed');
 settings = settings.replace(noticeDefaultAnchor, 'multipleLogin:"0",noticePopup:"1",showScan:"1",showGroupQr:"1",clientDownloadUrl:""},chatInfo:');
+const groupCreateDefaultAnchor = 'chatInfo:{simpleChat:!0,groupChat:!0,';
+if (!settings.includes(groupCreateDefaultAnchor)) throw Error('Chat settings defaults changed');
+settings = settings.replace(groupCreateDefaultAnchor, 'chatInfo:{simpleChat:!0,groupChat:!0,groupCreateRole:"mentor",');
+const groupChatField = 'e("el-form-item",{attrs:{label:"允许用户建群",prop:"groupChat"}},[e("el-switch",{attrs:{"active-value":"1","inactive-value":"0"},model:{value:t.chatInfo.groupChat,callback:function(e){t.$set(t.chatInfo,"groupChat",e)},expression:"chatInfo.groupChat"}}),e("span",{staticClass:"ml-10 c-999 f-12"},[t._v("关闭后，用户将无法创建群聊")])],1),';
+if (!settings.includes(groupChatField)) throw Error('Group chat setting field changed');
+const groupCreateRoleField = 'e("el-form-item",{attrs:{label:"建群权限",prop:"groupCreateRole"}},[e("el-radio-group",{model:{value:t.chatInfo.groupCreateRole,callback:function(e){t.$set(t.chatInfo,"groupCreateRole",e)},expression:"chatInfo.groupCreateRole"}},[e("el-radio",{attrs:{label:"mentor",border:""}},[t._v("仅超管和导师")]),e("el-radio",{attrs:{label:"all",border:""}},[t._v("所有用户")])],1),e("div",{staticClass:"c-999 f-12"},[t._v("普通用户尝试创建群聊时会提示权限不足")])],1),';
+settings = settings.replace(groupChatField, groupChatField + groupCreateRoleField);
 const noticeFormAnchor = 'e("el-form-item",{attrs:{label:"系统状态",prop:"state"}';
 if (!settings.includes(noticeFormAnchor)) throw Error('System settings form changed');
 const noticeSwitch = 'e("el-form-item",{attrs:{label:"系统公告滚动条",prop:"noticePopup"}},[e("el-switch",{attrs:{"active-value":"1","inactive-value":"0"},model:{value:t.sysInfo.noticePopup,callback:function(e){t.$set(t.sysInfo,"noticePopup",e)},expression:"sysInfo.noticePopup"}}),e("span",{staticClass:"ml-10 c-999 f-12"},[t._v("开启后，聊天页面顶部滚动显示最新系统公告")])],1),';
@@ -827,9 +936,9 @@ if (!hashPattern.test(app)) throw Error('Management chunk hash map changed');
 app = app.replace(hashPattern, `585:"imgo${chunkHash}"`);
 write(`public/assets/js/585.imgo${chunkHash}.js`, text);
 write('public/assets/js/app.85372e4e.js', app);
-write('public/assets/css/imgo-maintenance.css', read('frontend/maintenance.css') + '\n' + read('frontend/admin-theme.css') + '\n' + read('frontend/message-panel.css') + '\n' + read('frontend/bank-panel.css') + '\n' + read('frontend/finance-orders.css') + '\n' + read('frontend/member-finance.css') + '\n' + read('frontend/member-agent-setting.css') + '\n' + read('frontend/member-batch-create.css') + '\n' + read('frontend/chat-design.css') + '\n' + read('frontend/chat-account-switcher.css') + '\n' + read('frontend/login-mobile.css') + '\n' + read('frontend/role-panel.css') + '\n' + read('frontend/audit-panel.css') + '\n' + read('frontend/google-auth.css') + '\n' + read('frontend/system-alert.css') + '\n' + read('frontend/mobile-compat.css') + '\n' + read('frontend/chat-message-comfort.css'));
+write('public/assets/css/imgo-maintenance.css', read('frontend/maintenance.css') + '\n' + read('frontend/admin-theme.css') + '\n' + read('frontend/message-panel.css') + '\n' + read('frontend/bank-panel.css') + '\n' + read('frontend/identity-panel.css') + '\n' + read('frontend/finance-orders.css') + '\n' + read('frontend/member-finance.css') + '\n' + read('frontend/member-agent-setting.css') + '\n' + read('frontend/member-batch-create.css') + '\n' + read('frontend/chat-design.css') + '\n' + read('frontend/chat-account-switcher.css') + '\n' + read('frontend/login-mobile.css') + '\n' + read('frontend/role-panel.css') + '\n' + read('frontend/audit-panel.css') + '\n' + read('frontend/google-auth.css') + '\n' + read('frontend/system-alert.css') + '\n' + read('frontend/mobile-compat.css') + '\n' + read('frontend/chat-message-comfort.css'));
 let index = read('public/index.html');
-const version = crypto.createHash('sha256').update(app+text+members+managementGroups+read('frontend/maintenance.css')+read('frontend/admin-theme.css') + '\n' + read('frontend/message-panel.css') + '\n' + read('frontend/bank-panel.css') + '\n' + read('frontend/finance-orders.css') + '\n' + read('frontend/member-finance.css') + '\n' + read('frontend/member-agent-setting.css') + '\n' + read('frontend/member-batch-create.css') + '\n' + read('frontend/chat-design.css') + '\n' + read('frontend/chat-account-switcher.css') + '\n' + read('frontend/login-mobile.css') + '\n' + read('frontend/role-panel.css') + '\n' + read('frontend/audit-panel.css') + '\n' + read('frontend/google-auth.css') + '\n' + read('frontend/system-alert.css') + '\n' + read('frontend/mobile-compat.css') + '\n' + read('frontend/chat-message-comfort.css')).digest('hex').slice(0,12);
+const version = crypto.createHash('sha256').update(app+text+members+managementGroups+read('frontend/maintenance.css')+read('frontend/admin-theme.css') + '\n' + read('frontend/message-panel.css') + '\n' + read('frontend/bank-panel.css') + '\n' + read('frontend/identity-panel.css') + '\n' + read('frontend/finance-orders.css') + '\n' + read('frontend/member-finance.css') + '\n' + read('frontend/member-agent-setting.css') + '\n' + read('frontend/member-batch-create.css') + '\n' + read('frontend/chat-design.css') + '\n' + read('frontend/chat-account-switcher.css') + '\n' + read('frontend/login-mobile.css') + '\n' + read('frontend/role-panel.css') + '\n' + read('frontend/audit-panel.css') + '\n' + read('frontend/google-auth.css') + '\n' + read('frontend/system-alert.css') + '\n' + read('frontend/mobile-compat.css') + '\n' + read('frontend/chat-message-comfort.css')).digest('hex').slice(0,12);
 index = index.replace(/assets\/js\/app\.85372e4e\.js(?:\?v=[a-z0-9]+)?/g, `assets/js/app.85372e4e.js?v=${version}`);
 index = index.replace(/<link[^>]*href="assets\/css\/imgo-maintenance.css[^>]*>/g, '');
 index = index.replace('</head>', `<link href="assets/css/imgo-maintenance.css?v=${version}" rel="stylesheet"></head>`);

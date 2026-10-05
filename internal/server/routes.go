@@ -26,6 +26,8 @@ func (a *App) register() {
 	add("/enterprise/wallet", false, false, "status withdraw history entries", a.wallet)
 	add("/enterprise/checkin", false, false, "status submit", a.checkIn)
 	add("/enterprise/invite", false, false, "status", a.inviteStatus)
+	add("/enterprise/identity", false, false, "get save", a.identityVerification)
+	addManage("/manage/identity", "manage.users", "index detail review", a.manageIdentityVerification)
 	addManage("/manage/bank", "manage.bank", "index detail edit", a.manageBankCard)
 	addManage("/manage/wallet", "manage.finance", "index detail account credit review freeze recharges entries recharge withdraw", a.manageWallet)
 	add("/enterprise/files", false, false, "index", a.files)

@@ -19,7 +19,7 @@ func TestAddonDDLIncludesAgentTables(t *testing.T) {
 	joinedDDL := strings.Join(a.addonTableDDL(), "\n")
 	for _, name := range []string{
 		"imgo_agent_setting", "imgo_agent_auto_state", "imgo_agent_online_sample",
-		"imgo_batch_user_task",
+		"imgo_batch_user_task", "imgo_identity_verification",
 	} {
 		if !strings.Contains(joinedDDL, name) {
 			t.Fatalf("missing %s", name)

@@ -174,7 +174,10 @@ func (a *App) im(r *request) (any, error) {
 		}
 		return nil, a.revoke(r.ctx(), r.uid())
 	case "editaccount":
-		if !a.verifyCode(str(r.user["account"]), "4", r.s("code")) || !a.verifyCode(r.s("account"), "4", r.s("newCode")) {
+		if number(r.user["is_auth"]) != 0 && !a.verifyCode(str(r.user["account"]), "4", r.s("code")) {
+			return nil, r.fail("原账号验证码错误")
+		}
+		if !a.verifyCode(r.s("account"), "4", r.s("newCode")) {
 			return nil, r.fail("验证码错误")
 		}
 		if len(r.s("account")) < 3 || len(r.s("account")) > 32 {

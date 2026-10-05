@@ -4,7 +4,7 @@ function imgoNormalizeConfig(value, previous) {
  const defaults = {
   demon_mode: false,
   sysInfo: {name:'Imgo',logo:'',state:1,runMode:2,closeTips:'系统维护中',showScan:'1',showGroupQr:'1'},
-  chatInfo: {online:0,webrtc:0,simpleChat:0,redoTime:120,dbDelMsg:0},
+  chatInfo: {online:0,webrtc:0,simpleChat:0,redoTime:120,dbDelMsg:0,groupCreateRole:'mentor'},
   security: {googleAuthEnabled:false},
   compass: {status:0,mode:1,list:[]}, fileUpload: {size:50,videoSize:200}
  };
@@ -22,6 +22,29 @@ function imgoNormalizeConfig(value, previous) {
   }
  }
  return result;
+}
+
+function imgoCanCreateGroup(user, chatInfo) {
+ const role = String(chatInfo && chatInfo.groupCreateRole || 'mentor');
+ if (role === 'all') return true;
+ return Number(user && user.user_id) === 1 || Number(user && user.agent_mode) === 1;
+}
+
+function imgoCanViewMemberAccount(user) {
+ return Number(user && user.user_id) === 1 || Number(user && user.admin_role_id) > 0;
+}
+
+function imgoMessageSenderLabel(sender, viewer) {
+ const value = sender && typeof sender === 'object' ? sender : {};
+ const nickname = String(value.displayName || value.realname || '').trim();
+ if (!imgoCanViewMemberAccount(viewer)) return nickname;
+ const account = String(value.account || '').trim();
+ if (account && nickname && account !== nickname) return account + '(' + nickname + ')';
+ return account || nickname;
+}
+
+if (typeof window !== 'undefined') {
+ window.imgoMessageSenderLabel = imgoMessageSenderLabel;
 }
 
 function imgoUploadLimitMB(message, value) {
