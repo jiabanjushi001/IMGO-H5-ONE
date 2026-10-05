@@ -177,6 +177,12 @@
 			}
 		},
 		{
+			"path": "pages/mine/real-name",
+			"style": {
+				"navigationBarTitleText": "实名认证"
+			}
+		},
+		{
 			"path": "pages/mine/about",
 			"style": {
 				"navigationBarTitleText": "关于"

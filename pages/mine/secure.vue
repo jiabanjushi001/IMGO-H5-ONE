@@ -1,6 +1,6 @@
 <template>
 	<view class="secure-page">
-		<cu-custom bgColor="text-white" bgStyle="background:linear-gradient(126deg,#4c63e9 0%,#5e70f5 55%,#6b6eeb 100%);color:#fff;" :isBack="true">
+		<cu-custom bgColor="text-white" bgStyle="background:linear-gradient(126deg,#4c63e9 0%,#5e70f5 55%,#6b6eeb 100%);color:#fff;" :isBack="true" :fallbackToHome="true">
 			<template #backText></template>
 			<template #content>账号安全</template>
 		</cu-custom>
@@ -25,6 +25,21 @@
 					<text class="text-grey cuIcon-right"></text>
 				</view>
 			</view>
+			<view class="cu-item account-auth-item" @tap="openRealName">
+				<view class="content padding-tb-sm">
+					<view class="account-auth-title">
+						<text class="cuIcon-vip text-orange"></text>
+						<text>实名认证</text>
+					</view>
+					<view class="text-gray text-sm account-auth-tip">
+						上传身份证正反面，提交后等待后台审核
+					</view>
+				</view>
+				<view class="action">
+					<text class="account-auth-status" :class="{'is-verified': userInfo.is_auth}">{{ userInfo.is_auth ? '已实名' : '未实名' }}</text>
+					<text class="text-grey cuIcon-right"></text>
+				</view>
+			</view>
 			<view class="padding flex flex-direction mt-40">
 				<button class="cu-btn bg-red lg" @tap="logout()">注销登录</button>
 			</view>
@@ -37,7 +52,7 @@
 				</view>
 				<view class="manage-content mb-20">
 					<view class="cu-list menu mt-15 bg-white">
-						<view class="cu-form-group text-right" v-if="userInfo.is_auth">
+						<view class="cu-form-group text-right" v-if="!editPass && userInfo.is_auth">
 							<view class="title">验证码</view>
 							<input placeholder="输入验证码" name="input"  v-model="code" />
 							<button class='cu-btn theme-btn shadow cu-load'  :class="loading?'loading':''" :disabled="loading" @tap="sendCode(true)">发送验证码</button>
@@ -57,7 +72,7 @@
 							</view>
 						</template>
 						<template v-else>
-							<view class="cu-form-group text-right" v-if="!userInfo.is_auth">
+							<view class="cu-form-group text-right">
 								<view class="title">原密码</view>
 								<input placeholder="输入原来的密码" name="input" v-model="originalPassword" />
 							</view>
@@ -98,9 +113,12 @@
 			}
 		},
 		onShow() {
-			
+			this.userInfo = loginStore.userInfo
 		}, 
 		methods: {
+			openRealName(){
+				uni.navigateTo({ url: '/pages/mine/real-name' })
+			},
 			logout(){
 				let client_id=uni.getStorageSync('client_id');
 				this.$api.LoginApi.logout({client_id:client_id}).then(res => {
@@ -114,7 +132,7 @@
 				this.editPass=false;
 			},
 			save(){
-				if(this.code=='' && this.userInfo.is_auth){
+				if(!this.editPass && this.code=='' && this.userInfo.is_auth){
 					uni.showToast({
 					  title: '请输入验证码',
 					  icon: 'none'
@@ -179,10 +197,10 @@
 						  this.code = '';
 						  this.newCode = '';
 						  uni.showToast({
-						    title: "修改成功，请重新登陆",
+						    title: "修改成功，请重新登录",
 						    icon: 'none'
 						  });
-						  
+						  setTimeout(() => loginStore.logout(), 900);
 						}
 					})
 				}
@@ -233,6 +251,35 @@
 	background: linear-gradient(126deg, #4c63e9 0%, #5e70f5 100%) !important;
 	color: #fff !important;
 	border: 0 !important;
+}
+.account-auth-item {
+	min-height: 116rpx;
+}
+.account-auth-title {
+	display: flex;
+	align-items: center;
+	gap: 16rpx;
+	font-weight: 600;
+	color: #202943;
+}
+.account-auth-tip {
+	margin-top: 8rpx;
+	padding-left: 48rpx;
+}
+.account-auth-status {
+	display: inline-flex;
+	align-items: center;
+	height: 48rpx;
+	padding: 0 18rpx;
+	margin-right: 8rpx;
+	border-radius: 24rpx;
+	color: #ef8c24;
+	background: #fff4e7;
+	font-size: 24rpx;
+}
+.account-auth-status.is-verified {
+	color: #118a59;
+	background: #dcf7eb;
 }
 .cu-load {
     display: block;

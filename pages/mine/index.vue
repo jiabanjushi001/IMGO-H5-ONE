@@ -6,6 +6,7 @@
 					:user="loginStore.userInfo"
 					:circle-avatar="!!appSetting.circleAvatar"
 					@edit="editInfo"
+					@identity="openIdentity"
 				/>
 			</view>
 			<WalletSummaryCard
@@ -53,6 +54,7 @@ import scan from '@/common/scan.js'
 import checkInApi from '@/api/check-in.js'
 import inviteApi from '@/api/invite.js'
 import walletApi from '@/api/wallet.js'
+import identityApi from '@/api/identity.js'
 import MineProfileHero from '@/components/mine/MineProfileHero.vue'
 import MineCheckInCard from '@/components/mine/MineCheckInCard.vue'
 import MineQuickActions from '@/components/mine/MineQuickActions.vue'
@@ -103,6 +105,7 @@ export default {
 					this.loadCheckIn()
 					this.loadWallet()
 					this.loadInvite()
+					this.loadIdentity()
 				}
 			}
 		},
@@ -111,6 +114,7 @@ export default {
 				this.loadCheckIn()
 				this.loadWallet()
 				this.loadInvite()
+				this.loadIdentity()
 			}
 		}
 	},
@@ -123,6 +127,16 @@ export default {
 		// #endif
 	},
 	methods: {
+		async loadIdentity() {
+			try {
+				const res = await identityApi.get()
+				if (Number(res.code) !== 0) return
+				const next = res.data && res.data.is_auth ? 1 : 0
+				if (Number(loginStore.userInfo.is_auth || 0) !== next) {
+					loginStore.login({ ...loginStore.userInfo, is_auth: next })
+				}
+			} catch (error) {}
+		},
 		async loadWallet() {
 			this.walletLoading = true
 			this.walletError = false
@@ -177,6 +191,7 @@ export default {
 		showsecure() { uni.navigateTo({ url: '/pages/mine/secure' }) },
 		showBankCard() { uni.navigateTo({ url: '/pages/mine/bank-card' }) },
 		editInfo() { uni.navigateTo({ url: '/pages/mine/profile' }) },
+		openIdentity() { uni.navigateTo({ url: '/pages/mine/real-name' }) },
 		scan() { scan.scanQr() },
 		checkVersion() {
 			// #ifdef APP-PLUS
