@@ -940,7 +940,8 @@ uni-page[data-page="pages/login/register"] .login-logo {
 	padding: 10rpx;
 	border: 1rpx solid rgba(255, 255, 255, 0.88);
 	border-radius: 38rpx;
-	background: rgba(255, 255, 255, 0.86) url("../image/rocket.png") center / 76% auto no-repeat;
+	/* 不要写死 rocket.png：否则会在 config.js 的 appLogo 加载前闪出旧图标 */
+	background: rgba(255, 255, 255, 0.86);
 	box-shadow: 0 24rpx 60rpx rgba(62, 82, 155, 0.16);
 }
 
