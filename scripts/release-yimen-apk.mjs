@@ -71,15 +71,17 @@ writeFileSync(readmePath, `一门 APP 静态离线打包说明
 `)
 
 rmSync(outZip, { force: true })
-const zip = spawnSync(
-	'powershell.exe',
-	[
-		'-NoProfile',
-		'-Command',
-		`Compress-Archive -Path '${outDir}\\*' -DestinationPath '${outZip}' -Force`,
-	],
-	{ cwd: projectRoot, stdio: 'inherit' },
-)
+const zip = process.platform === 'win32'
+	? spawnSync(
+		'powershell.exe',
+		[
+			'-NoProfile',
+			'-Command',
+			`Compress-Archive -Path '${outDir}\\*' -DestinationPath '${outZip}' -Force`,
+		],
+		{ cwd: projectRoot, stdio: 'inherit' },
+	)
+	: spawnSync('zip', ['-qry', outZip, '.'], { cwd: outDir, stdio: 'inherit' })
 if (zip.status !== 0) {
 	console.warn('zip 压缩失败，仍可手动压缩 release/yimen-apk 目录后上传一门')
 } else {

@@ -1,8 +1,21 @@
+<script setup>
+import { computed } from 'vue'
+
+const props = defineProps({
+	rewardEnabled: { type: Boolean, default: true }
+})
+
+const rewardDescription = computed(() => props.rewardEnabled
+	? '签到成功后，奖励会自动进入钱包余额。'
+	: '当前签到奖励已关闭，签到记录和累计天数仍会正常保存。')
+</script>
+
 <template>
 	<view class="rules-card">
 		<view class="rules-title"><view class="rules-mark"></view>签到说明</view>
 		<view class="rule-row"><view class="rule-number">01</view><view><view class="rule-heading">每天一次</view><view class="rule-copy">按北京时间自然日计算，每天只能签到一次。</view></view></view>
 		<view class="rule-row"><view class="rule-number">02</view><view><view class="rule-heading">记录每一步</view><view class="rule-copy">累计天数来自实际签到记录，错过一天也不会清零。</view></view></view>
+		<view class="rule-row"><view class="rule-number">03</view><view><view class="rule-heading">奖励自动到账</view><view class="rule-copy">{{ rewardDescription }}</view></view></view>
 	</view>
 </template>
 

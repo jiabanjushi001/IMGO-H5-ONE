@@ -76,6 +76,14 @@
 				{{isCancel ? '松开取消' : '正在录音'}}
 			</view>
 		</view>
+
+		<CallModePicker
+			:visible="modelName === 'callMode'"
+			:allow-prepared-video="canUsePreparedVideo"
+			:show-voice="false"
+			@close="modelName = ''"
+			@start="startSelectedCall"
+		/>
 		
 		<view class="cu-modal bottom-modal" :class="modelName=='userModel'?'show':''" @tap="closeModel()">
 			<view class="cu-dialog" v-if="modelName=='userModel'">
@@ -97,17 +105,20 @@
 <script>
 import MumuRecorder from '@/uni_modules/mumu-recorder/components/mumu-recorder/mumu-recorder.vue'
 import userSelect from '@/components/message/user-select.vue';
+import CallModePicker from '@/components/call/CallModePicker.vue'
 import Edit from '@/utils/edit.js'
 import emoji from '@/utils/emoji.js'
 import { useMsgStore } from '@/store/message';
 import { useloginStore } from '@/store/login';
+import { normalizeMediaUrl } from '@/utils/avatar.js'
+import { canUsePreparedVideo } from '@/utils/call-video-permission.js'
 import pinia from '@/store/index'
 const msgStore = useMsgStore(pinia);
 const userStore = useloginStore(pinia);
 	export default {
 	name  : "im-input",
 	emits: ['send', 'setPad', 'layout-change'],
-	components: { MumuRecorder,userSelect },
+	components: { MumuRecorder,userSelect,CallModePicker },
 	props : { 
 		boxStatus:{type:Number, default:0},
 		contact:{type:Object, default:{}}
@@ -164,6 +175,11 @@ const userStore = useloginStore(pinia);
 		},
 		InputBottom(val){
 			this.$emit('setPad',val);
+		}
+	},
+	computed: {
+		canUsePreparedVideo() {
+			return canUsePreparedVideo(this.userInfo)
 		}
 	},
 	created : function(){
@@ -568,7 +584,10 @@ const userStore = useloginStore(pinia);
 			})
 			
 		},
-		calling(is_video){
+		startSelectedCall(selection) {
+			this.calling(selection.type, selection.videoMode, selection.video)
+		},
+		calling(is_video, videoMode = '', video = null){
 			// #ifdef MP
 				return uni.showToast({
 					title:'小程序暂不支持',
@@ -593,9 +612,19 @@ const userStore = useloginStore(pinia);
 					icon:'none'
 				})
 			}
+			if (is_video && !videoMode && this.canUsePreparedVideo) {
+				this.appBox = 0
+				this.InputBottom = 0
+				this.modelName = 'callMode'
+				return
+			}
+			this.modelName = ''
 			let msg_id=this.$util.getUuid();
+			const mode = is_video ? (videoMode || 'live') : ''
+			const videoFileId = Number(video && video.file_id || 0)
+			const videoUrl = video ? normalizeMediaUrl(video.url || '') : ''
 			uni.navigateTo({
-			  url: '/pages/message/call?msg_id='+msg_id+'&type='+is_video+'&status=1&id='+this.contact.id+'&name='+this.contact.displayName+'&avatar='+encodeURIComponent(this.contact.avatar || '')+'&token='+encodeURIComponent(uni.getStorageSync('authToken') || '')
+			  url: '/pages/message/call?msg_id='+msg_id+'&type='+is_video+'&status=1&id='+this.contact.id+'&name='+encodeURIComponent(this.contact.displayName || '')+'&avatar='+encodeURIComponent(this.contact.avatar || '')+'&token='+encodeURIComponent(uni.getStorageSync('authToken') || '')+'&video_mode='+mode+'&video_file_id='+videoFileId+'&video_url='+encodeURIComponent(videoUrl)
 			})
 			
 		},

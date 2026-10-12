@@ -97,7 +97,7 @@ test('healthy API loads the app bundle after the probe', async () => {
   await settle()
   assert.equal(harness.scripts.length, 1)
   assert.equal(harness.scripts[0].type, 'module')
-  assert.equal(harness.scripts[0].src, '/assets/index-test.js')
+  assert.equal(harness.scripts[0].src, 'http://127.0.0.1:8765/assets/index-test.js')
 })
 
 const servers = [

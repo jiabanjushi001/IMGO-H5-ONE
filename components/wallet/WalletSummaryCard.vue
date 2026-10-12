@@ -5,6 +5,7 @@ const props = defineProps({
 	availableCents: { type: Number, default: 0 },
 	pendingCents: { type: Number, default: 0 },
 	frozenCents: { type: Number, default: 0 },
+	withdrawalEnabled: { type: Boolean, default: true },
 	loading: { type: Boolean, default: false },
 	error: { type: Boolean, default: false }
 })
@@ -38,7 +39,7 @@ const hasAdminFrozen = computed(() => props.frozenCents > 0)
 					</view>
 				</view>
 			</view>
-			<button class="wallet-withdraw" :disabled="loading || error" @tap.stop="emit('withdraw')">提现<text class="cuIcon-right"></text></button>
+			<button class="wallet-withdraw" :disabled="loading || error || !withdrawalEnabled" @tap.stop="emit('withdraw')">{{ withdrawalEnabled ? '提现' : '暂停提现' }}<text v-if="withdrawalEnabled" class="cuIcon-right"></text></button>
 		</view>
 		<view class="wallet-divider"></view>
 		<view class="wallet-links">

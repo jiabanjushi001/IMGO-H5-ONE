@@ -34,6 +34,31 @@
 		   z-index:10;
 		   object-fit: cover;
 		}
+		.recorded-badge{
+			position:fixed;
+			top:18px;
+			left:50%;
+			z-index:20;
+			transform:translateX(-50%);
+			padding:7px 14px;
+			border:1px solid rgba(255,255,255,.4);
+			border-radius:999px;
+			background:rgba(25,32,54,.72);
+			color:#fff;
+			font-size:13px;
+			font-weight:600;
+			letter-spacing:.5px;
+			backdrop-filter:blur(8px);
+		}
+		.prepared-source{
+			position:fixed;
+			left:-4px;
+			bottom:-4px;
+			width:2px;
+			height:2px;
+			opacity:.01;
+			pointer-events:none;
+		}
 		
 		.call-user-box{
 			position:fixed;
@@ -100,10 +125,12 @@
 	<body>
 		<div id="app">
 			<div class="webrtc-box">
-				<audio id="music1">
+			<audio id="music1">
 			        <source src="./voice/calling.mp3">
-			    </audio>
-			    <video v-show="localStream && is_video" class="localvideo" ref="localvideo"  x5-video-player-fullscreen="true" autoplay x5-playsinline playsinline webkit-playsinline @click="displayBtn = !displayBtn" poster="./image/wallpaper.png"></video>
+			</audio>
+			<video ref="preparedvideo" class="prepared-source" muted loop autoplay playsinline webkit-playsinline></video>
+			<div v-if="is_video && isRecordedCall" class="recorded-badge">预录视频</div>
+			<video v-show="localStream && is_video" class="localvideo" ref="localvideo"  x5-video-player-fullscreen="true" autoplay x5-playsinline playsinline webkit-playsinline @click="displayBtn = !displayBtn" poster="./image/wallpaper.png"></video>
 			    <video v-show="remoteStream && is_video" class="remotevideo" ref="remotevideo" x5-video-player-fullscreen="true" autoplay x5-playsinline playsinline webkit-playsinline @click="changeVideo()" poster="./image/wallpaper.png"></video>
 			    <div class="call-user-box" v-if="displayBtn">
 			      <div class="call-user" v-if="contact">
@@ -134,9 +161,13 @@
 					  <div class="text">接听</div>
 					</div>
 			        <div class="button switch-btn" v-if="status<3" >
-						<template v-if="is_video">
+						<template v-if="is_video && !isPreparedSender">
 							<img class="image-icon" :src="'./image/video.png'" @click="exchangeVideo()"/>
 							<div class="text">切换摄像头</div> 
+						</template>
+						<template v-else-if="is_video">
+							<img class="image-icon" src="./image/video.png"/>
+							<div class="text">预录视频</div>
 						</template>
 						<template v-else>
 						  <img class="image-icon" :src="'./image/speaker'+(speaker ? '' : '-off')+'.png'" @click="speakBtn()"/>
@@ -191,7 +222,16 @@
 					callTimeDis:'', //通话时间展示
 					timerIntervalId:null,  //通话计时器
 					displayAvatar:'',
-					contact:{
+					isRecordedCall:params.video_mode === 'recorded',
+					isPreparedSender:params.video_mode === 'recorded' && String(params.status) === '1',
+					preparedVideo:null,
+					preparedObjectUrl:'',
+					messageHandler:null,
+					pageExitHandler:null,
+						ringPlayPromise:null,
+						pendingIceCandidates:[],
+						answering:false,
+						contact:{
 						id:params.target_id,
 						displayName:params.name,
 						avatar:params.avatar
@@ -201,15 +241,26 @@
 			mounted() {
 				this.resolveContactAvatar();
 				this.pc = new RTCPeerConnection(config);
-				this.pc.ontrack = (event) => {
-					console.log(event,'接收视频流');
-					if(this.localVideo){
-						this.remoteStream = event.streams[0];
-						setTimeout(()=>{
-							this.streamType=2;
-						},50)
-					}
-				};
+					this.pc.ontrack = (event) => {
+						console.log(event,'接收视频流');
+						this.stopRinging();
+						const incomingStream = event.streams && event.streams[0]
+							? event.streams[0]
+							: new MediaStream([event.track]);
+						if (this.remoteStream && (!event.streams || !event.streams[0])) {
+							const exists = this.remoteStream.getTracks().some(track => track.id === event.track.id);
+							if (!exists) this.remoteStream.addTrack(event.track);
+						} else {
+							this.remoteStream = incomingStream;
+						}
+						this.streamType = 2;
+						this.$nextTick(() => this.updateVideoElements());
+					};
+					this.pc.onconnectionstatechange = () => {
+						console.log('WebRTC connection state:', this.pc && this.pc.connectionState);
+						if (this.pc && this.pc.connectionState === 'connected') this.stopRinging();
+					};
+					this.onicecandidate();
 				
 				if (this.platform === 'app') {
 				  document.addEventListener('plusready', () => {
@@ -219,12 +270,15 @@
 				  });
 				}
 				
-			    this.localVideo = this.$refs.localvideo;
-			    this.remoteVideo = this.$refs.remotevideo;
+				this.localVideo = this.$refs.localvideo;
+				this.remoteVideo = this.$refs.remotevideo;
+				this.preparedVideo = this.$refs.preparedvideo;
 				
-				window.addEventListener('message', (e) => {
-				  this.callMessagecallback(e)
-				}, false);
+				this.messageHandler = (e) => this.callMessagecallback(e);
+				window.addEventListener('message', this.messageHandler, false);
+				this.pageExitHandler = () => this.cleanupCall();
+				window.addEventListener('pagehide', this.pageExitHandler, false);
+				window.addEventListener('beforeunload', this.pageExitHandler, false);
 				
 				window.getUniAppMessage = (arg) => {
 				  const data = {
@@ -234,13 +288,13 @@
 				}
 				this.is_video = params.type==1 ? true : false;
 				
-				this.offerParams = this.is_video ? {
-				  offerToRecieveAudio: 1,
-				  offerToRecieveVideo: 1
-				} : {
-				  offerToRecieveAudio: 1,
-				  offerToRecieveVideo: 0
-				}
+					this.offerParams = this.is_video ? {
+					  offerToReceiveAudio: true,
+					  offerToReceiveVideo: true
+					} : {
+					  offerToReceiveAudio: true,
+					  offerToReceiveVideo: false
+					}
 				this.status=params.status
 				// 如果状态为1,表示拨打电话，并且calling状态为1的时候才是直接拨打；
 				if(this.status==1){
@@ -251,23 +305,40 @@
 					this.playMusicCall('state');
 				}
 			},
-			watch:{
-				streamType(val){
-					// 切换镜头位置
-					if(val==1){
-						this.localVideo.srcObject = this.localStream;
-						this.remoteVideo.srcObject = this.remoteStream;
-						this.localVideo.muted=true;
-						this.remoteVideo.muted=false;
-					}else{
-						this.localVideo.srcObject = this.remoteStream;
-						this.remoteVideo.srcObject = this.localStream;
-						this.localVideo.muted=false;
-						this.remoteVideo.muted=true;
-					}
+			beforeUnmount() {
+				this.cleanupCall();
+				if (this.messageHandler) window.removeEventListener('message', this.messageHandler, false);
+				if (this.pageExitHandler) {
+					window.removeEventListener('pagehide', this.pageExitHandler, false);
+					window.removeEventListener('beforeunload', this.pageExitHandler, false);
 				}
 			},
-			methods: {
+				watch:{
+					streamType(val){
+						this.$nextTick(() => this.updateVideoElements());
+					}
+				},
+				methods: {
+					playStream(video, stream, muted) {
+						if (!video) return;
+						if (video.srcObject !== stream) video.srcObject = stream || null;
+						video.muted = Boolean(muted);
+						video.playsInline = true;
+						if (!stream) return;
+						const playTask = video.play();
+						if (playTask && typeof playTask.catch === 'function') {
+							playTask.catch(error => console.warn('video autoplay failed', error));
+						}
+					},
+					updateVideoElements() {
+						if (this.streamType == 1) {
+							this.playStream(this.localVideo, this.localStream, true);
+							this.playStream(this.remoteVideo, this.remoteStream, false);
+						} else {
+							this.playStream(this.localVideo, this.remoteStream, false);
+							this.playStream(this.remoteVideo, this.localStream, true);
+						}
+					},
 				resolveContactAvatar() {
 					const raw = decodeURIComponent(this.contact && this.contact.avatar ? this.contact.avatar : (params.avatar || ''))
 					const token = decodeURIComponent(params.token || '')
@@ -304,29 +375,69 @@
 					const seconds = time - (hours * 3600) - (minutes * 60);
 					return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}`;
 				},
-			    // 视频电话初始化本地视频
-			    initLocalStream(call_id, is_video) {
-					let video=false;
-					navigator.mediaDevices.enumerateDevices().then(devices => {
-					  const videoDevices = devices.filter(device => device.kind === 'videoinput');
-					    if(videoDevices.length && is_video){
-						    video = {
-						      width: window.screen.height,
-						      height: window.screen.width
-						    }
-					    }
-						navigator.mediaDevices.getUserMedia({
-							video: video,
-							audio: {echoCancellation: true}
-						}).then((stream) => {
-							this.localStream = stream;
+				async createPreparedStream() {
+					const source = decodeURIComponent(params.video_url || '')
+					const token = decodeURIComponent(params.token || '')
+					if (!source || !this.preparedVideo || typeof fetch !== 'function') {
+						throw new Error('prepared video unavailable')
+					}
+					const response = await fetch(source, {
+						headers: token ? { Authorization: token } : {},
+						credentials: 'omit',
+						cache: 'no-store'
+					})
+					if (!response.ok) throw new Error('prepared video HTTP ' + response.status)
+					const blob = await response.blob()
+					this.preparedObjectUrl = URL.createObjectURL(blob)
+					this.preparedVideo.src = this.preparedObjectUrl
+					this.preparedVideo.currentTime = 0
+					await this.preparedVideo.play()
+					const capture = this.preparedVideo.captureStream || this.preparedVideo.mozCaptureStream
+					if (typeof capture !== 'function') throw new Error('captureStream unsupported')
+					const capturedStream = capture.call(this.preparedVideo)
+					if (!capturedStream || !capturedStream.getVideoTracks().length) throw new Error('prepared video has no video track')
+					if (!capturedStream.getAudioTracks().length) throw new Error('预设视频不包含声音')
+					// Send the prepared file's original picture and sound together. The
+					// caller microphone is intentionally not mixed into recorded mode.
+					return capturedStream
+				},
+					async createDeviceStream(is_video) {
+						if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== 'function') {
+							throw new Error('当前浏览器不支持摄像头或麦克风');
+						}
+						const audio = {
+							echoCancellation: true,
+							noiseSuppression: true,
+							autoGainControl: true
+						};
+						if (!is_video) return navigator.mediaDevices.getUserMedia({ video: false, audio });
+						try {
+							return await navigator.mediaDevices.getUserMedia({
+								video: {
+									facingMode: { ideal: this.facingMode },
+									width: { ideal: 1280 },
+									height: { ideal: 720 }
+								},
+								audio
+							});
+						} catch (error) {
+							if (!['OverconstrainedError', 'ConstraintNotSatisfiedError'].includes(error && error.name)) throw error;
+							return navigator.mediaDevices.getUserMedia({ video: true, audio });
+						}
+					},
+				    // 视频电话初始化本地视频
+				    async initLocalStream(call_id, is_video) {
+						const streamTask = this.isPreparedSender && is_video
+							? this.createPreparedStream()
+							: this.createDeviceStream(is_video)
+						try {
+								const stream = await streamTask;
+								this.localStream = stream;
 							// 同步音频
 							 stream.getTracks().forEach((track) => {
 								this.pc.addTrack(track, stream);
 							});
-							this.localVideo.srcObject = this.localStream;
-							// 把自己的视频静音
-							this.localVideo.muted = true;
+								this.updateVideoElements();
 							if(call_id){
 								this.postMsg({
 									event:'calling',
@@ -342,16 +453,26 @@
 								}, 1000)
 							}else{
 								// 告诉对方已经接听电话
-								this.postMsg({ event: 'acceptRtc',code:904});
+									this.postMsg({ event: 'acceptRtc',code:904});
+								}
+								return true;
+							} catch (e) {
+								console.error('local media error', e)
+								this.postMsg({
+								  event: 'mediaDevices',
+								  name: e && e.name ? e.name : '',
+								  message: this.mediaErrorMessage(e),
+								})
+								return false;
 							}
-						  // 监听远程媒体流
-						}).catch((e) => {
-							this.postMsg({
-							  event: 'mediaDevices',
-							})
-						});
-					});
-			    },
+				    },
+					mediaErrorMessage(error) {
+						const name = error && error.name ? error.name : '';
+						if (name === 'NotAllowedError' || name === 'PermissionDeniedError') return '请允许访问摄像头和麦克风';
+						if (name === 'NotFoundError' || name === 'DevicesNotFoundError') return '未检测到摄像头或麦克风';
+						if (name === 'NotReadableError' || name === 'TrackStartError') return '摄像头或麦克风正在被其他程序使用';
+						return error && error.message ? error.message : '无法打开摄像头或麦克风';
+					},
 			    // 拨打电话
 			    called(is_video) {
 			      this.is_video = is_video;
@@ -359,20 +480,20 @@
 			      this.playMusicCall('state');
 			    },
 			    // 接听电话
-			    answer() {
-					this.status = 2;
-			        this.initLocalStream(false, this.is_video);
-			        this.playMusicCall('close');
-					this.startTime();
-			    },
+				    async answer() {
+						if (this.answering) return;
+						this.answering = true;
+				        this.playMusicCall('close');
+						const ready = await this.initLocalStream(false, this.is_video);
+						this.answering = false;
+						if (!ready) return;
+						this.status = 2;
+						this.startTime();
+				    },
 			    // 挂断电话
 			    hangup(btn) {
-			      clearInterval(this.timer);
-				  clearInterval(this.timerIntervalId);
-				  if(this.status!=2){
-					  this.playMusicCall('close');
-				  }
-			      if (this.status) {
+				  this.cleanupCall();
+			      if (false && this.status) {
 			        this.closeLocalMedia();  //关闭本地媒体
 			        this.remoteStream=null;  //关闭远程媒体
 			      }
@@ -396,14 +517,48 @@
 				  })
 			    },
 			    // 关闭本地媒体
-			    closeLocalMedia() {
+				    closeLocalMedia() {
 			      if (this.localStream && this.localStream.getTracks()) {
 			        this.localStream.getTracks().forEach((track) => {
 			          track.stop();
 			        });
 			      }
-			      this.localStream = null;
-			    },
+				      this.localStream = null;
+					  if (this.preparedVideo) {
+						  this.preparedVideo.pause();
+						  this.preparedVideo.removeAttribute('src');
+						  this.preparedVideo.load();
+					  }
+					  if (this.preparedObjectUrl) {
+						  URL.revokeObjectURL(this.preparedObjectUrl);
+						  this.preparedObjectUrl = '';
+					  }
+					    },
+				stopRinging() {
+					const audio = document.getElementById('music1');
+					if (!audio) return;
+					audio.loop = false;
+					audio.pause();
+					try { audio.currentTime = 0; } catch (error) {}
+					this.ringPlayPromise = null;
+				},
+				cleanupCall() {
+					clearInterval(this.timer);
+					clearInterval(this.timerIntervalId);
+					this.timer = null;
+					this.timerIntervalId = null;
+					this.stopRinging();
+					this.closeLocalMedia();
+					if (this.remoteStream && this.remoteStream.getTracks) {
+						this.remoteStream.getTracks().forEach(track => track.stop());
+					}
+					this.remoteStream = null;
+					if (this.pc) {
+						this.pc.ontrack = null;
+						this.pc.onicecandidate = null;
+						if (this.pc.connectionState !== 'closed') this.pc.close();
+					}
+				},
 			    // 打开或关闭声音
 			    switchVoice() {
 			      if (this.localStream == null) {
@@ -452,6 +607,7 @@
 			    },
 				// 切换前后摄像头
 				exchangeVideo() {
+					if (this.isPreparedSender) return;
 				    this.localStream.getTracks().forEach(track => track.stop());
 				    if (this.facingMode == 'user') this.facingMode = 'environment'
 				    else this.facingMode = 'user'
@@ -494,21 +650,19 @@
 				},
 			    // 播放响铃
 			    playMusicCall(type) {
-			      var audio = document.getElementById("music1");
-				  if(type=='close' && !audio.paused){
-					  audio.pause(); // 暂停
+				  if (type !== 'state') {
+					  this.stopRinging();
 					  return;
 				  }
-			      if (type === "state") {
-			          audio.loop = true;
-			      } else {
-			          audio.loop = false;
-			      }
-				  
+			      const audio = document.getElementById("music1");
+				  if (!audio) return;
+				  audio.loop = true;
 				  if (audio.paused) {
-					  audio.play(); // 播放
-				  } else {
-					  audio.pause(); // 暂停
+					  const playTask = audio.play();
+					  this.ringPlayPromise = playTask || null;
+					  if (playTask && typeof playTask.catch === 'function') {
+						  playTask.catch(() => {});
+					  }
 				  }
 			    },
 				// 向uniapp发送消息，页面通讯
@@ -522,8 +676,11 @@
 				  }
 				},
 				// 接收websocket发送过来的消息,由uniapp接收后传输到当前页面
-				callMessagecallback(msg){
-					let e=msg.data;
+					async callMessagecallback(msg){
+					let e=msg && msg.data;
+					const signalingEvents = ['calling', 'hangup', 'busy', 'forceClose', 'acceptRtc', 'turndown', 'answer', 'iceCandidate', 'offer'];
+					if (!e || typeof e !== 'object' || !signalingEvents.includes(e.event)) return;
+					if (e.video_mode === 'recorded') this.isRecordedCall = true;
 					switch (e.event) {
 						case "calling":
 							console.log('发起通话...');
@@ -536,65 +693,79 @@
 							this.status=4;
 						    this.hangup(false);
 							break;
+						case "forceClose":
+							this.cleanupCall();
+							break;
 						case "acceptRtc": //已经接听，创建offer并发送
 							this.status = 2;
 							clearInterval(this.timer);
 							this.startTime();
-							this.playMusicCall();
-							this.createOffer()
+							this.stopRinging();
+							await this.createOffer()
 							break;
 						case "turndown":
 						  break;
-						case "answer":
-							//同步answer信息...
-							this.pc.setRemoteDescription(new RTCSessionDescription({
-							  type: 'answer',
-							  sdp:  e.sdp
-							}));
-							break;	
-						case "iceCandidate":
-							setTimeout(()=>{
-								// 添加ice完成通话连接
-								  if (typeof(e.iceCandidate) === 'object') {
-									this.pc.addIceCandidate(new RTCIceCandidate(e.iceCandidate));
-								  } else {
-									this.pc.addIceCandidate(new RTCIceCandidate(JSON.parse(e.iceCandidate)));
-								  }
-							},100)
-							break;
-						case "offer":
-						  this.pc.setRemoteDescription(new RTCSessionDescription({
-							type: 'offer',
-							sdp: e.sdp
-						  }));
-						  this.createAnswer();
-							break;
+							case "answer":
+								//同步answer信息...
+								await this.setRemoteDescription({
+								  type: 'answer',
+								  sdp:  e.sdp
+								});
+								break;
+							case "iceCandidate":
+								await this.addOrQueueIceCandidate(e.iceCandidate);
+								break;
+							case "offer":
+							  await this.setRemoteDescription({
+								type: 'offer',
+								sdp: e.sdp
+							  });
+							  await this.createAnswer();
+								break;
 						
 					}
 				},
 				// 创建offer-sdp
-				createOffer() {
-				  this.pc.createOffer(this.offerParams).then((offer) => {
-				  this.pc.setLocalDescription(offer);
-				    this.postMsg({
-				      event: 'offer',
-				      sdp: offer.sdp
-				    }, '*');
-				  });
-				  // 创建offer需要监听ice流
-				  this.onicecandidate();
-				},
-				// 创建应答sdp
-				createAnswer() {
-				  this.pc.createAnswer(this.offerParams).then((answer) => {
-				    this.pc.setLocalDescription(answer);
-				    this.postMsg({
-				      event: 'answer',
-				      sdp: answer.sdp
-				    }, '*');
-				    this.onicecandidate();
-				  });
-				},
+					async createOffer() {
+					  const offer = await this.pc.createOffer(this.offerParams);
+					  await this.pc.setLocalDescription(offer);
+					  this.postMsg({
+					    event: 'offer',
+					    sdp: this.pc.localDescription.sdp
+					  }, '*');
+					},
+					// 创建应答sdp
+					async createAnswer() {
+					  const answer = await this.pc.createAnswer(this.offerParams);
+					  await this.pc.setLocalDescription(answer);
+					  this.postMsg({
+					    event: 'answer',
+					    sdp: this.pc.localDescription.sdp
+					  }, '*');
+					},
+					async setRemoteDescription(description) {
+						await this.pc.setRemoteDescription(new RTCSessionDescription(description));
+						await this.flushPendingIceCandidates();
+					},
+					parseIceCandidate(candidate) {
+						if (!candidate) return null;
+						return typeof candidate === 'object' ? candidate : JSON.parse(candidate);
+					},
+					async addOrQueueIceCandidate(candidate) {
+						const parsed = this.parseIceCandidate(candidate);
+						if (!parsed) return;
+						if (!this.pc.remoteDescription || !this.pc.remoteDescription.type) {
+							this.pendingIceCandidates.push(parsed);
+							return;
+						}
+						await this.pc.addIceCandidate(new RTCIceCandidate(parsed));
+					},
+					async flushPendingIceCandidates() {
+						const candidates = this.pendingIceCandidates.splice(0);
+						for (const candidate of candidates) {
+							await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
+						}
+					},
 				onicecandidate(){
 					this.pc.onicecandidate = (event) => {
 					  var iceCandidate = event.candidate;

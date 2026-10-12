@@ -22,7 +22,7 @@
     <script>
       // 一门 APP / file:// / fs:// 离线包与 Nginx 部署共用：静态资源按相对路径解析。
       window.__IMGO_CLASSIC_SCRIPT__=true;
-      window.__IMGO_BASE__ = new URL('./', document.baseURI).href
+      window.__IMGO_BASE__ = new URL('./', document.baseURI || (location.origin + '/')).href
       // config.js 必须提供有效服务器配置；配置缺失时禁止启动 H5 主程序。
       window.imgoStartApp = function (entry) {
         function resolveAsset(path) {
@@ -186,11 +186,11 @@
     <!--preload-links-->
     <!--app-context-->
     
-    <link rel="stylesheet" href="./assets/index-DSjZDWrl.css">
+    <link rel="stylesheet" href="./assets/index-DL6KhShh.css">
       <link rel="stylesheet" href="./assets/quill.snow.css">
   </head>
   <body>
     <div id="app"><!--app-html--></div>
-      <script>window.imgoStartApp("./assets/index-classic-c7fe4aef8665.js")</script>
+      <script>window.imgoStartApp("./assets/index-classic-ff5b01edab3b.js")</script>
   </body>
 </html>

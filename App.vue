@@ -537,7 +537,7 @@
 									//#ifdef APP-PLUS || H5
 									msgStore.webrtcLock=data.fromUser.user_id;
 									uni.navigateTo({
-									  url: '/pages/message/call?msg_id='+data.id+'&type='+data.extends.type+'&status='+data.extends.status+'&id='+data.fromUser.user_id+'&name='+data.fromUser.realname+'&avatar='+encodeURI(data.fromUser.avatar)
+									  url: '/pages/message/call?msg_id='+data.id+'&type='+data.extends.type+'&status='+data.extends.status+'&id='+data.fromUser.user_id+'&name='+encodeURIComponent(data.fromUser.realname || '')+'&avatar='+encodeURIComponent(data.fromUser.avatar || '')+'&token='+encodeURIComponent(uni.getStorageSync('authToken') || '')+'&video_mode='+(data.extends.video_mode || '')+'&video_file_id='+(data.extends.video_file_id || 0)
 									})
 									//#endif
 								}

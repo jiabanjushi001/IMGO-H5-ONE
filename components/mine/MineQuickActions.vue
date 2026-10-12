@@ -16,7 +16,7 @@ const isAppPlus = false
 const showMoreServices = computed(() => isAppPlus || props.showAbout)
 const shortcuts = computed(() => [
 	{ key: 'scan', label: '扫一扫', icon: 'cuIcon-scan', tone: 'blue' },
-	{ key: 'bank', label: '银行卡', icon: 'cuIcon-card', tone: 'violet' },
+	{ key: 'bank', label: '收款方式', icon: 'cuIcon-card', tone: 'violet' },
 	{ key: 'secure', label: '账号安全', icon: 'cuIcon-safe', tone: 'cyan' },
 	{ key: 'settings', label: '通用设置', icon: 'cuIcon-settings', tone: 'amber' }
 ].filter(item => item.key !== 'scan' || props.showScan))

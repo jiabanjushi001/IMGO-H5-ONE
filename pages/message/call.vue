@@ -26,6 +26,14 @@
 				type:false,
 				wsData:null,
 				main_id:null,
+				videoMode:'',
+				videoFileId:0,
+				videoUrl:'',
+				isClosing:false,
+				frameReadyTimer:null,
+				webrtcHandler:null,
+				windowMessageHandler:null,
+				hangupAudio:null,
 				globalConfig:userStore.globalConfig
 			}
 		},
@@ -40,6 +48,9 @@
 			// #endif
 		},
 		onLoad: function (option) {
+			this.videoMode = option.type == 1 && option.video_mode === 'recorded' ? 'recorded' : (option.type == 1 ? 'live' : '')
+			this.videoFileId = Number(option.video_file_id || 0)
+			this.videoUrl = option.video_url || ''
 			let platform='h5';
 			let calling=0;
 			//#ifdef H5
@@ -63,7 +74,7 @@
 				stunUser:this.globalConfig.chatInfo.stunUser ?? '',
 				stunPass:this.globalConfig.chatInfo.stunPass ?? '',
 			}));
-			this.html=assetUrl('hybrid/html/index.html')+'?id='+userInfo.value.user_id+'&status='+option.status+'&calling='+calling+'&name='+option.name+'&target_id='+option.id+'&type='+option.type+'&platform='+platform+'&avatar='+encodeURIComponent(option.avatar || '')+'&token='+encodeURIComponent(uni.getStorageSync('authToken') || '')+'&stun='+stun;
+			this.html=assetUrl('hybrid/html/index.html')+'?id='+userInfo.value.user_id+'&status='+option.status+'&calling='+calling+'&name='+encodeURIComponent(option.name || '')+'&target_id='+option.id+'&type='+option.type+'&platform='+platform+'&avatar='+encodeURIComponent(option.avatar || '')+'&token='+encodeURIComponent(uni.getStorageSync('authToken') || '')+'&video_mode='+this.videoMode+'&video_file_id='+this.videoFileId+'&video_url='+encodeURIComponent(this.videoUrl)+'&stun='+stun;
 			this.main_id=option.msg_id;
 			this.type= option.type;
 			this.status = option.status
@@ -73,21 +84,37 @@
 				avatar:option.avatar
 			}
 			// #ifdef H5
-			setTimeout(() => {
+			this.frameReadyTimer = setTimeout(() => {
 			  this.Frames = document.getElementsByTagName('iframe');
-			  this.mainFrame = this.Frames[0].contentWindow;
-			  this.postMsg = this.h5sendH5
+			  this.mainFrame = this.Frames[0] && this.Frames[0].contentWindow;
+			  if (this.mainFrame) this.postMsg = this.h5sendH5
 			}, 500)
 			
-			window.onmessage = (e) => {
+			this.windowMessageHandler = (e) => {
+				const frame = Array.from(document.getElementsByTagName('iframe')).find(item => item.contentWindow === e.source)
+				if (!frame) return
+				this.mainFrame = e.source
+				this.postMsg = this.h5sendH5
 				this.msgCallback(e)
 			}
+			window.addEventListener('message', this.windowMessageHandler)
 			//#endif
 			
 			uni.$off('webrtcConn');
 			// 接收websocket传输过来的消息,并发送给webview
-			uni.$on('webrtcConn',(e)=>{
+			this.webrtcHandler = (e)=>{
+				 if(e.extends && e.extends.video_mode){
+					this.videoMode=e.extends.video_mode;
+					this.videoFileId=Number(e.extends.video_file_id || this.videoFileId || 0);
+				 }
 				 if(e.fromUser.id==userInfo.value.user_id){
+					// The server echoes RTC control events back to the sending account so
+					// another logged-in device can stop its call UI.  Events marked as
+					// isMobile=1 originated from this H5 client and must not close the
+					// page that just accepted the call.
+					if(Number(e.extends.isMobile)===1){
+						return;
+					}
 					if(e.extends.event=="otherOpt"){
 						this.wsData=null;
 						this.main_id=null;
@@ -114,7 +141,11 @@
 					}
 				}
 				
-			})
+			}
+			uni.$on('webrtcConn', this.webrtcHandler)
+		},
+			onUnload() {
+			this.teardownCallPage()
 		},
 		methods: {
 			async checkAuth(option){
@@ -167,16 +198,48 @@
 			},
 			// h5端向webview传输消息
 			h5sendH5(params) {
-			  this.mainFrame.postMessage(params, '*')
+			  if (this.mainFrame && !this.mainFrame.closed) {
+				this.mainFrame.postMessage(params, '*')
+			  }
+			},
+			stopEmbeddedCall() {
+				if (typeof this.postMsg !== 'function') return
+				try {
+					this.postMsg({ event: 'forceClose' }, '*')
+				} catch (error) {
+					console.warn('stop embedded call failed', error)
+				}
+			},
+			teardownCallPage() {
+				if (this.frameReadyTimer) {
+					clearTimeout(this.frameReadyTimer)
+					this.frameReadyTimer = null
+				}
+				this.stopEmbeddedCall()
+				if (this.webrtcHandler) {
+					uni.$off('webrtcConn', this.webrtcHandler)
+					this.webrtcHandler = null
+				}
+				// #ifdef H5
+				if (this.windowMessageHandler) {
+					window.removeEventListener('message', this.windowMessageHandler)
+					this.windowMessageHandler = null
+				}
+				// #endif
+				this.mainFrame = null
+				this.Frames = null
 			},
 			msgCallback(e){
+				const data = e && e.data
+				const embeddedEvents = ['calling', 'hangup', 'iceCandidate', 'mediaDevices', 'acceptRtc', 'offer', 'answer']
+				if (!data || typeof data !== 'object' || !embeddedEvents.includes(data.event)) return
 				let iceCandidate = '';
 				let msg_id='';
 				if(this.wsData){
 					msg_id=this.wsData.msg_id ?? '';
 				}
 				let api=true;
-				switch(e.data['event']){
+				switch(data.event){
 					case 'hangup':
 						this.closeCall();
 						if(e.data['code']==907){
@@ -197,11 +260,11 @@
 						niceCandidate['sdpMid'] = e.data['iceCandidate']['sdpMid']
 						iceCandidate=JSON.stringify(niceCandidate)
 						break;
-					case "mediaDevices":
-						api=false;
-						uni.showToast({
-							title: '请检查音视频',
-							icon:'none'
+						case "mediaDevices":
+							api=false;
+							uni.showToast({
+								title: data.message || '无法打开摄像头或麦克风',
+								icon:'none'
 						})
 						this.closeCall();
 				}
@@ -217,11 +280,19 @@
 						callTime:e.data['callTime'] ?? '',
 						sdp:e.data['sdp'] ?? '',
 						iceCandidate:iceCandidate,
-					}).then((res)=>{
+							video_mode:this.videoMode,
+							video_file_id:this.videoFileId,
+							isMobile:1,
+						}).then((res)=>{
+						if (!res || Number(res.code) !== 0 || !res.data || Array.isArray(res.data)) {
+							if (e.data['event'] === 'calling') this.closeCall()
+							return
+						}
 						if(e.data['event']=='calling'){
 							this.wsData=res.data;
 						}
-						if(res.data.extends.code==907){
+						if(res.data.extends && res.data.extends.code==907){
+							this.stopEmbeddedCall();
 							uni.showToast({
 								title:'对方不在线',
 								icon:'none'
@@ -232,14 +303,27 @@
 				}
 				
 			},
+			playHangupSound(){
+				if (this.hangupAudio) return
+				const audio = uni.createInnerAudioContext();
+				this.hangupAudio = audio
+				audio.autoplay = true;
+				audio.loop = false;
+				audio.src = config.apiUrl+'/static/voice/guaduan.mp3';
+				const release = () => {
+					if (this.hangupAudio !== audio) return
+					this.hangupAudio = null
+					if (typeof audio.destroy === 'function') audio.destroy()
+				}
+				if (typeof audio.onEnded === 'function') audio.onEnded(release)
+				if (typeof audio.onError === 'function') audio.onError(release)
+			},
 			//关闭通话页面
 			closeCall(){
-				const innerAudioContext = uni.createInnerAudioContext();
-				innerAudioContext.autoplay = true;
-				innerAudioContext.src = config.apiUrl+'/static/voice/guaduan.mp3';
-				innerAudioContext.onStop((res) => {
-					this.$forceUpdate()
-				})
+				if (this.isClosing) return
+				this.isClosing = true
+				this.stopEmbeddedCall()
+				this.playHangupSound()
 				let pages = getCurrentPages();
 				if (pages.length > 1) {
 				  uni.navigateBack();

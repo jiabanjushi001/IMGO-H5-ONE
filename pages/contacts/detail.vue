@@ -39,44 +39,27 @@
 				<button class="cu-btn bg-green lg" @tap="addFriend()">加好友</button>
 			</view>
 		</template>
-		<view class="cu-modal bottom-modal" :class="modelName=='callRtc'?'show':''"  @tap="modelName=''">
-			<view class="cu-dialog">
-				<view class="manage-content">
-					<view class="cu-list menu bg-white">
-						<view class="cu-item" @tap="calling(0)">
-							<view class="content padding-tb-sm">
-								<text class="cuIcon-dianhua"></text>
-								<text>语音通话</text>
-							</view>
-						</view>
-						<view class="cu-item" @tap="calling(1)">
-							<view class="content padding-tb-sm">
-								<text class=" cuIcon-record"></text>
-								<text>视频通话</text>
-							</view>
-						</view>
-						<view class="parting-line-5"></view>
-						<view class="cu-item" @tap="modelName=''">
-							<view class="content padding-tb-sm">
-								<text class="c-red">取消</text>
-							</view>
-						</view>
-
-					</view>
-				</view>
-			</view>
-		</view>
+		<CallModePicker
+			:visible="modelName === 'callRtc'"
+			:allow-prepared-video="canUsePreparedVideo"
+			:show-voice="true"
+			@close="modelName = ''"
+			@start="startSelectedCall"
+		/>
 	</view>
 </template>
 
 <script>
 	import { useMsgStore } from '@/store/message';
 	import { useloginStore } from '@/store/login';
-	import { resolveMediaDisplayUrl } from '@/utils/avatar.js'
+	import { normalizeMediaUrl, resolveMediaDisplayUrl } from '@/utils/avatar.js'
+	import { canUsePreparedVideo } from '@/utils/call-video-permission.js'
+	import CallModePicker from '@/components/call/CallModePicker.vue'
 	import pinia from '@/store/index'
 	const msgStore = useMsgStore(pinia)
 	const userStore = useloginStore(pinia)
 	export default {
+		components: { CallModePicker },
 		data() {
 			return {
 				modelName:'',
@@ -86,6 +69,9 @@
 			}
 		},
 		computed: {
+			canUsePreparedVideo() {
+				return canUsePreparedVideo(this.userInfo)
+			},
 		    validatePhone(){
 				let reg = /^1[3456789]\d{9}$/;
 				return reg.test(this.detail.account);
@@ -120,7 +106,10 @@
 					phoneNumber: this.detail.account
 				});
 			},
-			calling(is_video){
+			startSelectedCall(selection) {
+				this.calling(selection.type, selection.videoMode, selection.video)
+			},
+			calling(is_video, videoMode = '', video = null){
 				if(msgStore.webrtcLock){
 					return uni.showToast({
 						title:'其他终端正在通话中',
@@ -129,8 +118,11 @@
 				}
 				this.modelName='';
 				let msg_id=this.$util.getUuid();
+				const mode = is_video ? (videoMode || 'live') : ''
+				const videoFileId = Number(video && video.file_id || 0)
+				const videoUrl = video ? normalizeMediaUrl(video.url || '') : ''
 				uni.navigateTo({
-				  url: '/pages/message/call?msg_id='+msg_id+'&type='+is_video+'&status=1&id='+this.detail.user_id+'&name='+this.detail.realname+'&avatar='+encodeURIComponent(this.detail.avatar || '')+'&token='+encodeURIComponent(uni.getStorageSync('authToken') || '')
+				  url: '/pages/message/call?msg_id='+msg_id+'&type='+is_video+'&status=1&id='+this.detail.user_id+'&name='+encodeURIComponent(this.detail.realname || '')+'&avatar='+encodeURIComponent(this.detail.avatar || '')+'&token='+encodeURIComponent(uni.getStorageSync('authToken') || '')+'&video_mode='+mode+'&video_file_id='+videoFileId+'&video_url='+encodeURIComponent(videoUrl)
 				})
 			},
 			delFriend(){

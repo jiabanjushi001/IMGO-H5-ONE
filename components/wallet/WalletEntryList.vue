@@ -3,7 +3,7 @@ defineProps({ entries: { type: Array, default: () => [] } })
 
 const labels = {
 	credit: '后台入账', recharge: '充值本金', recharge_bonus: '充值赠送',
-	withdraw: '提现申请', refund: '提现退回', paid: '确认打款'
+	withdraw: '提现申请', refund: '提现退回', paid: '确认打款', checkin: '签到奖励'
 }
 const money = cents => `¥${(Math.abs(Number(cents || 0)) / 100).toFixed(2)}`
 const signedMoney = cents => `${Number(cents) >= 0 ? '+' : '−'}${money(cents)}`

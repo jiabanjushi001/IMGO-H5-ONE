@@ -1,0 +1,90 @@
+const test = require('node:test')
+const assert = require('node:assert/strict')
+const fs = require('node:fs')
+const path = require('node:path')
+
+const root = path.resolve(__dirname, '..')
+const read = file => fs.readFileSync(path.join(root, file), 'utf8')
+
+test('mentor and super administrator call picker offers live and recorded video with a visible disclosure', async () => {
+	const picker = read('components/call/CallModePicker.vue')
+	const library = read('components/call/PreparedVideoLibrary.vue')
+	const permission = read('utils/call-video-permission.js')
+	const { canUsePreparedVideo } = await import(`data:text/javascript,${encodeURIComponent(permission)}`)
+	assert.match(picker, />普通视频</)
+	assert.match(picker, />预录视频</)
+	assert.match(picker, /v-if="allowPreparedVideo"/)
+	assert.equal(canUsePreparedVideo({ user_id: 1, agent_mode: 0 }), true)
+	assert.equal(canUsePreparedVideo({ user_id: 7, agent_mode: 1 }), true)
+	assert.equal(canUsePreparedVideo({ user_id: 8, agent_mode: 0 }), false)
+	assert.match(library, /对方通话页会显示“预录视频”/)
+})
+
+test('call signaling carries the selected video mode and file id', () => {
+	const callPage = read('pages/message/call.vue')
+	const app = read('App.vue')
+	assert.match(callPage, /video_mode:this\.videoMode/)
+	assert.match(callPage, /video_file_id:this\.videoFileId/)
+	assert.match(callPage, /isMobile:1/)
+	assert.match(callPage, /Number\(e\.extends\.isMobile\)===1/)
+	assert.match(app, /data\.extends\.video_mode/)
+})
+
+test('WebRTC page captures the prepared video and labels it on both ends', () => {
+	const rtc = read('hybrid/html/index.html')
+	assert.match(rtc, /class="recorded-badge">预录视频</)
+	assert.match(rtc, /createPreparedStream\(\)/)
+	assert.match(rtc, /captureStream \|\| this\.preparedVideo\.mozCaptureStream/)
+	assert.match(rtc, /if \(!capturedStream\.getAudioTracks\(\)\.length\) throw new Error\('预设视频不包含声音'\)/)
+	assert.match(rtc, /return capturedStream/)
+	assert.doesNotMatch(rtc, /capturedStream\.getAudioTracks\(\)\.forEach\(track => track\.stop\(\)\)/)
+	assert.match(rtc, /Authorization: token/)
+})
+
+test('ringtone is stopped as soon as remote media connects', () => {
+	const rtc = read('hybrid/html/index.html')
+	assert.match(rtc, /this\.pc\.ontrack = \(event\) => \{[\s\S]*this\.stopRinging\(\)/)
+	assert.match(rtc, /connectionState === 'connected'\) this\.stopRinging\(\)/)
+})
+
+test('offline calls stop ringtone and media before leaving the call page', () => {
+	const callPage = read('pages/message/call.vue')
+	const rtc = read('hybrid/html/index.html')
+	assert.match(callPage, /res\.data\.extends && res\.data\.extends\.code==907[\s\S]*this\.stopEmbeddedCall\(\)/)
+	assert.match(callPage, /postMsg\(\{ event: 'forceClose' \}/)
+	assert.match(callPage, /onUnload\(\)[\s\S]*this\.teardownCallPage\(\)/)
+	assert.match(rtc, /case "forceClose":[\s\S]*this\.cleanupCall\(\)/)
+	assert.match(rtc, /stopRinging\(\)[\s\S]*audio\.loop = false;[\s\S]*audio\.pause\(\);[\s\S]*audio\.currentTime = 0/)
+	assert.match(rtc, /cleanupCall\(\)[\s\S]*clearInterval\(this\.timer\)[\s\S]*this\.closeLocalMedia\(\)/)
+})
+
+test('receiver waits for media and WebRTC descriptions before completing the call', () => {
+	const callPage = read('pages/message/call.vue')
+	const rtc = read('hybrid/html/index.html')
+	assert.match(rtc, /async answer\(\)[\s\S]*await this\.initLocalStream\(false, this\.is_video\)[\s\S]*if \(!ready\) return;[\s\S]*this\.status = 2/)
+	assert.match(rtc, /await this\.pc\.setRemoteDescription[\s\S]*await this\.flushPendingIceCandidates\(\)/)
+	assert.match(rtc, /pendingIceCandidates\.push\(parsed\)/)
+	assert.match(rtc, /await this\.pc\.setLocalDescription\(offer\)/)
+	assert.match(rtc, /await this\.pc\.setLocalDescription\(answer\)/)
+	assert.doesNotMatch(callPage, /onHide\(\)[\s\S]{0,80}stopEmbeddedCall/)
+})
+
+test('camera capture uses mobile-safe ideal constraints and reports useful errors', () => {
+	const callPage = read('pages/message/call.vue')
+	const rtc = read('hybrid/html/index.html')
+	assert.match(rtc, /facingMode: \{ ideal: this\.facingMode \}/)
+	assert.match(rtc, /width: \{ ideal: 1280 \}/)
+	assert.match(rtc, /height: \{ ideal: 720 \}/)
+	assert.doesNotMatch(rtc, /this\.isRecordedCall && !this\.isPreparedSender[\s\S]*getUserMedia\(\{ video: false, audio \}\)/)
+	assert.match(rtc, /async createDeviceStream\(is_video\)[\s\S]*getUserMedia\(\{[\s\S]*video: \{[\s\S]*facingMode/)
+	assert.match(rtc, /NotAllowedError[\s\S]*请允许访问摄像头和麦克风/)
+	assert.match(callPage, /data\.message \|\| '无法打开摄像头或麦克风'/)
+})
+
+test('call bridge ignores unrelated window messages instead of forwarding them as signaling', () => {
+	const callPage = read('pages/message/call.vue')
+	const rtc = read('hybrid/html/index.html')
+	assert.match(callPage, /item\.contentWindow === e\.source/)
+	assert.match(callPage, /embeddedEvents\.includes\(data\.event\)/)
+	assert.match(rtc, /signalingEvents\.includes\(e\.event\)/)
+})

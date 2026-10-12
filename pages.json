@@ -147,6 +147,12 @@
 			}
 		},
 		{
+			"path": "pages/mine/payment-methods",
+			"style": {
+				"navigationBarTitleText": "收款方式"
+			}
+		},
+		{
 			"path": "pages/mine/check-in",
 			"style": {
 				"navigationBarTitleText": "每日签到"

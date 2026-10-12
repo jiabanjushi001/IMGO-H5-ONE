@@ -7,6 +7,12 @@ const dateText = timestamp => {
 	return seconds > 0 ? new Date(seconds * 1000).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : '—'
 }
 const amountText = cents => `¥${(Number(cents || 0) / 100).toFixed(2)}`
+const paymentText = record => {
+	const type = String(record.payment_type || 'bank')
+	if (type === 'wechat') return '微信收款码'
+	if (type === 'alipay') return `支付宝（${record.account_last4 || '—'}）`
+	return `${record.bank_name || '银行卡'}（尾号 ${record.account_last4 || '—'}）`
+}
 </script>
 
 <template>
@@ -14,7 +20,7 @@ const amountText = cents => `¥${(Number(cents || 0) / 100).toFixed(2)}`
 		<view v-for="record in props.records" :key="record.withdrawal_id" class="record-card">
 			<view class="record-top"><text class="record-amount">{{ amountText(record.amount_cents) }}</text><text class="record-status" :class="`is-${record.status}`">{{ statusName(record.status) }}</text></view>
 			<view class="record-line"><text>申请时间</text><text>{{ dateText(record.created_at) }}</text></view>
-			<view class="record-line"><text>收款银行</text><text>{{ record.bank_name || '银行卡' }}（尾号 {{ record.account_last4 || '—' }}）</text></view>
+			<view class="record-line"><text>收款方式</text><text>{{ paymentText(record) }}</text></view>
 			<view v-if="Number(record.processed_at) > 0" class="record-line"><text>处理时间</text><text>{{ dateText(record.processed_at) }}</text></view>
 			<view v-if="record.remark" class="record-remark">备注：{{ record.remark }}</view>
 		</view>

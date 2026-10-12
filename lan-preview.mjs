@@ -40,13 +40,26 @@ const isApiPath = (pathname) =>
   /^\/(?:common|enterprise|avatar|storage|wss|scan)(?:\/|$)/i.test(pathname) ||
   /^\/static\/img\/emoji(?:\/|$)/i.test(pathname)
 
+function clientAddress(req) {
+  return String(req.socket.remoteAddress || '').replace(/^::ffff:/, '')
+}
+
 function canUseApi(req) {
-  return allowedClients.has(req.socket.remoteAddress) &&
-    (!req.headers.origin || req.headers.origin === siteOrigin)
+  const origin = req.headers.origin
+  let sameOrigin = !origin
+  if (origin) {
+    try {
+      sameOrigin = new URL(origin).origin === siteOrigin
+    } catch {
+      sameOrigin = false
+    }
+  }
+  return allowedClients.has(clientAddress(req)) && sameOrigin
 }
 
 function proxyHttp(req, res, pathname) {
   if (!canUseApi(req)) {
+    console.warn(`拒绝 API：ip=${clientAddress(req)} origin=${req.headers.origin || '-'} path=${pathname}`)
     res.writeHead(403).end('Forbidden')
     return
   }
@@ -123,7 +136,15 @@ const server = createServer((req, res) => {
     res.writeHead(400).end()
     return
   }
-  if (isApiPath(pathname)) proxyHttp(req, res, pathname)
+  if (pathname === '/config.js') {
+    const config = `window.appName = ''\nwindow.appLogo = ''\nwindow.apiServers = [{ httpUrl: '${siteOrigin}', wsUrl: 'ws://${host}:${port}/wss' }]\n`
+    res.writeHead(200, {
+      'content-type': 'text/javascript; charset=utf-8',
+      'content-length': Buffer.byteLength(config),
+      'cache-control': 'no-store',
+    })
+    res.end(config)
+  } else if (isApiPath(pathname)) proxyHttp(req, res, pathname)
   else void serveStatic(req, res, pathname)
 })
 
@@ -136,6 +157,7 @@ server.on('upgrade', (req, client, head) => {
     return
   }
   if (pathname !== '/wss' || !canUseApi(req)) {
+    console.warn(`拒绝 WebSocket：ip=${clientAddress(req)} origin=${req.headers.origin || '-'} path=${pathname}`)
     client.write('HTTP/1.1 403 Forbidden\r\nConnection: close\r\n\r\n')
     client.end()
     return

@@ -19,7 +19,7 @@
     </script>
     <script>
       // 一门 APP / file:// / fs:// 离线包与 Nginx 部署共用：静态资源按相对路径解析。
-      window.__IMGO_BASE__ = new URL('./', document.baseURI).href
+      window.__IMGO_BASE__ = new URL('./', document.baseURI || (location.origin + '/')).href
       // config.js 必须提供有效服务器配置；配置缺失时禁止启动 H5 主程序。
       window.imgoStartApp = function (entry) {
         function resolveAsset(path) {

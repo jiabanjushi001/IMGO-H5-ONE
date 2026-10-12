@@ -6,15 +6,22 @@ const props = defineProps({
 	signedToday: { type: Boolean, default: false },
 	loading: { type: Boolean, default: false },
 	submitting: { type: Boolean, default: false },
-	error: { type: Boolean, default: false }
+	error: { type: Boolean, default: false },
+	rewardEnabled: { type: Boolean, default: true },
+	cycleDay: { type: Number, default: 1 },
+	cycleDays: { type: Number, default: 10 }
 })
 const emit = defineEmits(['sign-in', 'retry'])
 
-const milestones = computed(() => Array.from({ length: 7 }, (_, index) => ({
-	day: index + 1,
-	completed: props.totalDays >= index + 1,
-	next: props.totalDays === index
-})))
+const completedCycleDays = computed(() => props.signedToday ? props.cycleDay : Math.max(0, props.cycleDay - 1))
+const milestones = computed(() => Array.from({ length: Math.max(2, props.cycleDays) }, (_, index) => {
+	const day = index + 1
+	return {
+		day,
+		completed: day <= completedCycleDays.value,
+		next: day === props.cycleDay && !props.signedToday
+	}
+}))
 const buttonLabel = computed(() => {
 	if (props.loading) return '正在查询…'
 	if (props.error) return '重新加载'
@@ -24,7 +31,9 @@ const buttonLabel = computed(() => {
 const helperText = computed(() => {
 	if (props.error) return '状态暂时获取失败，点击上方按钮重试'
 	if (props.loading) return '正在确认今日签到状态'
-	return props.signedToday ? '今天的签到已完成，明天再来看看吧' : '每天来一次，记录你的每一份坚持'
+	if (!props.rewardEnabled) return props.signedToday ? '今天的签到已完成' : '每天来一次，记录你的每一份坚持'
+	if (props.signedToday) return '今日奖励已到账'
+	return '完成今日签到后，奖励自动进入钱包余额'
 })
 
 function handleAction() {
@@ -38,21 +47,21 @@ function handleAction() {
 		<view class="section-heading">
 			<view class="section-heading-mark"></view>
 			<view class="section-heading-copy">
-				<view class="section-title">7 天累计里程碑</view>
-				<view class="section-subtitle">累计天数点亮进度，不计算连续天数</view>
+				<view class="section-title">{{ cycleDays }} 天签到奖励</view>
+				<view class="section-subtitle">每天都有奖励，每轮结束后重新从第 1 天计算</view>
 			</view>
 		</view>
 		<view class="milestone-track">
 			<view v-for="step in milestones" :key="step.day" class="milestone" :class="{ 'is-complete': step.completed && !error, 'is-next': step.next && !loading && !error }">
-				<text class="milestone-index">{{ step.day }}</text>
-				<view class="milestone-symbol">{{ step.completed && !error ? '✓' : step.day }}</view>
-				<text class="milestone-caption">{{ step.completed && !error ? '达成' : step.next && !loading && !error ? '下一站' : '待解锁' }}</text>
+				<text class="milestone-index">第{{ step.day }}天</text>
+				<view class="milestone-symbol">{{ step.completed && !error ? '✓' : '✦' }}</view>
+				<text class="milestone-caption">{{ step.completed ? '已完成' : step.next ? '今日' : '待签到' }}</text>
 			</view>
 		</view>
 		<view class="milestone-progress">
-			<view class="milestone-progress-fill" :style="{ width: (error ? 0 : Math.min(totalDays, 7) / 7 * 100) + '%' }"></view>
+			<view class="milestone-progress-fill" :style="{ width: (error ? 0 : completedCycleDays / cycleDays * 100) + '%' }"></view>
 		</view>
-		<view class="milestone-count">{{ loading ? '正在读取进度' : error ? '进度待确认' : totalDays >= 7 ? '已点亮全部基础里程碑' : `已点亮 ${totalDays} / 7 天` }}</view>
+		<view class="milestone-count">{{ loading ? '正在读取进度' : error ? '进度待确认' : `本轮已完成 ${completedCycleDays} / ${cycleDays} 天 · 累计 ${totalDays} 天` }}</view>
 		<button class="sign-button" :class="{ 'is-done': signedToday && !error }" :disabled="loading || submitting || (signedToday && !error)" @tap="handleAction">
 			<text class="sign-button-icon">{{ signedToday && !error ? '✓' : '✦' }}</text>{{ buttonLabel }}
 		</button>
@@ -67,15 +76,15 @@ function handleAction() {
 .section-heading-copy { min-width: 0; }
 .section-title { font-size: 31rpx; font-weight: 700; line-height: 1.25; color: #252d45; }
 .section-subtitle { margin-top: 7rpx; color: #8c95a8; font-size: 20rpx; line-height: 1.5; }
-.milestone-track { display: flex; justify-content: space-between; gap: 8rpx; margin-top: 36rpx; }
-.milestone { display: flex; align-items: center; flex: 1; flex-direction: column; min-width: 0; box-sizing: border-box; padding: 18rpx 0 15rpx; border: 1rpx solid transparent; border-radius: 20rpx; background: #f6f8fd; color: #a7afbf; }
+.milestone-track { display:grid; grid-template-columns:repeat(5,minmax(0,1fr)); gap:10rpx; margin-top:30rpx; }
+.milestone { display: flex; align-items: center; min-width: 0; box-sizing: border-box; flex-direction: column; padding: 17rpx 2rpx 14rpx; border: 1rpx solid transparent; border-radius: 20rpx; background: #f6f8fd; color: #a7afbf; }
 .milestone.is-complete { border-color: #e4e7ff; background: #f0f2ff; color: #556bf0; }
 .milestone.is-next { border-color: #b6c2ff; background: #f8f9ff; box-shadow: 0 9rpx 23rpx rgba(82,109,255,.1); }
-.milestone-index { font-size: 21rpx; font-weight: 700; line-height: 1.2; }
-.milestone-symbol { display: flex; align-items: center; justify-content: center; box-sizing: border-box; width: 54rpx; height: 54rpx; margin-top: 13rpx; border-radius: 50%; background: #e9edf6; color: #a3adbe; font-size: 24rpx; font-weight: 700; }
+.milestone-index { font-size: 19rpx; font-weight: 700; line-height: 1.2; }
+.milestone-symbol { display: flex; align-items: center; justify-content: center; box-sizing: border-box; width: 48rpx; height: 48rpx; margin-top: 11rpx; border-radius: 50%; background: #e9edf6; color: #a3adbe; font-size: 22rpx; font-weight: 700; }
 .milestone.is-complete .milestone-symbol { background: linear-gradient(135deg,#566fff,#8367ed); color: #fff; box-shadow: 0 7rpx 13rpx rgba(82,109,255,.23); }
 .milestone.is-next .milestone-symbol { border: 2rpx solid #7487fa; background: #fff; color: #526dff; }
-.milestone-caption { overflow: hidden; max-width: 100%; margin-top: 12rpx; font-size: 21rpx; line-height: 1.2; white-space: nowrap; }
+.milestone-caption { overflow: hidden; max-width: 100%; margin-top: 10rpx; color:#758096; font-size: 18rpx; font-weight:650; line-height:1.2; white-space: nowrap; }
 .milestone-progress { overflow: hidden; height: 10rpx; margin: 30rpx 3rpx 0; border-radius: 10rpx; background: #eef1f8; }
 .milestone-progress-fill { height: 100%; border-radius: 10rpx; background: linear-gradient(90deg,#566fff,#8969ed); transition: width .35s ease; }
 .milestone-count { margin-top: 12rpx; color: #8a94a8; font-size: 21rpx; text-align: right; }

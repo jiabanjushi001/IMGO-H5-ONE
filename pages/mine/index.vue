@@ -13,6 +13,7 @@
 				:available-cents="walletAvailableCents"
 				:pending-cents="walletPendingCents"
 				:frozen-cents="walletFrozenCents"
+				:withdrawal-enabled="walletWithdrawalEnabled"
 				:loading="walletLoading"
 				:error="walletError"
 				@refresh="loadWallet"
@@ -88,7 +89,8 @@ export default {
 			walletError: false,
 			walletAvailableCents: 0,
 			walletPendingCents: 0,
-			walletFrozenCents: 0
+			walletFrozenCents: 0,
+			walletWithdrawalEnabled: true
 		}
 	},
 	computed: {
@@ -146,13 +148,20 @@ export default {
 				this.walletAvailableCents = Number(res.data.available_cents) || 0
 				this.walletPendingCents = Number(res.data.pending_cents) || 0
 				this.walletFrozenCents = Number(res.data.frozen_cents) || 0
+				this.walletWithdrawalEnabled = res.data.withdrawal_enabled !== false && Number(res.data.withdrawal_enabled) !== 0
 			} catch (error) {
 				this.walletError = true
 			} finally {
 				this.walletLoading = false
 			}
 		},
-		openWithdraw() { uni.navigateTo({ url: '/pages/mine/wallet-withdraw' }) },
+		openWithdraw() {
+			if (!this.walletWithdrawalEnabled) {
+				uni.showToast({ title: '提现功能暂未开放', icon: 'none' })
+				return
+			}
+			uni.navigateTo({ url: '/pages/mine/wallet-withdraw' })
+		},
 		openWithdrawHistory() { uni.navigateTo({ url: '/pages/mine/wallet-history' }) },
 		openWalletEntries() { uni.navigateTo({ url: '/pages/mine/wallet-ledger' }) },
 		async loadCheckIn() {
@@ -189,7 +198,7 @@ export default {
 		about() { uni.navigateTo({ url: '/pages/mine/about' }) },
 		showSetting() { uni.navigateTo({ url: '/pages/mine/setting' }) },
 		showsecure() { uni.navigateTo({ url: '/pages/mine/secure' }) },
-		showBankCard() { uni.navigateTo({ url: '/pages/mine/bank-card' }) },
+		showBankCard() { uni.navigateTo({ url: '/pages/mine/payment-methods' }) },
 		editInfo() { uni.navigateTo({ url: '/pages/mine/profile' }) },
 		openIdentity() { uni.navigateTo({ url: '/pages/mine/real-name' }) },
 		scan() { scan.scanQr() },

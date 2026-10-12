@@ -11,12 +11,22 @@ const submitting = shallowRef(false)
 const error = shallowRef(false)
 const signedToday = shallowRef(false)
 const totalDays = shallowRef(0)
+const todayRewardCents = shallowRef(0)
+const totalRewardCents = shallowRef(0)
 const date = shallowRef('')
+const rewardEnabled = shallowRef(true)
+const cycleDay = shallowRef(1)
+const cycleDays = shallowRef(10)
 
 function updateStatus(data) {
 	signedToday.value = !!data.signed_today
 	totalDays.value = Number(data.total_days) || 0
+	todayRewardCents.value = Number(data.today_reward_cents) || 0
+	totalRewardCents.value = Number(data.total_reward_cents) || 0
 	date.value = data.date || ''
+	rewardEnabled.value = data.reward_enabled !== false
+	cycleDay.value = Number(data.cycle_day) || 1
+	cycleDays.value = Number(data.cycle_days) || 10
 }
 
 async function load() {
@@ -42,7 +52,10 @@ async function submit() {
 		if (res.code !== 0) throw new Error(res.msg || '签到失败')
 		const data = res.data || {}
 		updateStatus(data)
-		uni.showToast({ title: data.already_signed ? '今天已经签到过了' : '签到成功', icon: 'none' })
+		const title = data.already_signed
+			? '今天已经签到过了'
+			: rewardEnabled.value ? `签到成功，奖励¥${(todayRewardCents.value / 100).toFixed(2)}已到账` : '签到成功'
+		uni.showToast({ title, icon: 'none', duration: 2600 })
 	} catch (cause) {
 		uni.showToast({ title: cause.message || '签到失败，请重试', icon: 'none' })
 	} finally {
@@ -60,17 +73,30 @@ onShow(load)
 			<template #content>每日签到</template>
 		</cu-custom>
 		<view class="checkin-content">
-			<CheckInHero :date="date" :signed-today="signedToday" :total-days="totalDays" :loading="loading" :error="error" />
+			<CheckInHero
+				:date="date"
+				:signed-today="signedToday"
+				:total-days="totalDays"
+				:today-reward-cents="todayRewardCents"
+				:total-reward-cents="totalRewardCents"
+				:loading="loading"
+				:error="error"
+			/>
 			<CheckInMilestones
 				:total-days="totalDays"
 				:signed-today="signedToday"
 				:loading="loading"
 				:submitting="submitting"
 				:error="error"
+				:reward-enabled="rewardEnabled"
+				:cycle-day="cycleDay"
+				:cycle-days="cycleDays"
 				@sign-in="submit"
 				@retry="load"
 			/>
-			<CheckInRules />
+			<CheckInRules
+				:reward-enabled="rewardEnabled"
+			/>
 		</view>
 	</view>
 </template>

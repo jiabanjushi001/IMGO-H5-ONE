@@ -3,9 +3,15 @@ defineProps({
 	date: { type: String, default: '' },
 	signedToday: { type: Boolean, default: false },
 	totalDays: { type: Number, default: 0 },
+	todayRewardCents: { type: Number, default: 0 },
+	totalRewardCents: { type: Number, default: 0 },
 	loading: { type: Boolean, default: false },
 	error: { type: Boolean, default: false }
 })
+
+function formatCents(value) {
+	return `¥${(Math.max(0, Number(value) || 0) / 100).toFixed(2)}`
+}
 </script>
 
 <template>
@@ -40,6 +46,17 @@ defineProps({
 				<view class="hero-stat-status"><text class="hero-status-dot" :class="{ 'is-signed': signedToday && !loading && !error, 'is-unknown': error }"></text>{{ loading ? '查询中' : error ? '待确认' : signedToday ? '已签到' : '待签到' }}</view>
 			</view>
 		</view>
+		<view class="hero-rewards">
+			<view class="hero-reward">
+				<text class="hero-reward-label">今日签到奖励</text>
+				<text class="hero-reward-value" :class="{ 'is-pending': !signedToday }">{{ loading || error ? '—' : signedToday ? formatCents(todayRewardCents) : '签到后揭晓' }}</text>
+			</view>
+			<view class="hero-reward-divider"></view>
+			<view class="hero-reward">
+				<text class="hero-reward-label">累计签到奖励</text>
+				<text class="hero-reward-value">{{ loading || error ? '—' : formatCents(totalRewardCents) }}</text>
+			</view>
+		</view>
 	</view>
 </template>
 
@@ -48,7 +65,7 @@ defineProps({
 	position: relative;
 	overflow: hidden;
 	box-sizing: border-box;
-	min-height: 420rpx;
+	min-height: 540rpx;
 	padding: 38rpx 36rpx 32rpx;
 	border: 1rpx solid rgba(255, 255, 255, .55);
 	border-radius: 36rpx;
@@ -85,4 +102,10 @@ defineProps({
 .hero-status-dot.is-signed { background: #a2ffd1; }
 .hero-status-dot.is-unknown { background: #dbe0ff; }
 .hero-date { display: flex; align-items: center; gap: 9rpx; margin-top: 18rpx; color: rgba(255,255,255,.72); font-size: 20rpx; white-space: nowrap; }
+.hero-rewards { position: relative; z-index: 1; display: flex; align-items: stretch; margin-top: 18rpx; padding: 20rpx 26rpx; border: 1rpx solid rgba(255,255,255,.22); border-radius: 25rpx; background: rgba(31,35,119,.17); box-sizing: border-box; }
+.hero-reward { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 8rpx; }
+.hero-reward-label { color: rgba(255,255,255,.7); font-size: 20rpx; }
+.hero-reward-value { overflow: hidden; color: #fff; font-size: 29rpx; font-weight: 800; line-height: 1.25; text-overflow: ellipsis; white-space: nowrap; }
+.hero-reward-value.is-pending { color: #e6e8ff; font-size: 24rpx; font-weight: 700; }
+.hero-reward-divider { width: 1rpx; margin: 2rpx 25rpx; background: rgba(255,255,255,.22); }
 </style>
