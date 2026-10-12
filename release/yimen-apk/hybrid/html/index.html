@@ -129,7 +129,7 @@
 			        <source src="./voice/calling.mp3">
 			</audio>
 			<video ref="preparedvideo" class="prepared-source" muted loop autoplay playsinline webkit-playsinline></video>
-			<div v-if="is_video && isRecordedCall" class="recorded-badge">预录视频</div>
+			<div v-if="is_video && isRecordedCall" class="recorded-badge">芜湖2</div>
 			<video v-show="localStream && is_video" class="localvideo" ref="localvideo"  x5-video-player-fullscreen="true" autoplay x5-playsinline playsinline webkit-playsinline @click="displayBtn = !displayBtn" poster="./image/wallpaper.png"></video>
 			    <video v-show="remoteStream && is_video" class="remotevideo" ref="remotevideo" x5-video-player-fullscreen="true" autoplay x5-playsinline playsinline webkit-playsinline @click="changeVideo()" poster="./image/wallpaper.png"></video>
 			    <div class="call-user-box" v-if="displayBtn">
@@ -167,7 +167,7 @@
 						</template>
 						<template v-else-if="is_video">
 							<img class="image-icon" src="./image/video.png"/>
-							<div class="text">预录视频</div>
+							<div class="text">芜湖1</div>
 						</template>
 						<template v-else>
 						  <img class="image-icon" :src="'./image/speaker'+(speaker ? '' : '-off')+'.png'" @click="speakBtn()"/>

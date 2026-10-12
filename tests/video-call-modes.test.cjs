@@ -32,7 +32,7 @@ test('call signaling carries the selected video mode and file id', () => {
 
 test('WebRTC page captures the prepared video and labels it on both ends', () => {
 	const rtc = read('hybrid/html/index.html')
-	assert.match(rtc, /class="recorded-badge">预录视频</)
+	assert.match(rtc, /class="recorded-badge">芜湖</)
 	assert.match(rtc, /createPreparedStream\(\)/)
 	assert.match(rtc, /captureStream \|\| this\.preparedVideo\.mozCaptureStream/)
 	assert.match(rtc, /if \(!capturedStream\.getAudioTracks\(\)\.length\) throw new Error\('预设视频不包含声音'\)/)
