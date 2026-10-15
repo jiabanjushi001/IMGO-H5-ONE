@@ -111,6 +111,7 @@ import emoji from '@/utils/emoji.js'
 import { useMsgStore } from '@/store/message';
 import { useloginStore } from '@/store/login';
 import { normalizeMediaUrl } from '@/utils/avatar.js'
+import { createAndUploadVideoPoster } from '@/utils/video-cover.js'
 import { canUsePreparedVideo } from '@/utils/call-video-permission.js'
 import pinia from '@/store/index'
 const msgStore = useMsgStore(pinia);
@@ -467,7 +468,7 @@ const userStore = useloginStore(pinia);
 			};
 			uni.chooseVideo({
 				sourceType: ['camera', 'album'],
-				success: (res) => {
+				success: async (res) => {
 					if(res.duration>60){
 						return uni.showToast({
 							title: '视频长度不能超过60秒',
@@ -475,10 +476,20 @@ const userStore = useloginStore(pinia);
 						})
 					}
 					const tempFilePaths = res.tempFilePath;
+					let poster='';
+					try {
+						uni.showLoading({ title: '正在生成封面', mask: true });
+						poster=await createAndUploadVideoPoster(res);
+					} catch (error) {
+						console.warn('[IMGO] 视频封面生成失败，改用视频首帧', error);
+					} finally {
+						uni.hideLoading();
+					}
 					let arr={
 						duration:res.duration,
 						width:res.width,
-						height:res.height
+						height:res.height,
+						poster
 					};
 					message.fileName=res.name;
 					message.fileSize=res.size;

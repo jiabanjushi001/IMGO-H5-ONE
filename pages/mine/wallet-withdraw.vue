@@ -30,7 +30,7 @@ const paymentMethods = computed(() => {
 	const wechat = paymentBindings.value.wechat || {}
 	return [
 		{ type: 'bank', label: '银行卡', icon: 'cuIcon-card', ready: bankReady.value, description: bankReady.value ? `${card.value.bank_name || '银行卡'} ${card.value.receipt_account_masked || ''}`.trim() : '需绑定并通过审核' },
-		{ type: 'alipay', label: '支付宝', icon: 'cuIcon-pay', ready: !!alipay.bound && Number(alipay.status) === 1, description: !alipay.bound ? '尚未提交支付宝' : Number(alipay.status) === 1 ? `${alipay.receipt_name || ''} ${alipay.receipt_account || ''}`.trim() : Number(alipay.status) === 2 ? '审核未通过，请重新提交' : '审核中，暂不可提现' },
+		{ type: 'alipay', label: '支付宝收款码', icon: 'cuIcon-pay', ready: !!alipay.bound && Number(alipay.status) === 1 && Number(alipay.qr_file_id) > 0, description: !alipay.bound || !Number(alipay.qr_file_id) ? '尚未提交支付宝收款码' : Number(alipay.status) === 1 ? `${alipay.receipt_name || ''}的支付宝收款码` : Number(alipay.status) === 2 ? '审核未通过，请重新提交' : '审核中，暂不可提现' },
 		{ type: 'wechat', label: '微信收款码', icon: 'cuIcon-weixin', ready: !!wechat.bound && Number(wechat.status) === 1, description: !wechat.bound ? '尚未提交微信收款码' : Number(wechat.status) === 1 ? `${wechat.receipt_name || ''}的微信收款码` : Number(wechat.status) === 2 ? '审核未通过，请重新提交' : '审核中，暂不可提现' }
 	]
 })

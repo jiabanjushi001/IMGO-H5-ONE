@@ -3,12 +3,13 @@ import { computed, ref } from 'vue'
 import { onShow } from '@dcloudio/uni-app'
 import bankApi from '@/api/bank.js'
 import paymentMethodApi from '@/api/payment-method.js'
+import AuthImage from '@/components/AuthImage.vue'
 import PaymentQrUpload from '@/components/wallet/PaymentQrUpload.vue'
 
 const loading = ref(true)
 const savingType = ref('')
 const bank = ref({})
-const alipay = ref({ name: '', account: '', bound: false, status: -1, remark: '' })
+const alipay = ref({ name: '', qrFileId: 0, qrImage: '', bound: false, status: -1, remark: '', legacyQrMissing: false })
 const wechat = ref({ name: '', qrFileId: 0, qrImage: '', bound: false, status: -1, remark: '' })
 const bankStatus = computed(() => {
 	if (!bank.value.bound) return '未绑定'
@@ -27,7 +28,8 @@ async function load() {
 		bank.value = bankRes.data || {}
 		const ali = paymentRes.data && paymentRes.data.alipay || {}
 		const wx = paymentRes.data && paymentRes.data.wechat || {}
-		alipay.value = { name: ali.receipt_name || '', account: ali.receipt_account || '', bound: !!ali.bound, status: ali.bound ? Number(ali.status) : -1, remark: ali.remark || '' }
+		const alipayQrFileId = Number(ali.qr_file_id || 0)
+		alipay.value = { name: ali.receipt_name || '', qrFileId: alipayQrFileId, qrImage: ali.qr_image || '', bound: !!ali.bound, status: ali.bound ? Number(ali.status) : -1, remark: ali.remark || '', legacyQrMissing: !!ali.bound && !alipayQrFileId }
 		wechat.value = { name: wx.receipt_name || '', qrFileId: Number(wx.qr_file_id || 0), qrImage: wx.qr_image || '', bound: !!wx.bound, status: wx.bound ? Number(wx.status) : -1, remark: wx.remark || '' }
 	} catch (error) {
 		uni.showToast({ title: error.message || '读取失败，请重试', icon: 'none' })
@@ -35,12 +37,18 @@ async function load() {
 }
 
 function openBank() { uni.navigateTo({ url: '/pages/mine/bank-card' }) }
-function setWechatQr(file) {
+async function setAlipayQr(file) {
+	alipay.value.qrFileId = file.fileId
+	alipay.value.qrImage = file.url
+	await submitAlipay(true)
+}
+async function setWechatQr(file) {
 	wechat.value.qrFileId = file.fileId
 	wechat.value.qrImage = file.url
+	await submitWechat(true)
 }
 function validName(name) { return String(name || '').trim().length >= 2 }
-function canEdit(method) { return !method.bound || Number(method.status) === 2 }
+function canEdit(method) { return !method.bound || Number(method.status) === 2 || !!method.legacyQrMissing }
 function methodStatus(method) {
 	if (!method.bound) return '未提交'
 	return ['审核中', '已通过', '已拒绝'][Number(method.status)] || '审核中'
@@ -50,28 +58,28 @@ function methodDescription(method, emptyText) {
 	return Number(method.status) === 1 ? '审核已通过，可用于提现' : Number(method.status) === 2 ? '审核未通过，可修改后重新提交' : '资料已提交，请等待管理员审核'
 }
 
-async function saveAlipay() {
+async function submitAlipay(fromUpload = false) {
 	if (savingType.value) return
 	if (!canEdit(alipay.value)) { uni.showToast({ title: '当前资料不可修改', icon: 'none' }); return }
 	const name = alipay.value.name.trim()
-	const account = alipay.value.account.trim()
-	if (!validName(name)) { uni.showToast({ title: '请输入收款姓名', icon: 'none' }); return }
-	if (account.length < 5 || account.length > 100 || /\s/.test(account)) { uni.showToast({ title: '请输入5至100位有效支付宝账号', icon: 'none' }); return }
+	if (!validName(name)) { uni.showToast({ title: fromUpload ? '图片已上传，请填写收款姓名后提交审核' : '请输入收款姓名', icon: 'none' }); return }
+	if (!alipay.value.qrFileId) { uni.showToast({ title: '请上传支付宝收款码', icon: 'none' }); return }
 	savingType.value = 'alipay'
 	try {
-		const res = await paymentMethodApi.save({ payment_type: 'alipay', receipt_name: name, receipt_account: account })
+		const res = await paymentMethodApi.save({ payment_type: 'alipay', receipt_name: name, qr_file_id: alipay.value.qrFileId })
 		if (Number(res.code) !== 0) throw new Error(res.msg || '保存失败')
 		uni.showToast({ title: '已提交，等待审核', icon: 'none' })
 		await load()
 	} catch (error) { uni.showToast({ title: error.message || '保存失败', icon: 'none' }) }
 	finally { savingType.value = '' }
 }
+function saveAlipay() { return submitAlipay(false) }
 
-async function saveWechat() {
+async function submitWechat(fromUpload = false) {
 	if (savingType.value) return
 	if (!canEdit(wechat.value)) { uni.showToast({ title: '当前资料不可修改', icon: 'none' }); return }
 	const name = wechat.value.name.trim()
-	if (!validName(name)) { uni.showToast({ title: '请输入收款姓名', icon: 'none' }); return }
+	if (!validName(name)) { uni.showToast({ title: fromUpload ? '图片已上传，请填写收款姓名后提交审核' : '请输入收款姓名', icon: 'none' }); return }
 	if (!wechat.value.qrFileId) { uni.showToast({ title: '请上传微信收款码', icon: 'none' }); return }
 	savingType.value = 'wechat'
 	try {
@@ -82,6 +90,7 @@ async function saveWechat() {
 	} catch (error) { uni.showToast({ title: error.message || '保存失败', icon: 'none' }) }
 	finally { savingType.value = '' }
 }
+function saveWechat() { return submitWechat(false) }
 
 onShow(load)
 </script>
@@ -99,14 +108,14 @@ onShow(load)
 				<view class="payment-card">
 					<view class="payment-card-head"><view class="payment-brand is-alipay"><text class="cuIcon-pay"></text></view><view class="payment-head-copy"><text>支付宝</text><text>{{ methodDescription(alipay, '提交后由管理员审核') }}</text></view><text class="payment-state" :class="`is-${alipay.status}`">{{ methodStatus(alipay) }}</text></view>
 					<view class="payment-field"><text>收款姓名</text><input v-model.trim="alipay.name" :disabled="!canEdit(alipay)" maxlength="100" placeholder="请输入支付宝实名姓名" /></view>
-					<view class="payment-field"><text>支付宝账号</text><input v-model.trim="alipay.account" :disabled="!canEdit(alipay)" maxlength="100" placeholder="请输入手机号或邮箱" /></view>
+					<view class="payment-qr"><PaymentQrUpload v-if="canEdit(alipay)" :src="alipay.qrImage" label="支付宝收款码" @uploaded="setAlipayQr" /><AuthImage v-else-if="alipay.qrImage" class="payment-qr-locked" :src="alipay.qrImage" mode="aspectFit" /></view>
 					<view v-if="alipay.remark" class="payment-remark">处理备注：{{ alipay.remark }}</view>
-					<button v-if="canEdit(alipay)" class="payment-save" :disabled="!!savingType" @tap="saveAlipay">{{ savingType === 'alipay' ? '提交中…' : (alipay.bound ? '重新提交支付宝' : '提交支付宝审核') }}</button>
+					<button v-if="canEdit(alipay)" class="payment-save" :disabled="!!savingType" @tap="saveAlipay">{{ savingType === 'alipay' ? '提交中…' : (alipay.bound ? '重新提交支付宝收款码' : '提交支付宝审核') }}</button>
 				</view>
 				<view class="payment-card">
 					<view class="payment-card-head"><view class="payment-brand is-wechat"><text class="cuIcon-weixin"></text></view><view class="payment-head-copy"><text>微信收款码</text><text>{{ methodDescription(wechat, '上传后由管理员审核') }}</text></view><text class="payment-state" :class="`is-${wechat.status}`">{{ methodStatus(wechat) }}</text></view>
 					<view class="payment-field"><text>收款姓名</text><input v-model.trim="wechat.name" :disabled="!canEdit(wechat)" maxlength="100" placeholder="请输入收款人姓名" /></view>
-					<view class="payment-qr"><PaymentQrUpload v-if="canEdit(wechat)" :src="wechat.qrImage" @uploaded="setWechatQr" /><image v-else-if="wechat.qrImage" class="payment-qr-locked" :src="wechat.qrImage" mode="aspectFit" /></view>
+					<view class="payment-qr"><PaymentQrUpload v-if="canEdit(wechat)" :src="wechat.qrImage" label="微信收款码" @uploaded="setWechatQr" /><AuthImage v-else-if="wechat.qrImage" class="payment-qr-locked" :src="wechat.qrImage" mode="aspectFit" /></view>
 					<view v-if="wechat.remark" class="payment-remark">处理备注：{{ wechat.remark }}</view>
 					<button v-if="canEdit(wechat)" class="payment-save is-wechat" :disabled="!!savingType" @tap="saveWechat">{{ savingType === 'wechat' ? '提交中…' : (wechat.bound ? '重新提交微信收款码' : '提交微信审核') }}</button>
 				</view>

@@ -10,7 +10,7 @@ const amountText = cents => `¥${(Number(cents || 0) / 100).toFixed(2)}`
 const paymentText = record => {
 	const type = String(record.payment_type || 'bank')
 	if (type === 'wechat') return '微信收款码'
-	if (type === 'alipay') return `支付宝（${record.account_last4 || '—'}）`
+	if (type === 'alipay') return '支付宝收款码'
 	return `${record.bank_name || '银行卡'}（尾号 ${record.account_last4 || '—'}）`
 }
 </script>

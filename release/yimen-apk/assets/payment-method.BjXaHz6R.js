@@ -1,0 +1,1 @@
+import{aC as e,b5 as t}from"./index-aPSm53x1.js";const a=`${t}/common/upload/uploadFile`,p={get:()=>e("/enterprise/paymentMethod/get",{}),save:({payment_type:t,receipt_name:a,receipt_account:p="",qr_file_id:i=0})=>e("/enterprise/paymentMethod/save",{payment_type:t,receipt_name:a,receipt_account:p,qr_file_id:i})};export{p as a,a as p};

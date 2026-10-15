@@ -3,7 +3,10 @@ import { ref, watch } from 'vue'
 import { paymentQrUploadUrl } from '@/api/payment-method.js'
 import { resolveMediaDisplayUrl } from '@/utils/avatar.js'
 
-const props = defineProps({ src: { type: String, default: '' } })
+const props = defineProps({
+	src: { type: String, default: '' },
+	label: { type: String, default: '收款码' }
+})
 const emit = defineEmits(['uploaded'])
 const uploading = ref(false)
 const displaySrc = ref('')
@@ -50,7 +53,6 @@ function upload(result) {
 			try { displaySrc.value = await resolveMediaDisplayUrl(file.url) }
 			catch (_) { displaySrc.value = file.url }
 			emit('uploaded', { fileId: Number(file.file_id), url: file.url })
-			uni.showToast({ title: '收款码上传成功', icon: 'none' })
 		},
 		fail: () => uni.showToast({ title: '收款码上传失败，请检查网络', icon: 'none' }),
 		complete: () => { uploading.value = false; uni.hideLoading() }
@@ -63,7 +65,7 @@ function upload(result) {
 		<image v-if="displaySrc" class="qr-image" :src="displaySrc" mode="aspectFit" />
 		<view v-else class="qr-placeholder">
 			<text class="cuIcon-cameraadd qr-icon"></text>
-			<text class="qr-title">{{ uploading ? '上传中…' : '上传微信收款码' }}</text>
+			<text class="qr-title">{{ uploading ? '上传中…' : `上传${props.label}` }}</text>
 			<text class="qr-hint">请上传清晰、完整的二维码图片</text>
 		</view>
 		<text v-if="displaySrc" class="qr-replace">点击更换</text>

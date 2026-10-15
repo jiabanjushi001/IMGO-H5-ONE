@@ -81,6 +81,16 @@ test('camera capture uses mobile-safe ideal constraints and reports useful error
 	assert.match(callPage, /data\.message \|\| '无法打开摄像头或麦克风'/)
 })
 
+test('Android 10 WebView retries media after Vue renders and supports legacy remote streams', () => {
+	const rtc = read('hybrid/html/index.html')
+	assert.match(rtc, /ref="localvideo" muted[\s\S]*x5-video-player-type="h5-page"/)
+	assert.match(rtc, /ref="remoteaudio"[\s\S]*autoplay[\s\S]*playsinline/)
+	assert.match(rtc, /this\.pc\.onaddstream = \(event\) => this\.acceptRemoteStream\(event\.stream\)/)
+	assert.match(rtc, /element\.addEventListener\('loadedmetadata', start, \{ once: true \}\)/)
+	assert.match(rtc, /video\.muted = true;[\s\S]*this\.playRemoteAudio\(stream\)/)
+	assert.match(rtc, /await this\.\$nextTick\(\);[\s\S]*this\.updateVideoElements\(\)/)
+})
+
 test('call bridge ignores unrelated window messages instead of forwarding them as signaling', () => {
 	const callPage = read('pages/message/call.vue')
 	const rtc = read('hybrid/html/index.html')

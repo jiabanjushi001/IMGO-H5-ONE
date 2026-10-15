@@ -61,13 +61,13 @@
 								</view>
 								<!-- 视频消息 -->
 								<view v-else-if="item.type=='video'">
-									<view class="course-video radius-10"  @tap="handlePlay(item)">
-										<!-- 播放弹层 -->
-										<view class="relative-shadow">
-											<view class="cuIcon-video icon-center f-28 c-white"></view>
-										</view>
-										<image v-if="item.extends" :src="mediaSrc(item.extends.poster)" class="" mode="heightFix"></image>
-									</view>
+									<VideoMessageCover
+										:src="item.content"
+										:poster="item.extends && item.extends.poster"
+										:width="item.extends && item.extends.width"
+										:height="item.extends && item.extends.height"
+										@play="handlePlay(item)"
+									/>
 								</view>
 								<!-- 文件消息 -->
 								<view v-else-if="item.type=='file'">
@@ -246,6 +246,7 @@
 	import imUser from '@/components/im-user.vue';
 	import SystemNoticeBar from '@/components/message/SystemNoticeBar.vue';
 	import GroupNoticeBar from '@/components/message/GroupNoticeBar.vue';
+	import VideoMessageCover from '@/components/message/VideoMessageCover.vue';
 	import emoji from '@/utils/emoji.js'
 	import { normalizeMediaUrl, ensureAuthedDisplayUrl, resolveMediaDisplayUrl, needsAuthMediaUrl } from '@/utils/avatar.js'
 	import { chat } from '@/mixins/chat.js'
@@ -267,7 +268,8 @@
 			imUser,
 			statusPoint,
 			SystemNoticeBar,
-			GroupNoticeBar
+			GroupNoticeBar,
+			VideoMessageCover
 		},
 		mixins:[chat],
 		data() {

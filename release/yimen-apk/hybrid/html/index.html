@@ -129,9 +129,10 @@
 			        <source src="./voice/calling.mp3">
 			</audio>
 			<video ref="preparedvideo" class="prepared-source" muted loop autoplay playsinline webkit-playsinline></video>
+			<audio ref="remoteaudio" class="remote-audio" autoplay playsinline></audio>
 			<!--<div v-if="is_video && isRecordedCall" class="recorded-badge">芜湖6</div>-->
-			<video v-show="localStream && is_video" class="localvideo" ref="localvideo"  x5-video-player-fullscreen="true" autoplay x5-playsinline playsinline webkit-playsinline @click="displayBtn = !displayBtn" poster="./image/wallpaper.png"></video>
-			    <video v-show="remoteStream && is_video" class="remotevideo" ref="remotevideo" x5-video-player-fullscreen="true" autoplay x5-playsinline playsinline webkit-playsinline @click="changeVideo()" poster="./image/wallpaper.png"></video>
+			<video v-show="localStream && is_video" class="localvideo" ref="localvideo" muted x5-video-player-type="h5-page" x5-video-player-fullscreen="true" autoplay x5-playsinline playsinline webkit-playsinline @click="retryRemotePlayback(); displayBtn = !displayBtn" poster="./image/wallpaper.png"></video>
+			    <video v-show="remoteStream && is_video" class="remotevideo" ref="remotevideo" muted x5-video-player-type="h5-page" x5-video-player-fullscreen="true" autoplay x5-playsinline playsinline webkit-playsinline @click="retryRemotePlayback(); changeVideo()" poster="./image/wallpaper.png"></video>
 			    <div class="call-user-box" v-if="displayBtn">
 			      <div class="call-user" v-if="contact">
 			        <img class="avatar" v-if="status!=2 || !is_video" :src="displayAvatar || contact.avatar" alt="">
@@ -206,6 +207,7 @@
 					remoteVideo: "",   //远程视频的DOM
 					remoteStream: null, // 远端视频流
 					localStream: null,  // 本地视频流
+					remoteAudio: null,  // 旧版 Android WebView 的远端音频兜底
 					is_video: 0,        //是否为视频通话
 					videoStatus: true,  //视频开启状态
 					voiceStatus: true,  //语音开启状态
@@ -243,19 +245,13 @@
 				this.pc = new RTCPeerConnection(config);
 					this.pc.ontrack = (event) => {
 						console.log(event,'接收视频流');
-						this.stopRinging();
 						const incomingStream = event.streams && event.streams[0]
 							? event.streams[0]
 							: new MediaStream([event.track]);
-						if (this.remoteStream && (!event.streams || !event.streams[0])) {
-							const exists = this.remoteStream.getTracks().some(track => track.id === event.track.id);
-							if (!exists) this.remoteStream.addTrack(event.track);
-						} else {
-							this.remoteStream = incomingStream;
-						}
-						this.streamType = 2;
-						this.$nextTick(() => this.updateVideoElements());
+						this.acceptRemoteStream(incomingStream, event.track);
 					};
+					// 部分 Android 10 设备的旧 WebView 只稳定触发 addstream。
+					this.pc.onaddstream = (event) => this.acceptRemoteStream(event.stream);
 					this.pc.onconnectionstatechange = () => {
 						console.log('WebRTC connection state:', this.pc && this.pc.connectionState);
 						if (this.pc && this.pc.connectionState === 'connected') this.stopRinging();
@@ -272,6 +268,7 @@
 				
 				this.localVideo = this.$refs.localvideo;
 				this.remoteVideo = this.$refs.remotevideo;
+				this.remoteAudio = this.$refs.remoteaudio;
 				this.preparedVideo = this.$refs.preparedvideo;
 				
 				this.messageHandler = (e) => this.callMessagecallback(e);
@@ -319,16 +316,87 @@
 					}
 				},
 				methods: {
+					attachStream(element, stream) {
+						if (!element) return;
+						if ('srcObject' in element) {
+							if (element.srcObject !== stream) element.srcObject = stream || null;
+							return;
+						}
+						if (element.__streamObjectUrl) {
+							URL.revokeObjectURL(element.__streamObjectUrl);
+							element.__streamObjectUrl = '';
+						}
+						if (stream) {
+							element.__streamObjectUrl = URL.createObjectURL(stream);
+							element.src = element.__streamObjectUrl;
+						} else {
+							element.removeAttribute('src');
+						}
+					},
+					playElement(element, label, onBlocked) {
+						if (!element) return;
+						const start = () => {
+							let playTask;
+							try {
+								playTask = element.play();
+							} catch (error) {
+								console.warn(label + ' play failed', error);
+								if (onBlocked) onBlocked(error);
+								return;
+							}
+							if (playTask && typeof playTask.catch === 'function') {
+								playTask.catch((error) => {
+									console.warn(label + ' autoplay failed', error);
+									if (onBlocked) onBlocked(error);
+								});
+							}
+						};
+						start();
+						// 旧 WebView 在 metadata 到达前调用 play() 可能不会自动重试。
+						if (element.readyState < 1) element.addEventListener('loadedmetadata', start, { once: true });
+					},
+					playRemoteAudio(stream) {
+						if (!this.remoteAudio) return;
+						this.attachStream(this.remoteAudio, stream);
+						this.remoteAudio.muted = false;
+						this.playElement(this.remoteAudio, 'remote audio');
+					},
 					playStream(video, stream, muted) {
 						if (!video) return;
-						if (video.srcObject !== stream) video.srcObject = stream || null;
-						video.muted = Boolean(muted);
+						this.attachStream(video, stream);
+						video.autoplay = true;
 						video.playsInline = true;
+						video.setAttribute('playsinline', '');
+						video.setAttribute('webkit-playsinline', '');
+						video.muted = Boolean(muted);
 						if (!stream) return;
-						const playTask = video.play();
-						if (playTask && typeof playTask.catch === 'function') {
-							playTask.catch(error => console.warn('video autoplay failed', error));
+						this.playElement(video, muted ? 'local video' : 'remote video', () => {
+							if (muted) return;
+							// 低版 WebView 可能拦截带声音的自动播放：视频降级为静音播放，音频独立输出。
+							video.muted = true;
+							this.playElement(video, 'muted remote video');
+							this.playRemoteAudio(stream);
+						});
+					},
+					acceptRemoteStream(incomingStream, track) {
+						if (!incomingStream) return;
+						this.stopRinging();
+						if (this.remoteStream && track && !this.remoteStream.getTracks().some(item => item.id === track.id)) {
+							this.remoteStream.addTrack(track);
+						} else if (!this.remoteStream || incomingStream !== this.remoteStream) {
+							this.remoteStream = incomingStream;
 						}
+						this.streamType = 2;
+						if (track) {
+							track.addEventListener('unmute', () => this.$nextTick(() => this.updateVideoElements()), { once: true });
+						}
+						this.$nextTick(() => this.updateVideoElements());
+					},
+					retryRemotePlayback() {
+						if (!this.remoteStream) return;
+						const video = this.streamType == 1 ? this.remoteVideo : this.localVideo;
+						if (this.remoteAudio) this.remoteAudio.pause();
+						this.playStream(video, this.remoteStream, false);
 					},
 					updateVideoElements() {
 						if (this.streamType == 1) {
@@ -437,6 +505,7 @@
 							 stream.getTracks().forEach((track) => {
 								this.pc.addTrack(track, stream);
 							});
+								await this.$nextTick();
 								this.updateVideoElements();
 							if(call_id){
 								this.postMsg({
@@ -553,8 +622,11 @@
 						this.remoteStream.getTracks().forEach(track => track.stop());
 					}
 					this.remoteStream = null;
+					if (this.remoteAudio) this.remoteAudio.pause();
+					this.attachStream(this.remoteAudio, null);
 					if (this.pc) {
 						this.pc.ontrack = null;
+						this.pc.onaddstream = null;
 						this.pc.onicecandidate = null;
 						if (this.pc.connectionState !== 'closed') this.pc.close();
 					}

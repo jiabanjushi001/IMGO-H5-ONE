@@ -17,14 +17,21 @@ test('withdrawal page enforces server settings and sends selected payment type',
 	assert.match(walletApi, /payment_type = 'bank'/)
 })
 
-test('payment binding page supports bank, Alipay and WeChat QR', () => {
+test('payment binding page supports bank, Alipay QR and WeChat QR', () => {
 	assert.match(paymentPage, />银行卡</)
 	assert.match(paymentPage, />支付宝</)
 	assert.match(paymentPage, />微信收款码</)
 	assert.match(paymentPage, /payment_type: 'alipay'/)
 	assert.match(paymentPage, /payment_type: 'wechat'/)
+	assert.match(paymentPage, /qr_file_id: alipay\.value\.qrFileId/)
 	assert.match(paymentPage, /qr_file_id: wechat\.value\.qrFileId/)
+	assert.match(paymentPage, /setWechatQr[\s\S]*submitWechat\(true\)/)
+	assert.match(paymentPage, /setAlipayQr[\s\S]*submitAlipay\(true\)/)
 	assert.match(paymentPage, /canEdit\(method\).*status.*=== 2/)
+	assert.match(paymentPage, /legacyQrMissing: !!ali\.bound && !alipayQrFileId/)
+	assert.match(paymentPage, /canEdit\(method\).*legacyQrMissing/)
+	assert.match(paymentPage, /<AuthImage v-else-if="alipay\.qrImage"/)
+	assert.match(paymentPage, /<AuthImage v-else-if="wechat\.qrImage"/)
 	assert.match(paymentPage, /已提交，等待审核/)
 	assert.match(withdrawPage, /alipay\.status\) === 1/)
 	assert.match(withdrawPage, /wechat\.status\) === 1/)
