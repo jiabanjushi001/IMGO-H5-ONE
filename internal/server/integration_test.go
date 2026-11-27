@@ -56,14 +56,17 @@ func TestMySQLIntegration(t *testing.T) {
 		t.Fatal(e)
 	}
 	defer a.Close()
-	if e = a.Migrate(ctx, true); e != nil {
+	if e = a.Initialize(ctx, "", ""); e == nil {
+		t.Fatal("initialization accepted a missing administrator password")
+	}
+	if e = a.Initialize(ctx, "", "test-admin-password"); e != nil {
 		t.Fatal(e)
+	}
+	if e = a.Initialize(ctx, "", "replacement-password"); e == nil {
+		t.Fatal("initialization accepted an existing database")
 	}
 	if e = a.Migrate(ctx, false); e != nil {
 		t.Fatal("migration not repeatable", e)
-	}
-	if e = a.CreateAdmin(ctx, "administrator", "test-admin-password"); e != nil {
-		t.Fatal(e)
 	}
 	if e = a.CheckSchema(ctx); e != nil {
 		t.Fatal(e)
@@ -118,7 +121,12 @@ func TestMySQLIntegration(t *testing.T) {
 		time.Sleep(320 * time.Millisecond)
 		return str(v["authToken"])
 	}
-	admin := login("administrator", "test-admin-password")
+	adminInfo := obj(success("/common/pub/login", "", M{"account": "administrator", "password": "test-admin-password", "admin_login": 1}))
+	if number(obj(adminInfo["userInfo"])["role"]) != 1 {
+		t.Fatal("initial administrator did not receive role=1")
+	}
+	admin := str(adminInfo["authToken"])
+	time.Sleep(320 * time.Millisecond)
 	alice := login("alice", "test-password")
 	bob := login("bob", "test-password")
 	outsider := login("outsider", "test-password")

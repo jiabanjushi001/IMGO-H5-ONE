@@ -63,16 +63,50 @@ func (a *App) Migrate(ctx context.Context, initialize bool) error {
 	}
 	return a.migrateLegacyMedia(ctx)
 }
+
+// Initialize validates the initial account before creating any tables.
+func (a *App) Initialize(ctx context.Context, account, password string) error {
+	if account == "" {
+		account = "administrator"
+	}
+	hash, err := initialAdminHash(account, password)
+	if err != nil {
+		return err
+	}
+	if err := a.Migrate(ctx, true); err != nil {
+		return err
+	}
+	if err := a.createInitialAdmin(ctx, account, hash); err != nil {
+		return fmt.Errorf("表结构已初始化，创建超级管理员失败: %w", err)
+	}
+	return nil
+}
+
 func (a *App) CreateAdmin(ctx context.Context, account, password string) error {
-	if len(account) < 3 || len(account) > 32 {
-		return errors.New("管理员账号长度须为 3–32 字节")
+	hash, err := initialAdminHash(account, password)
+	if err != nil {
+		return err
 	}
-	hash, e := hashPassword(password)
-	if e != nil {
-		return e
+	return a.createInitialAdmin(ctx, account, hash)
+}
+
+func initialAdminHash(account, password string) (string, error) {
+	if len(account) < 3 || len(account) > 32 || strings.TrimSpace(account) != account || strings.ContainsAny(account, "\r\n\x00") {
+		return "", errors.New("ADMIN_ACCOUNT 须为 3–32 字节，且不能包含首尾空白或换行")
 	}
+	if strings.TrimSpace(password) == "" {
+		return "", errors.New("请先设置超级管理员密码 ADMIN_PASSWORD，再执行初始化或创建管理员")
+	}
+	hash, err := hashPassword(password)
+	if err != nil {
+		return "", fmt.Errorf("ADMIN_PASSWORD 无效: %w", err)
+	}
+	return hash, nil
+}
+
+func (a *App) createInitialAdmin(ctx context.Context, account, hash string) error {
 	var n int
-	if e = a.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+a.t("user")).Scan(&n); e != nil {
+	if e := a.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM "+a.t("user")).Scan(&n); e != nil {
 		return e
 	}
 	if n != 0 {

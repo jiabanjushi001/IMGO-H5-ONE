@@ -10,12 +10,13 @@ chmod 600 .env
 chmod +x start.sh run.sh bin/imgo
 ```
 
-编辑 `.env` 后，先创建空数据库。全新空库执行：
+编辑 `.env` 后，先创建空数据库。为 `ADMIN_PASSWORD` 设置独立的强密码（6–30 字节）。`ADMIN_ACCOUNT` 省略时默认为 `administrator`。全新空库执行以下命令，一次完成建表和超级管理员创建。
 
 ```sh
 ./start.sh -init
-ADMIN_ACCOUNT=administrator ADMIN_PASSWORD='替换为强密码' ./start.sh -create-admin
 ```
+
+如果已用旧版完成建表，且数据库还没有用户，在 `.env` 中设置 `ADMIN_ACCOUNT` 和 `ADMIN_PASSWORD` 后执行 `./start.sh -create-admin`。
 
 已有数据库直接启动。程序会自动补齐 Go 扩展表、角色权限表和兼容字段；涉及旧数据重写的迁移仍按 `docs/MIGRATION.md` 执行。
 

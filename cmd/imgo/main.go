@@ -36,7 +36,7 @@ func newHTTPServer(addr string, handler http.Handler) *http.Server {
 
 func main() {
 	migrate := flag.Bool("migrate", false, "apply additive migration to existing database")
-	initialize := flag.Bool("init", false, "initialize an empty database")
+	initialize := flag.Bool("init", false, "initialize an empty database and create the initial super administrator")
 	admin := flag.Bool("create-admin", false, "create admin using ADMIN_ACCOUNT and ADMIN_PASSWORD environment variables")
 	flag.Parse()
 	cfg, e := server.EnvConfig()
@@ -53,17 +53,26 @@ func main() {
 	if *migrate || *initialize || *admin {
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
 		defer cancel()
-		if *migrate || *initialize {
-			e = app.Migrate(ctx, *initialize)
-		}
-		if e == nil && *admin {
+		switch {
+		case *initialize:
+			e = app.Initialize(ctx, os.Getenv("ADMIN_ACCOUNT"), os.Getenv("ADMIN_PASSWORD"))
+		case *migrate:
+			e = app.Migrate(ctx, false)
+			if e == nil && *admin {
+				e = app.CreateAdmin(ctx, os.Getenv("ADMIN_ACCOUNT"), os.Getenv("ADMIN_PASSWORD"))
+			}
+		case *admin:
 			e = app.CreateAdmin(ctx, os.Getenv("ADMIN_ACCOUNT"), os.Getenv("ADMIN_PASSWORD"))
 		}
 		if e != nil {
 			slog.Error("database operation", "error", e)
 			os.Exit(1)
 		}
-		slog.Info("database operation completed")
+		if *initialize {
+			slog.Info("数据库初始化完成，已创建超级管理员")
+		} else {
+			slog.Info("database operation completed")
+		}
 		return
 	}
 	upgradeCtx, upgradeCancel := context.WithTimeout(context.Background(), 10*time.Minute)

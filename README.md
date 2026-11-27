@@ -42,17 +42,14 @@ deploy/           Nginx 和 systemd 配置示例
 
 1. 手动建立空数据库，为应用配置仅访问该库的账号。
 2. `cp .env.example .env`，设置 `MYSQL_DSN`、`JWT_KEY`、`BASE_URL`。用 `openssl rand -hex 32` 生成 JWT 密钥。
-3. `make build`，加载配置后初始化：
+3. 在 `.env` 设置 `ADMIN_PASSWORD`（6–30 字节），需要自定义账号时设置 `ADMIN_ACCOUNT`。执行 `make build` 后初始化。
 
 ```sh
-set -a
-. ./.env
-set +a
-./bin/imgo -init
+./start.sh -init
 ```
 
-4. 在终端环境中设置 `ADMIN_ACCOUNT` 和随机 `ADMIN_PASSWORD`，执行 `./bin/imgo -create-admin`。此命令只允许在没有用户的库中运行。
-5. `./start-local.sh`，访问对应地址。
+4. 初始化会创建超级管理员。账号默认是 `administrator`。如果旧版已建表且库里还没有用户，可设置两项环境变量后执行 `./start.sh -create-admin`。
+5. 执行 `./start-local.sh`，访问对应地址。
 
 ## 已有 PHP 数据库迁移
 
