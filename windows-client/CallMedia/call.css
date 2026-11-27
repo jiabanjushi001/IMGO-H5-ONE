@@ -1,0 +1,8 @@
+:root { color-scheme: dark; background: #172624; }
+body { margin: 0; }
+video { position: absolute; object-fit: contain; }
+#remote { inset: 0; width: 100%; height: 100%; }
+#local { right: 12px; bottom: 12px; width: 27%; height: 28%; border-radius: 10px; background: #233c35; object-fit: cover; transform: scaleX(-1); }
+#local:not(.camera) { display: none; }
+#prepared { right: 12px; bottom: 12px; width: 27%; height: 28%; border-radius: 10px; background: #233c35; }
+#prepared:not(.preview) { visibility: hidden; }

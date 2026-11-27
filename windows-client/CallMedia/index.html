@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="zh-CN">
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; media-src 'self' blob:; base-uri 'none'; form-action 'none'">
+<title>IMGO 通话画面</title>
+<link rel="stylesheet" href="call.css">
+<video id="remote" autoplay playsinline aria-label="对方画面"></video>
+<video id="local" autoplay muted playsinline aria-label="本机画面"></video>
+<video id="prepared" muted loop playsinline aria-label="预录视频画面"></video>
+<script src="call.js" defer></script>
+</html>

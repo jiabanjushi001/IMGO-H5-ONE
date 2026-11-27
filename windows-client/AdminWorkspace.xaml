@@ -1,0 +1,102 @@
+<UserControl x:Class="Imgo.Desktop.AdminWorkspace"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid>
+        <Grid.ColumnDefinitions><ColumnDefinition Width="170"/><ColumnDefinition Width="*"/></Grid.ColumnDefinitions>
+        <Border Background="White" CornerRadius="12" Margin="0,0,17,0" Padding="9,12" BorderBrush="{StaticResource Line}" BorderThickness="1">
+            <DockPanel>
+                <TextBlock DockPanel.Dock="Top" Text="管理中心" Foreground="{StaticResource Muted}" FontSize="12" FontWeight="SemiBold" Margin="11,6,0,11"/>
+                <ListBox x:Name="Menu" Background="Transparent" Foreground="{StaticResource Ink}"
+                         BorderThickness="0" SelectionChanged="PageChanged">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock FontFamily="Segoe MDL2 Assets" Text="{Binding Icon}" Width="26"
+                                           FontSize="14" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding Title}" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="10,8"/>
+                            <Setter Property="Margin" Value="0,1"/>
+                            <Setter Property="Foreground" Value="{StaticResource Muted}"/>
+                            <Setter Property="AutomationProperties.Name" Value="{Binding Title}"/>
+                            <Setter Property="Template">
+                                <Setter.Value>
+                                    <ControlTemplate TargetType="ListBoxItem">
+                                        <Border x:Name="MenuItemBackground" CornerRadius="6" Padding="{TemplateBinding Padding}" Background="Transparent">
+                                            <ContentPresenter/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="MenuItemBackground" Property="Background" Value="#F3F6FC"/>
+                                            </Trigger>
+                                            <Trigger Property="IsSelected" Value="True">
+                                                <Setter TargetName="MenuItemBackground" Property="Background" Value="{StaticResource AccentTint}"/>
+                                                <Setter Property="Foreground" Value="{StaticResource Accent}"/>
+                                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Setter.Value>
+                            </Setter>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
+            </DockPanel>
+        </Border>
+        <Grid Grid.Column="1">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/><RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/><RowDefinition Height="Auto"/>
+            </Grid.RowDefinitions>
+            <DockPanel Margin="0,0,0,13">
+                <Button DockPanel.Dock="Right" Click="OpenWeb" Content="打开网页版 ↗" Margin="0"/>
+                <TextBlock x:Name="Heading" FontSize="26" FontWeight="Bold" VerticalAlignment="Center"/>
+            </DockPanel>
+            <WrapPanel Grid.Row="1" Margin="0,0,0,10">
+                <Grid Width="172" Margin="0,0,8,0" Visibility="{Binding Visibility, ElementName=Keyword}">
+                    <TextBox x:Name="Keyword" KeyDown="SearchKey" AutomationProperties.Name="搜索关键字"/>
+                    <TextBlock Text="输入关键字" Foreground="{StaticResource Muted}" Margin="11,0,0,0"
+                               VerticalAlignment="Center" IsHitTestVisible="False">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Text, ElementName=Keyword}" Value="">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
+                <ComboBox x:Name="Filter" Width="114" Margin="0,0,8,0" SelectedIndex="0" Visibility="Collapsed"/>
+                <Button x:Name="SearchButton" Style="{StaticResource PrimaryButton}" Content="查询" Click="Search"/>
+                <Button Content="刷新" Click="Refresh"/>
+                <Button x:Name="Primary" Click="PrimaryAction" Visibility="Collapsed"/>
+                <Button x:Name="Secondary" Click="SecondaryAction" Visibility="Collapsed"/>
+                <Button x:Name="Extra" Style="{StaticResource PrimaryButton}" Click="ExtraAction" Visibility="Collapsed"/>
+            </WrapPanel>
+            <Border Grid.Row="2" Background="White" CornerRadius="12" Padding="1" BorderBrush="{StaticResource Line}" BorderThickness="1">
+                <Grid>
+                    <DataGrid x:Name="Table" IsReadOnly="True" AutoGenerateColumns="False" HeadersVisibility="Column"
+                              GridLinesVisibility="Horizontal" HorizontalGridLinesBrush="#E6ECF5" Background="White" BorderThickness="0" RowHeaderWidth="0"
+                              CanUserAddRows="False" SelectionMode="Single" EnableRowVirtualization="True"
+                              EnableColumnVirtualization="True" RowHeight="42" AlternationCount="2" AlternatingRowBackground="#FAFCFE"
+                              SelectionChanged="RowChanged"/>
+                    <ScrollViewer x:Name="Cards" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="CardBody" Margin="9"/>
+                    </ScrollViewer>
+                </Grid>
+            </Border>
+            <DockPanel Grid.Row="3" Margin="0,8,0,0">
+                <Button x:Name="Next" Content="下一页" DockPanel.Dock="Right" Click="NextPage"/>
+                <Button x:Name="Previous" Content="上一页" DockPanel.Dock="Right" Click="PreviousPage"/>
+                <TextBlock x:Name="Footer" Foreground="{StaticResource Muted}" TextWrapping="Wrap" VerticalAlignment="Center"/>
+            </DockPanel>
+        </Grid>
+    </Grid>
+</UserControl>
