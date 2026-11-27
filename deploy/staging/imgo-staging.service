@@ -1,0 +1,25 @@
+[Unit]
+Description=IMGo staging Go backend
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=imgo-staging
+Group=imgo-staging
+WorkingDirectory=/opt/imgo-staging
+EnvironmentFile=/etc/imgo-staging/imgo.env
+ExecStart=/opt/imgo-staging/bin/imgo
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/imgo-staging/public/storage
+UMask=0027
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

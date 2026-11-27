@@ -63,6 +63,36 @@ assert.strictEqual(cookies.get('sessionId'), 'session-two', 'switching must repl
 assert.strictEqual(cookies.get('UserInfo').user_id, 2, 'switching must replace cached user info');
 assert.strictEqual(cookies.get('UserInfo').custom_permission, 'retained', 'switching must retain non-secret user state');
 
+async function testAuthenticatedSwitch() {
+  vault.switchTo(vault.read().find(account => account.user_id === 3));
+  let syncToken = '';
+  let reloads = 0;
+  const errors = [];
+  context.window.location.reload = () => { reloads += 1; };
+  const switcher = Object.assign({}, context.component.components.ImgoAccountSwitcher.data(), {
+    $api: {imApi: {getContactsAPI() {
+      syncToken = cookies.get('authToken');
+      return Promise.resolve({code: 0, data: []});
+    }}},
+    $message: {success() {}, error(message) { errors.push(message); }}
+  });
+  for (const [name, method] of Object.entries(context.component.components.ImgoAccountSwitcher.methods)) {
+    switcher[name] = method.bind(switcher);
+  }
+  const switched = await switcher.switchAccount(vault.read().find(account => account.user_id === 2));
+  assert.strictEqual(switched, true, 'valid saved account must switch');
+  assert.strictEqual(syncToken, 'token-two', 'media-cookie sync request must use the selected account token');
+  assert.strictEqual(reloads, 1, 'reload must happen only after media-cookie sync succeeds');
+  assert.deepStrictEqual(errors, []);
+
+  switcher.$api.imApi.getContactsAPI = () => Promise.reject(new Error('offline'));
+  const failed = await switcher.switchAccount(vault.read().find(account => account.user_id === 3));
+  assert.strictEqual(failed, false, 'failed media-cookie sync must cancel the account switch');
+  assert.strictEqual(cookies.get('authToken'), 'token-two', 'failed switch must restore the previous active account');
+  assert.strictEqual(reloads, 1, 'failed switch must not reload into a mismatched media session');
+  assert.strictEqual(errors.at(-1), 'offline');
+}
+
 vault.remove('id:1');
 assert.deepStrictEqual(Array.from(vault.read(), item => item.user_id), [2], 'a saved non-current account can be removed');
 for (let userId = 3; userId <= 11; userId += 1) {
@@ -89,4 +119,9 @@ assert.ok(app.includes('window.ImgoAccountVault.save({authToken:i.authToken,sess
 assert.ok(app.includes('window.ImgoAccountVault.removeCurrent()'), 'explicit logout must remove the active saved token');
 assert.ok(bundleCss.includes('IMGO_CHAT_ACCOUNT_SWITCHER_CSS_BEGIN'), 'account switcher CSS must be bundled');
 
-console.log('Chat account switcher tests passed');
+testAuthenticatedSwitch().then(() => {
+  console.log('Chat account switcher tests passed');
+}).catch(error => {
+  console.error(error);
+  process.exitCode = 1;
+});

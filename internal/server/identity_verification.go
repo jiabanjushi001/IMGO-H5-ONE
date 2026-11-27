@@ -140,6 +140,17 @@ func identityStatus(value any) (int64, bool) {
 	return status, err == nil && status >= identityPending && status <= identityRejected
 }
 
+func (a *App) identityFeatureEnabled(ctx context.Context, db DB, userID int64) (bool, error) {
+	mentorID, err := a.nearestAgent(ctx, db, userID)
+	if err != nil {
+		return false, err
+	}
+	if mentorID < 1 {
+		return true, nil
+	}
+	return a.agentIdentityEnabled(ctx, db, mentorID)
+}
+
 func (a *App) identityFile(ctx context.Context, uid, fileID int64) (M, error) {
 	if fileID <= 0 {
 		return nil, clientError{"请上传身份证正反面照片", 400}
@@ -153,11 +164,21 @@ func (a *App) identityFile(ctx context.Context, uid, fileID int64) (M, error) {
 
 func (a *App) identityVerification(r *request) (any, error) {
 	r.c.Header("Cache-Control", "no-store")
+	enabled, err := a.identityFeatureEnabled(r.ctx(), a.db, r.uid())
+	if err != nil {
+		return nil, err
+	}
+	if !enabled {
+		if action(r) == "get" {
+			return M{"enabled": false}, nil
+		}
+		return nil, clientError{"实名认证功能暂未开放", 403}
+	}
 	switch action(r) {
 	case "get":
 		row, err := r.one("SELECT v.user_id,v.real_name,v.id_number_cipher,v.id_number_masked,v.front_file_id,v.back_file_id,v.status,v.remark,v.version,v.submitted_at,v.reviewed_at,v.created_at,v.updated_at,ff.src AS front_image,bf.src AS back_image FROM "+a.t("imgo_identity_verification")+" v JOIN "+a.t("file")+" ff ON ff.file_id=v.front_file_id JOIN "+a.t("file")+" bf ON bf.file_id=v.back_file_id WHERE v.user_id=?", r.uid())
 		if errors.Is(err, sql.ErrNoRows) {
-			return M{"submitted": false, "status": int64(-1), "is_auth": false}, nil
+			return M{"enabled": true, "submitted": false, "status": int64(-1), "is_auth": false}, nil
 		}
 		if err != nil {
 			return nil, err
@@ -166,6 +187,7 @@ func (a *App) identityVerification(r *request) (any, error) {
 			return nil, err
 		}
 		row["submitted"] = true
+		row["enabled"] = true
 		row["is_auth"] = number(row["status"]) == identityApproved
 		row["front_image"] = a.mediaPath(str(row["front_image"]))
 		row["back_image"] = a.mediaPath(str(row["back_image"]))
@@ -231,7 +253,7 @@ func (a *App) identityVerification(r *request) (any, error) {
 		if err = tx.Commit(); err != nil {
 			return nil, err
 		}
-		return M{"submitted": true, "status": identityPending, "is_auth": false}, nil
+		return M{"enabled": true, "submitted": true, "status": identityPending, "is_auth": false}, nil
 	}
 	return nil, r.fail("未知操作")
 }

@@ -5,7 +5,8 @@ const ImgoMemberReferralFilter = {
   props: {
     scope: { type: String, default: '' },
     agentMode: { type: Boolean, default: false },
-    referrerAccount: { type: String, default: '' }
+    referrerAccount: { type: String, default: '' },
+    mentorOnly: { type: Boolean, default: false }
   },
   render(h) {
     return h('div', { class: 'imgo-member-referral-filter' }, [
@@ -20,6 +21,14 @@ const ImgoMemberReferralFilter = {
         h('el-option', { props: { label: '直属下级', value: 'direct' } }),
         h('el-option', { props: { label: '全部下级', value: 'all' } })
       ]),
+      h('el-checkbox', {
+        class: 'imgo-member-mentor-only',
+        props: { value: this.mentorOnly },
+        on: {
+          input: value => this.$emit('update:mentor-only', Boolean(value)),
+          change: () => this.$emit('search')
+        }
+      }, '只看导师账号'),
       h('el-button', {
         props: { type: 'primary', icon: 'el-icon-search' },
         on: { click: () => this.$emit('search') }

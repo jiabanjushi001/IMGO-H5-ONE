@@ -6,7 +6,7 @@ function imgoNormalizeConfig(value, previous) {
   sysInfo: {name:'Imgo',logo:'',state:1,runMode:2,closeTips:'系统维护中',showScan:'1',showGroupQr:'1'},
   chatInfo: {online:0,webrtc:0,simpleChat:0,redoTime:120,dbDelMsg:0,groupCreateRole:'mentor'},
   security: {googleAuthEnabled:false},
-  compass: {status:0,mode:1,list:[]}, fileUpload: {size:50,videoSize:200}
+  compass: {status:0,mode:1,list:[]}, fileUpload: {size:50,videoSize:200,directUpload:{enabled:false,provider:'',protocol:1}}
  };
  const safe = v => Object.fromEntries(Object.entries(object(v) ? v : {}).filter(([k]) => !['__proto__','constructor','prototype'].includes(k)));
  const base = safe(previous);

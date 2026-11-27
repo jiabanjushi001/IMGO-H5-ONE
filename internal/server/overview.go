@@ -202,6 +202,12 @@ func (a *App) overview(r *request) (any, error) {
 		totals[spec.name] = total
 		daily[spec.name] = added
 	}
+	var todayChatUsers int64
+	todayChatArgs := append([]any{today}, userArgs...)
+	if err := a.db.QueryRowContext(r.ctx(), "SELECT COUNT(*) FROM "+a.t("user")+" u WHERE u.last_chat_time>=? AND u.delete_time=0 AND "+userScope, todayChatArgs...).Scan(&todayChatUsers); err != nil {
+		return nil, err
+	}
+	totals["today_online_users"] = todayChatUsers
 	users, devices := 0, 0
 	if scope.Global {
 		users, devices = a.hub.onlineCounts(now)

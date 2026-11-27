@@ -51,6 +51,7 @@ const ImgoOverview = {
       h('div', { class: 'imgo-stats' }, [
         card('用户总数', 'users', `今日新增 +${today.users}`, '#409eff', 'el-icon-user'),
         card('在线用户', 'online_users', `今日采样峰值 ${today.peak_users}`, '#67c23a', 'el-icon-user-solid'),
+        card('今日聊天用户', 'today_online_users', '按最后聊天时间去重统计', '#5c7cfa', 'el-icon-data-analysis'),
         card('在线设备', 'online_devices', `今日采样峰值 ${today.peak_devices}`, '#13c2c2', 'el-icon-monitor'),
         card('群聊总数', 'groups', `今日创建 +${today.groups}`, '#e6a23c', 'el-icon-s-custom'),
         card('消息总数', 'messages', `今日 ${today.messages} 条`, '#8959d1', 'el-icon-chat-dot-round', '条'),
@@ -58,7 +59,7 @@ const ImgoOverview = {
       ]),
       h('div', { class: 'imgo-overview-middle' }, this.$slots.default),
       h('div', { class: 'imgo-charts' }, charts),
-      h('p', { class: 'imgo-overview-footnote' }, '统计当前未删除的用户、有效群聊和文件、可见聊天消息（不含系统公告）。删除或清理后，相关历史统计也会变化。在线统计为当前 Go 实例的已认证连接，每60秒刷新。')
+      h('p', { class: 'imgo-overview-footnote' }, '统计当前未删除的用户、有效群聊和文件、可见聊天消息（不含系统公告）。今日聊天用户按北京时间当天的最后聊天时间去重；持续登录但今天有聊天的用户也会计入。在线统计为当前 Go 实例的已认证连接，每60秒刷新。')
     ])
   }
 }

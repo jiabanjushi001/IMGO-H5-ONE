@@ -1,8 +1,13 @@
 package server
 
 import (
+	"context"
+	"database/sql"
+	"errors"
 	"strings"
 	"testing"
+
+	"github.com/DATA-DOG/go-sqlmock"
 )
 
 func TestIdentityNumberValidationEncryptionAndMasking(t *testing.T) {
@@ -52,5 +57,65 @@ func TestIdentityRoutesUseAuthenticatedUserAndMemberPermission(t *testing.T) {
 		if !ok || route.public || route.super || route.permission != "manage.users" {
 			t.Fatalf("management identity route is not scoped correctly: %s %#v", path, route)
 		}
+	}
+}
+
+func TestIdentityFeatureEnabledUsesNearestMentorSetting(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		row     *int
+		enabled bool
+	}{
+		{name: "mentor disabled", row: func() *int { value := 0; return &value }(), enabled: false},
+		{name: "mentor enabled", row: func() *int { value := 1; return &value }(), enabled: true},
+		{name: "legacy mentor defaults enabled", row: nil, enabled: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, mock := testApp(t)
+			mock.ExpectQuery("SELECT p.ancestor_user_id FROM `yu_imgo_referral_path`").WithArgs(int64(20)).
+				WillReturnRows(sqlmock.NewRows([]string{"ancestor_user_id"}).AddRow(7))
+			query := mock.ExpectQuery("SELECT identity_enabled FROM `yu_imgo_agent_setting`").WithArgs(int64(7))
+			if tc.row == nil {
+				query.WillReturnError(sql.ErrNoRows)
+			} else {
+				query.WillReturnRows(sqlmock.NewRows([]string{"identity_enabled"}).AddRow(*tc.row))
+			}
+			got, err := a.identityFeatureEnabled(context.Background(), a.db, 20)
+			if err != nil || got != tc.enabled {
+				t.Fatalf("identityFeatureEnabled() = %v, %v", got, err)
+			}
+			if err := mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestIdentityFeatureEnabledWithoutMentorDefaultsEnabled(t *testing.T) {
+	a, mock := testApp(t)
+	mock.ExpectQuery("SELECT p.ancestor_user_id FROM `yu_imgo_referral_path`").WithArgs(int64(20)).
+		WillReturnError(sql.ErrNoRows)
+	enabled, err := a.identityFeatureEnabled(context.Background(), a.db, 20)
+	if err != nil || !enabled {
+		t.Fatalf("identityFeatureEnabled() = %v, %v", enabled, err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestDisabledIdentityFeatureRejectsDirectSave(t *testing.T) {
+	a, mock := testApp(t)
+	mock.ExpectQuery("SELECT p.ancestor_user_id FROM `yu_imgo_referral_path`").WithArgs(int64(20)).
+		WillReturnRows(sqlmock.NewRows([]string{"ancestor_user_id"}).AddRow(7))
+	mock.ExpectQuery("SELECT identity_enabled FROM `yu_imgo_agent_setting`").WithArgs(int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"identity_enabled"}).AddRow(0))
+	_, err := a.identityVerification(bankRequest(a, "/enterprise/identity/save", 20, M{}))
+	var client clientError
+	if !errors.As(err, &client) || client.code != 403 {
+		t.Fatalf("disabled identity save error = %v", err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
 	}
 }

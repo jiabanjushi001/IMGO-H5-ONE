@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <link rel="stylesheet" href="/public/assets/css/app.c65eb857.css">
+  <link rel="stylesheet" href="/public/assets/css/imgo-maintenance.css">
+  <title>Group notice layout regression</title>
+  <style>
+    body { margin: 0; }
+    .fixture { width: 900px; height: 700px; }
+    .fixture .lemon-sidebar { width: 1px; }
+  </style>
+</head>
+<body>
+  <main class="fixture imgo-chat-design">
+    <section class="lemon-wrapper">
+      <aside class="lemon-sidebar"></aside>
+      <section class="lemon-container">
+        <header class="lemon-container__title">长群公告布局回归</header>
+        <div class="lemon-vessel">
+          <section class="lemon-vessel__left">
+            <div class="lemon-messages">消息列表</div>
+            <div class="lemon-editor">
+              <div class="lemon-editor__tool">工具栏</div>
+              <div class="lemon-editor__inner"><div class="lemon-editor__input"><div class="chat-rich-text">聊天输入框</div></div></div>
+              <div class="lemon-editor__footer">发送</div>
+            </div>
+          </section>
+          <aside class="lemon-vessel__right">
+            <div class="slot-group-list lemon-wrapper" data-v-6c5c2dba>
+              <div class="group-side-box lemon-container" data-v-6c5c2dba>
+                <div class="group-notice" data-v-6c5c2dba>
+                  <div class="group-side-title" data-v-6c5c2dba>群公告</div>
+                  <div class="group-side-body" data-v-6c5c2dba>这是一条很长很长的群公告，用于确认公告无论多长都只能在右侧固定宽度区域内换行显示，不能继续扩张并把左侧消息列表和聊天输入框挤成零宽度。这里继续补充内容以覆盖线上实际出现的超长公告场景。</div>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </section>
+  </main>
+</body>
+</html>

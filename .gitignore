@@ -1,4 +1,6 @@
 .env
+deploy/staging/.env
+deploy/staging/certs/
 bin/
 dist/
 run/

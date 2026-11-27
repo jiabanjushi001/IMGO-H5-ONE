@@ -6,6 +6,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"github.com/gin-gonic/gin"
 	"github.com/go-sql-driver/mysql"
 	"github.com/gorilla/websocket"
 	"image/png"
@@ -365,6 +366,25 @@ func TestMySQLIntegration(t *testing.T) {
 		if e != nil || !strings.Contains(plain, "01:05") || number(obj(m["extends"])["code"]) != 906 {
 			t.Fatal("hangup history", m, e)
 		}
+
+		// In restricted private-chat mode an administrator may initiate a call
+		// to a user who is not their friend. The existing call message, rather
+		// than the new-chat friend rule, authorises the user's reply signals.
+		sys := a.config(ctx, "sysInfo")
+		previousRunMode := sys["runMode"]
+		sys["runMode"] = 2
+		if e = update(ctx, a.db, a.t("config"), M{"value": js(sys)}, "name=?", "sysInfo"); e != nil {
+			t.Fatal(e)
+		}
+		adminCall := obj(success("/enterprise/im/sendToMsg", admin, M{"id": "rtc-admin-user", "toContactId": 2, "type": 1, "event": "calling"}))
+		accepted := obj(success("/enterprise/im/sendToMsg", alice, M{"id": "rtc-admin-user", "msg_id": adminCall["msg_id"], "toContactId": 1, "type": 1, "event": "acceptRtc", "code": 904}))
+		if str(obj(accepted["extends"])["event"]) != "acceptRtc" {
+			t.Fatal("administrator call was not accepted", accepted)
+		}
+		sys["runMode"] = previousRunMode
+		if e = update(ctx, a.db, a.t("config"), M{"value": js(sys)}, "name=?", "sysInfo"); e != nil {
+			t.Fatal(e)
+		}
 	})
 	t.Run("legacy media and emoji", func(t *testing.T) {
 		content, _ := encryptContent(a.cfg.ChatKey, "/storage/voice/old.mp3")
@@ -467,6 +487,26 @@ func TestMySQLIntegration(t *testing.T) {
 			friends, e := one(ctx, a.db, "SELECT COUNT(*) n FROM yu_friend WHERE status=1 AND ((create_user=? AND friend_user_id=?) OR (create_user=? AND friend_user_id=?))", wantCS, uid, uid, wantCS)
 			if e != nil || number(friends["n"]) != 2 {
 				t.Fatal("automatic mutual friendship", friends, e)
+			}
+			customer, e := one(ctx, a.db, "SELECT * FROM yu_user WHERE user_id=?", wantCS)
+			if e != nil {
+				t.Fatal(e)
+			}
+			contactRequest := &request{app: a, c: &gin.Context{}, user: customer, p: M{}}
+			contactRequest.c.Request = httptest.NewRequest("POST", "/enterprise/im/getContacts", nil)
+			contactList, e := a.contacts(contactRequest, wantCS)
+			if e != nil {
+				t.Fatal("customer contacts after registration", e)
+			}
+			foundRegisteredUser := false
+			for _, contact := range contactList.([]M) {
+				if number(contact["id"]) == uid {
+					foundRegisteredUser = str(contact["lastContent"]) == "欢迎新成员"
+					break
+				}
+			}
+			if !foundRegisteredUser {
+				t.Fatal("registered user missing from customer contacts before replying", contactList)
 			}
 			g, e := one(ctx, a.db, "SELECT group_id FROM yu_group_user WHERE user_id=?", uid)
 			if e != nil || number(g["group_id"]) == previousGroup {

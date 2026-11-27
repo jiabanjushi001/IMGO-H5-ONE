@@ -37,9 +37,13 @@ BEGIN
          CONCAT(@imgo_clear_prefix, 'imgo_agent_online_sample'),
          CONCAT(@imgo_clear_prefix, 'imgo_admin_audit_log'),
          CONCAT(@imgo_clear_prefix, 'imgo_bank_card'),
+         CONCAT(@imgo_clear_prefix, 'imgo_batch_user_task'),
          CONCAT(@imgo_clear_prefix, 'imgo_check_in'),
+         CONCAT(@imgo_clear_prefix, 'imgo_identity_verification'),
+         CONCAT(@imgo_clear_prefix, 'imgo_payment_method'),
          CONCAT(@imgo_clear_prefix, 'imgo_wallet'),
          CONCAT(@imgo_clear_prefix, 'imgo_withdrawal'),
+         CONCAT(@imgo_clear_prefix, 'imgo_withdrawal_password'),
          CONCAT(@imgo_clear_prefix, 'imgo_wallet_entry'),
          CONCAT(@imgo_clear_prefix, 'imgo_recharge_order'),
          CONCAT(@imgo_clear_prefix, 'imgo_referral_path')

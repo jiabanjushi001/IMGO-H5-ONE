@@ -8,7 +8,8 @@ body:has(.imgo-admin) .sideMenu-message > .el-dialog__header .el-dialog__headerb
 body:has(.imgo-admin) .sideMenu-message > .el-dialog__body { padding:0 !important; flex:1; min-height:0; overflow:hidden; }
 .sideMenu-message > .el-dialog__body > div,.sideMenu-message .chat-box { height:100%; min-height:0; }
 .sideMenu-message .chat-box { box-shadow:none; }
-.sideMenu-message .lemon-wrapper { width:100% !important; height:100% !important; min-height:0 !important; font-family:inherit; transition:none; }
+/* Do not apply the full-panel width to the nested group-details wrapper. */
+.sideMenu-message .chat-box > .lemon-wrapper { width:100% !important; height:100% !important; min-height:0 !important; font-family:inherit; transition:none; }
 .sideMenu-message .lemon-menu { background:#eef1fb; width:64px; flex-shrink:0; box-sizing:border-box; padding-top:20px; border-right:1px solid #e5eaf5; }
 .sideMenu-message .lemon-menu__avatar { border-radius:10px; overflow:hidden; margin-bottom:18px; }
 .sideMenu-message .lemon-menu__item { color:#8a94ae; border-radius:10px; margin:4px 8px; padding:10px 8px; box-sizing:border-box; width:44px; text-align:center; }

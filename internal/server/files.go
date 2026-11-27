@@ -43,14 +43,26 @@ func uploadLimitMB(config M, kind string) int64 {
 	return limit
 }
 
-func (a *App) upload(r *request) (any, error) {
+func (a *App) upload(r *request) (result any, uploadErr error) {
+	started := time.Now()
+	r.c.Set(requestStageContextKey, "upload_config")
+	defer func() {
+		if uploadErr != nil {
+			return
+		}
+		attrs := a.requestLogAttrs(r.c, effectivePath(r.c), r.uid(), started)
+		attrs = append(attrs, "upload_action", action(r))
+		a.log.Info("upload completed", attrs...)
+	}()
 	config := a.config(r.ctx(), "fileUpload")
 	disk := str(config["disk"])
+	r.c.Set(requestStageContextKey, "upload_read_file")
 	file, e := r.c.FormFile("file")
 	if e != nil {
 		return nil, r.fail("缺少上传文件")
 	}
 	message := obj(r.p["message"])
+	r.c.Set(requestStageContextKey, "upload_validate_name")
 	if filepath.Ext(file.Filename) == "" {
 		if name := str(message["fileName"]); name != "" {
 			file.Filename = name
@@ -64,6 +76,7 @@ func (a *App) upload(r *request) (any, error) {
 		return nil, r.fail("文件名或扩展名不安全")
 	}
 	allowed := false
+	r.c.Set(requestStageContextKey, "upload_validate_type")
 	switch extensions := config["fileExt"].(type) {
 	case []any:
 		for _, s := range extensions {
@@ -86,6 +99,7 @@ func (a *App) upload(r *request) (any, error) {
 	}
 	cate, kind := fileCategory(ext, str(message["type"]) == "voice")
 	limitMB := uploadLimitMB(config, kind)
+	r.c.Set(requestStageContextKey, "upload_validate_size")
 	if file.Size > limitMB<<20 {
 		label := "文件"
 		if kind == "video" {
@@ -103,12 +117,14 @@ func (a *App) upload(r *request) (any, error) {
 	if act == "uploademoji" && file.Size > 2<<20 {
 		return nil, r.fail("表情不能超过 2 MB")
 	}
+	r.c.Set(requestStageContextKey, "upload_open_file")
 	in, e := file.Open()
 	if e != nil {
 		return nil, e
 	}
 	defer in.Close()
 	if kind == "image" {
+		r.c.Set(requestStageContextKey, "upload_decode_image")
 		cfg, format, err := image.DecodeConfig(in)
 		if err != nil || cfg.Width <= 0 || cfg.Height <= 0 || cfg.Width > 12000 || cfg.Height > 12000 || int64(cfg.Width)*int64(cfg.Height) > 40_000_000 {
 			return nil, r.fail("图片格式无效或尺寸过大")
@@ -123,15 +139,18 @@ func (a *App) upload(r *request) (any, error) {
 	}
 	rel := filepath.ToSlash(filepath.Join("storage", kind, time.Now().Format("2006-01-02"), fmt.Sprint(r.uid()), randomID()+"."+ext))
 	full := filepath.Join(a.cfg.PublicDir, filepath.FromSlash(rel))
+	r.c.Set(requestStageContextKey, "upload_create_directory")
 	if e = os.MkdirAll(filepath.Dir(full), 0750); e != nil {
 		return nil, e
 	}
+	r.c.Set(requestStageContextKey, "upload_create_file")
 	out, e := os.OpenFile(full, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0640)
 	if e != nil {
 		return nil, e
 	}
 	defer out.Close()
 	hash := md5.New()
+	r.c.Set(requestStageContextKey, "upload_write_file")
 	written, e := io.Copy(io.MultiWriter(out, hash), io.LimitReader(in, (limitMB<<20)+1))
 	if e != nil || written > limitMB<<20 {
 		_ = os.Remove(full)
@@ -144,11 +163,13 @@ func (a *App) upload(r *request) (any, error) {
 	name := strings.TrimSuffix(file.Filename, filepath.Ext(file.Filename))
 	p := M{"cate": cate, "file_type": mime.TypeByExtension("." + ext), "name": name, "src": "/" + rel, "size": written, "ext": ext, "md5": fmt.Sprintf("%x", hash.Sum(nil)), "user_id": r.uid(), "create_time": time.Now().Unix(), "status": 1}
 	if disk != "" && disk != "local" {
+		r.c.Set(requestStageContextKey, "upload_cloud")
 		if e = a.uploadCloud(r.ctx(), config, rel, full, str(p["file_type"])); e != nil {
 			_ = os.Remove(full)
 			return nil, e
 		}
 	}
+	r.c.Set(requestStageContextKey, "upload_save_record")
 	tx, e := a.db.BeginTx(r.ctx(), nil)
 	if e != nil {
 		return nil, e
@@ -188,14 +209,24 @@ func (a *App) upload(r *request) (any, error) {
 		return p["url"], nil
 	}
 	if message := obj(r.p["message"]); len(message) > 0 {
+		r.c.Set(requestStageContextKey, "upload_send_message")
 		message["file_id"] = fid
 		message["content"] = "/" + rel
 		message["type"] = kind
 		if kind == "video" {
-			metadata, e = a.makeVideoCover(r, full, fid)
+			suppliedMetadata := obj(message["extends"])
+			var uploaded bool
+			metadata, uploaded, e = a.saveUploadedVideoCover(r, fid)
+			if e == nil && !uploaded {
+				metadata, uploaded, e = a.claimUploadedVideoCover(r, fid, str(suppliedMetadata["poster"]))
+			}
+			if e == nil && !uploaded {
+				metadata, e = a.makeVideoCover(r, full, fid)
+			}
 			if e != nil {
 				return nil, e
 			}
+			metadata = mergeVideoMetadata(metadata, suppliedMetadata)
 			message["extends"] = metadata
 		}
 		if kind == "image" {
@@ -203,6 +234,7 @@ func (a *App) upload(r *request) (any, error) {
 		}
 		return a.sendMessage(r, message)
 	}
+	r.c.Set(requestStageContextKey, "upload_complete")
 	return p, nil
 }
 func (a *App) emoji(r *request) (any, error) {

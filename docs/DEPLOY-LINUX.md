@@ -25,6 +25,22 @@ ADMIN_ACCOUNT=administrator ADMIN_PASSWORD='替换为强密码' ./start.sh -crea
 
 默认使用 Nginx 反向代理 `127.0.0.1:8080`，并为 `/wss` 配置 WebSocket Upgrade。如果修改了 `.env` 中的 `IMGO_ADDR`，Nginx 的 `proxy_pass` 也要使用同一端口。API 域名和后台域名分离的示例位于 `deploy/domain-split/`。
 
+原生 Android TCP 是新增的可选通道。设置 `IMGO_TCP_ADDR=0.0.0.0:9090` 后，Go 进程会在保留全部 HTTP/WebSocket 功能的同时监听 TCP；留空则完全不启动 TCP。公网环境同时设置 `IMGO_TCP_TLS_CERT` 和 `IMGO_TCP_TLS_KEY`，并在防火墙中仅开放实际使用的 TCP 端口。TLS 两项必须同时配置。
+
+## H5 和后台直传阿里云 OSS
+
+超级管理员在“系统设置 → 文件上传设置”选择“阿里云”，填写 OSS 区域 `endpoint` 和已经绑定当前 Bucket 的 ESA/CNAME HTTPS 域名，再开启“客户端直传 OSS”。新版 H5 与管理后台会把图片、视频、语音和文件直接上传到 ESA，A 反向代理和 B Go 服务只处理上传凭证申请、文件确认等很小的 JSON 请求，文件内容不再经过 A 或 B。关闭开关后，新版客户端自动退回原上传接口；未升级的旧 H5 继续使用原接口，但 B 服务向 OSS 上传、校验和生成签名下载地址时同样会走配置的 ESA 域名。
+
+在阿里云 OSS Bucket 的跨域设置中，为实际使用的 H5 和后台域名添加规则：
+
+- 来源（Origins）：填写完整的 H5、管理后台域名，生产环境建议不要使用 `*`。
+- 允许方法（Methods）：`POST`、`GET`、`HEAD`。
+- 允许请求头（Allowed Headers）：`*`。
+- 暴露响应头（Expose Headers）：可填写 `ETag`。
+- 缓存时间（Max Age）：建议 `600` 秒或以上。
+
+直传使用服务端签发的短期 POST Policy，不会把 OSS `AccessKeySecret` 下发给浏览器。ESA/CNAME 域名必须使用 HTTPS，不能填写 `*.aliyuncs.com` 公共 endpoint，也不能带路径、端口或查询参数。修改 ESA/OSS 跨域规则后应同时用 H5 和管理后台各上传一张图片、一个视频和一个普通文件；如果浏览器控制台显示 CORS 错误，先核对当前页面的协议、域名和端口是否与 Origins 完全一致，并确认允许 `POST`、`GET`、`HEAD` 和 `Content-Type` 请求头。
+
 ## 更新已有部署
 
 保留服务器原来的 `.env` 与 `public/storage`。停止旧进程后更新 `bin/imgo`、`public`、`start.sh` 和 `run.sh`，再按原来的进程管理方式启动。不要用 `.env.example` 覆盖生产配置。

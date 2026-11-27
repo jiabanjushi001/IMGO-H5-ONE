@@ -1,7 +1,6 @@
 {
   "controller_routes": [
     "/common/Api/createUser",
-    "/common/Api/login",
     "/common/Pub/avatar",
     "/common/Pub/bindGroup",
     "/common/Pub/bindUid",

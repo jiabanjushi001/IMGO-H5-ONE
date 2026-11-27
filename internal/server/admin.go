@@ -2,6 +2,7 @@ package server
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -56,6 +57,11 @@ func (a *App) manageUser(r *request) (any, error) {
 		if referralScope != "" && referralScope != "direct" && referralScope != "all" {
 			return nil, r.fail("下级范围无效")
 		}
+		mentorOnlyValue := strings.TrimSpace(r.s("mentor_only"))
+		if mentorOnlyValue != "" && mentorOnlyValue != "0" && mentorOnlyValue != "1" {
+			return nil, r.fail("导师筛选无效")
+		}
+		mentorOnly := mentorOnlyValue == "1"
 		if !scope.Global {
 			from += " u"
 			column = "u."
@@ -70,13 +76,16 @@ func (a *App) manageUser(r *request) (any, error) {
 			}
 			where += "))"
 		}
+		if mentorOnly {
+			where += " AND EXISTS (SELECT 1 FROM " + a.t("imgo_admin_role") + " mentor_filter WHERE mentor_filter.role_id=" + column + "admin_role_id AND mentor_filter.status=1 AND mentor_filter.agent_mode=1)"
+		}
 		if username := strings.TrimSpace(r.s("keywords")); username != "" {
 			match := column + "account=?"
-			exactWhere := "delete_time=0 AND account=?"
-			exactArgs := []any{username}
-			if !scope.Global {
-				exactWhere = where + " AND u.account=?"
-				exactArgs = append(append([]any{}, args...), username)
+			exactWhere := where + " AND " + column + "account=?"
+			exactArgs := append(append([]any{}, args...), username)
+			if scope.Global && referralScope != "" {
+				exactWhere = "delete_time=0 AND account=?"
+				exactArgs = []any{username}
 			}
 			exact, err := r.one("SELECT COUNT(*) n FROM "+from+" WHERE "+exactWhere, exactArgs...)
 			if err != nil {
@@ -131,10 +140,16 @@ func (a *App) manageUser(r *request) (any, error) {
 		if e = a.memberCheckInSummaries(r, list); e != nil {
 			return nil, e
 		}
+		if e = a.memberWalletSummaries(r, list); e != nil {
+			return nil, e
+		}
 		if e = a.memberReferralSummaries(r, list); e != nil {
 			return nil, e
 		}
 		if e = a.attachAdminRoleNames(r, list); e != nil {
+			return nil, e
+		}
+		if e = a.memberMentorSummaries(r, list); e != nil {
 			return nil, e
 		}
 		for _, u := range list {
@@ -157,10 +172,16 @@ func (a *App) manageUser(r *request) (any, error) {
 		if e = a.memberCheckInSummaries(r, []M{u}); e != nil {
 			return nil, e
 		}
+		if e = a.memberWalletSummaries(r, []M{u}); e != nil {
+			return nil, e
+		}
 		if e = a.memberReferralSummaries(r, []M{u}); e != nil {
 			return nil, e
 		}
 		if e = a.attachAdminRoleNames(r, []M{u}); e != nil {
+			return nil, e
+		}
+		if e = a.memberMentorSummaries(r, []M{u}); e != nil {
 			return nil, e
 		}
 		delete(u, "salt")
@@ -183,7 +204,7 @@ func (a *App) manageUser(r *request) (any, error) {
 		}
 		r.count = number(n["n"])
 		limit, offset := r.pagination()
-		return r.list("SELECT DATE_FORMAT(sign_date,'%Y-%m-%d') sign_date,created_at signed_at FROM "+a.t("imgo_check_in")+" WHERE user_id=? ORDER BY sign_date DESC LIMIT ? OFFSET ?", uid, limit, offset)
+		return r.list("SELECT DATE_FORMAT(sign_date,'%Y-%m-%d') sign_date,created_at signed_at,cycle_day,reward_cents FROM "+a.t("imgo_check_in")+" WHERE user_id=? ORDER BY sign_date DESC LIMIT ? OFFSET ?", uid, limit, offset)
 	case "batchadd":
 		return a.batchAddUsers(r, scope)
 	case "batchstatus":
@@ -231,6 +252,10 @@ func (a *App) manageUser(r *request) (any, error) {
 		return nil, update(r.ctx(), a.db, a.t("user"), M{"remark": remark}, whereUser, uid)
 	case "setinvitecode":
 		return a.setMemberInviteCode(r, uid, whereUser, scope)
+	case "setgroupfriendadd":
+		return a.setGroupFriendAddPermission(r, uid, whereUser)
+	case "setwithdrawal":
+		return a.setMemberWithdrawalPermission(r, uid, whereUser)
 	case "edit":
 		if uid == 1 && r.uid() != 1 {
 			return nil, deny()
@@ -297,9 +322,17 @@ func (a *App) manageUser(r *request) (any, error) {
 		if e != nil {
 			return nil, r.fail(e.Error())
 		}
+		target, e := r.one("SELECT account FROM "+a.t("user")+" WHERE "+whereUser, uid)
+		if e != nil {
+			return nil, e
+		}
 		if e = update(r.ctx(), a.db, a.t("user"), M{"password": hash, "salt": ""}, whereUser, uid); e != nil {
 			return nil, e
 		}
+		// A successful administrator reset must also unlock the account. Otherwise
+		// the old failed-password counter rejects the newly assigned password for
+		// up to five minutes, which makes a successful reset appear ineffective.
+		a.get("login-fail:"+str(target["account"]), true)
 		if e = a.revoke(r.ctx(), uid); e != nil {
 			return nil, e
 		}
@@ -491,8 +524,30 @@ func (a *App) manageGroup(r *request) (any, error) {
 }
 func (a *App) manageConfig(r *request) (any, error) {
 	switch action(r) {
+	case "getcheckinsettings", "setcheckinsettings":
+		return a.manageCheckInSettings(r)
 	case "getsystemalert", "setsystemalert", "testsystemalert":
 		return a.manageSystemAlert(r)
+	case "getwithdrawalsettings":
+		if r.uid() != 1 {
+			return nil, deny()
+		}
+		return a.config(r.ctx(), "withdrawal"), nil
+	case "setwithdrawalsettings":
+		if r.uid() != 1 {
+			return nil, deny()
+		}
+		value, err := normalizeWithdrawalConfig(r.p)
+		if err != nil {
+			return nil, err
+		}
+		existing, err := r.one("SELECT id FROM "+a.t("config")+" WHERE name=?", "withdrawal")
+		if errors.Is(err, sql.ErrNoRows) {
+			_, err = insert(r.ctx(), a.db, a.t("config"), M{"name": "withdrawal", "value": js(value), "create_user": r.uid(), "create_time": time.Now().Unix(), "status": 1})
+		} else if err == nil {
+			err = update(r.ctx(), a.db, a.t("config"), M{"value": js(value), "update_time": time.Now().Unix()}, "id=?", existing["id"])
+		}
+		return value, err
 	}
 	switch action(r) {
 	case "setconfig", "sendtestemail", "getinvitelink":
@@ -556,14 +611,14 @@ func (a *App) manageConfig(r *request) (any, error) {
 		}
 		return nil, r.fail("缺少安全设置参数")
 	case "getinfo", "getconfig":
-		if name == "systemAlert" {
+		if name == "systemAlert" || name == "withdrawal" {
 			return nil, deny()
 		}
 		return a.config(r.ctx(), name), nil
 	case "getallconfig":
-		return r.list("SELECT * FROM " + a.t("config") + " WHERE status=1 AND name<>'systemAlert' ORDER BY id")
+		return r.list("SELECT * FROM " + a.t("config") + " WHERE status=1 AND name NOT IN ('systemAlert','withdrawal') ORDER BY id")
 	case "setconfig":
-		valid := map[string]bool{"sysInfo": true, "chatInfo": true, "fileUpload": true, "compass": true, "email": true, "smtp": true, "appVersion": true, "sms": true}
+		valid := map[string]bool{"sysInfo": true, "chatInfo": true, "fileUpload": true, "compass": true, "checkIn": true, "email": true, "smtp": true, "appVersion": true, "sms": true}
 		if !valid[name] {
 			return nil, r.fail("配置名称无效")
 		}
@@ -584,15 +639,45 @@ func (a *App) manageConfig(r *request) (any, error) {
 			if role, ok := v["groupCreateRole"]; ok && str(role) != groupCreateRoleAll && str(role) != groupCreateRoleMentor {
 				return nil, r.fail("建群权限配置无效")
 			}
-			if limit, ok := obj(v["autoAddGroup"])["userMax"]; ok {
-				if err := validateAutoGroupUserMax(limit); err != nil {
+			group := obj(v["autoAddGroup"])
+			if len(group) > 0 {
+				if _, err := a.validateAutoGroupSetting(r.ctx(), a.db, group, nil); err != nil {
 					return nil, err
 				}
 			}
 		}
-		if name == "fileUpload" && str(v["disk"]) != "local" {
-			if _, err := newObjectStore(str(v["disk"]), obj(v[str(v["disk"])])); err != nil {
+		if name == "checkIn" {
+			var err error
+			v, err = normalizeCheckInConfig(v)
+			if err != nil {
 				return nil, err
+			}
+		}
+		if name == "fileUpload" {
+			direct := str(v["directUpload"])
+			if direct == "" {
+				direct = "0"
+			}
+			if direct != "0" && direct != "1" {
+				return nil, r.fail("客户端直传 OSS 开关配置无效")
+			}
+			v["directUpload"] = direct
+			if direct == "1" && str(v["disk"]) != "aliyun" {
+				return nil, r.fail("客户端直传仅支持阿里云 OSS，请先将储存位置设为阿里云")
+			}
+			if direct == "1" {
+				aliyun := obj(v["aliyun"])
+				domain, err := normalizeAliyunCNAME(str(aliyun["domain"]))
+				if err != nil {
+					return nil, err
+				}
+				aliyun["domain"] = domain
+				v["aliyun"] = aliyun
+			}
+			if str(v["disk"]) != "local" {
+				if _, err := newObjectStore(str(v["disk"]), obj(v[str(v["disk"])])); err != nil {
+					return nil, err
+				}
 			}
 		}
 		existing, e := r.one("SELECT id FROM "+a.t("config")+" WHERE name=?", name)
@@ -607,6 +692,11 @@ func (a *App) manageConfig(r *request) (any, error) {
 				safe[k] = val
 			}
 			delete(safe, "stunPass")
+			a.hub.broadcast("updateConfig", M{"name": name, "value": safe})
+		}
+		if e == nil && name == "fileUpload" {
+			safe := pick(v, "size", "videoSize", "preview", "fileExt")
+			safe["directUpload"] = directUploadCapability(v)
 			a.hub.broadcast("updateConfig", M{"name": name, "value": safe})
 		}
 		return nil, e

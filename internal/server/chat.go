@@ -103,6 +103,9 @@ func (a *App) im(r *request) (any, error) {
 		if uid == 0 {
 			uid = r.uid()
 		}
+		if e := a.requireGroupMemberInteraction(r, uid); e != nil {
+			return nil, e
+		}
 		u, e := r.one("SELECT * FROM "+a.t("user")+" WHERE user_id=? AND status=1 AND delete_time=0", uid)
 		if e != nil {
 			return nil, e
@@ -386,6 +389,9 @@ func (a *App) serialize(ctx context.Context, m M) (M, error) {
 	if str(m["type"]) == "text" {
 		content = sanitizeText(content)
 	}
+	if str(m["type"]) == "webrtc" {
+		content = normalizeRTCContent(content)
+	}
 	download := ""
 	if number(m["file_id"]) > 0 {
 		download = a.mediaPath("/filedown/" + a.hashID(number(m["file_id"])))
@@ -409,6 +415,15 @@ func (a *App) serialize(ctx context.Context, m M) (M, error) {
 		extensions["poster"] = a.videoPoster(str(extensions["poster"]))
 	}
 	return M{"role": role, "toUser": to, "msg_id": m["msg_id"], "id": m["id"], "status": "succeed", "type": m["type"], "sendTime": number(m["create_time"]) * 1000, "content": content, "preview": content, "download": download, "is_read": m["is_read"], "is_group": g, "at": at, "toContactId": to, "to_user": m["to_user"], "from_user": m["from_user"], "fromUser": a.safeUser(u), "file_id": m["file_id"], "file_cate": m["file_cate"], "fileName": m["file_name"], "fileSize": m["file_size"], "extUrl": "", "extends": extensions, "pid": m["pid"]}, nil
+}
+
+func normalizeRTCContent(content string) string {
+	switch content {
+	case "预设视频通话", "预录视频通话":
+		return "视频通话"
+	default:
+		return content
+	}
 }
 func (a *App) messageList(r *request, admin bool) (any, error) {
 	to, g := target(r.p)

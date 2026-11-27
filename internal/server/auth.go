@@ -70,7 +70,10 @@ func (a *App) public(r *request) (any, error) {
 		if _, _, err := a.authenticate(r.ctx(), r.c.GetHeader("Authorization")); err != nil {
 			delete(chat, "stunPass")
 		}
-		return M{"sysInfo": s, "chatInfo": chat, "compass": a.config(r.ctx(), "compass"), "fileUpload": pick(a.config(r.ctx(), "fileUpload"), "size", "videoSize", "preview", "fileExt"), "security": M{"googleAuthEnabled": a.googleAuthEnabled()}}, nil
+		uploadConfig := a.config(r.ctx(), "fileUpload")
+		upload := pick(uploadConfig, "size", "videoSize", "preview", "fileExt")
+		upload["directUpload"] = directUploadCapability(uploadConfig)
+		return M{"sysInfo": s, "chatInfo": chat, "compass": a.config(r.ctx(), "compass"), "fileUpload": upload, "security": M{"googleAuthEnabled": a.googleAuthEnabled()}}, nil
 	case "checkversion":
 		return a.checkVersion(r), nil
 	case "sendcode":
@@ -179,7 +182,7 @@ func (a *App) login(r *request) (any, error) {
 	}
 	token := signToken(a.cfg.JWTKey, number(u["user_id"]), sid, expiry)
 	a.setMediaCookie(r.c, token, 86400)
-	v := pick(u, "user_id", "account", "realname", "email", "sex", "role", "admin_role_id", "motto", "remark", "name_py", "cs_uid", "setting", "friend_limit", "group_limit", "is_auth", "status", "create_time")
+	v := pick(u, "user_id", "account", "realname", "email", "sex", "role", "admin_role_id", "motto", "remark", "name_py", "cs_uid", "setting", "friend_limit", "group_limit", "group_friend_add", "is_auth", "status", "create_time")
 	access, err := a.adminAccessInfo(r.ctx(), u)
 	if err != nil {
 		return nil, err
@@ -405,20 +408,6 @@ func (a *App) api(r *request) (any, error) {
 		}
 		uid, e := a.createRegisteredUser(r.ctx(), r.p, a.clientIP(r.c))
 		return M{"open_id": a.hashID(uid), "user_id": uid}, e
-	case "login":
-		var u M
-		var e error
-		if id := a.decodeID(r.s("open_id")); id > 0 {
-			u, e = r.one("SELECT user_id FROM "+a.t("user")+" WHERE user_id=? AND status=1 AND delete_time=0", id)
-		} else {
-			u, e = r.one("SELECT user_id FROM "+a.t("user")+" WHERE account=? AND status=1 AND delete_time=0", r.s("account"))
-		}
-		if e != nil {
-			return nil, e
-		}
-		tok := randomID()
-		a.put("sso:"+tok, u["user_id"], 5*time.Minute)
-		return M{"token": tok, "url": a.url("/#/login?token=" + tok)}, nil
 	}
 	return nil, r.fail("未知操作")
 }

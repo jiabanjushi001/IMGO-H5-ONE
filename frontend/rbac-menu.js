@@ -22,6 +22,14 @@ function imgoBuildAdminMenu(userInfo, routes) {
     const permission = imgoAdminPermissionByPath[route.path]
     return isSuper || (!!permission && permissions.has(permission))
   })
+  if (Number(user.agent_mode) === 1 && !normal.some(route => route.path === '/manage/setting')) {
+    const source = (routes || []).find(route => route.path === '/manage/setting')
+    if (source) {
+      const checkInRoute = { ...source, meta: { ...(source.meta || {}), title: '签到设置' } }
+      const overviewIndex = normal.findIndex(route => route.path === '/manage/index')
+      normal.splice(overviewIndex < 0 ? 0 : overviewIndex + 1, 0, checkInRoute)
+    }
+  }
   if (isSuper || permissions.has('manage.finance')) {
     const finance = {
       path: '/manage/finance', meta: { title: '财务', icon: 'el-icon-money' },

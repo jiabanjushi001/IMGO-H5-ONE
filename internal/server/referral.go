@@ -264,6 +264,9 @@ func (a *App) memberReferralSummaries(r *request, users []M) error {
 		user["invite_code"] = ""
 		user["direct_invite_count"] = int64(0)
 		user["team_count"] = int64(0)
+		user["parent_user_id"] = int64(0)
+		user["parent_account"] = ""
+		user["parent_name"] = ""
 	}
 	placeholders := marks(len(userIDs))
 	codes, err := r.list("SELECT user_id,invite_code FROM "+a.t("imgo_referral")+" WHERE user_id IN ("+placeholders+")", values(userIDs)...)
@@ -283,6 +286,74 @@ func (a *App) memberReferralSummaries(r *request, users []M) error {
 		if user := byID[number(count["ancestor_user_id"])]; user != nil {
 			user["direct_invite_count"] = number(count["direct_count"])
 			user["team_count"] = number(count["team_count"])
+		}
+	}
+	parents, err := r.list(
+		"SELECT p.descendant_user_id,parent.user_id parent_user_id,parent.account parent_account,parent.realname parent_name "+
+			"FROM "+a.t("imgo_referral_path")+" p "+
+			"JOIN "+a.t("user")+" parent ON parent.user_id=p.ancestor_user_id "+
+			"WHERE p.descendant_user_id IN ("+placeholders+") AND p.depth=1 AND parent.delete_time=0",
+		values(userIDs)...,
+	)
+	if err != nil {
+		return err
+	}
+	for _, parent := range parents {
+		if user := byID[number(parent["descendant_user_id"])]; user != nil {
+			user["parent_user_id"] = number(parent["parent_user_id"])
+			user["parent_account"] = str(parent["parent_account"])
+			user["parent_name"] = str(parent["parent_name"])
+		}
+	}
+	return nil
+}
+
+// memberMentorSummaries resolves the nearest enabled mentor for every listed
+// account in one query. Mentor accounts identify themselves so the management
+// table never shows a misleading upstream mentor for an account that owns a
+// team of its own.
+func (a *App) memberMentorSummaries(r *request, users []M) error {
+	if len(users) == 0 {
+		return nil
+	}
+	byID := make(map[int64]M, len(users))
+	userIDs := make([]int64, 0, len(users))
+	for _, user := range users {
+		id := number(user["user_id"])
+		byID[id] = user
+		userIDs = append(userIDs, id)
+		user["mentor_user_id"] = int64(0)
+		user["mentor_account"] = ""
+		user["mentor_name"] = ""
+	}
+	placeholders := marks(len(userIDs))
+	mentors, err := r.list(
+		"SELECT p.descendant_user_id,mentor.user_id mentor_user_id,mentor.account mentor_account,mentor.realname mentor_name "+
+			"FROM "+a.t("imgo_referral_path")+" p "+
+			"JOIN "+a.t("user")+" mentor ON mentor.user_id=p.ancestor_user_id AND mentor.status=1 AND mentor.delete_time=0 "+
+			"JOIN "+a.t("imgo_admin_role")+" mentor_role ON mentor_role.role_id=mentor.admin_role_id AND mentor_role.status=1 AND mentor_role.agent_mode=1 "+
+			"WHERE p.descendant_user_id IN ("+placeholders+") AND p.depth=("+
+			"SELECT MIN(nearest_path.depth) FROM "+a.t("imgo_referral_path")+" nearest_path "+
+			"JOIN "+a.t("user")+" nearest_mentor ON nearest_mentor.user_id=nearest_path.ancestor_user_id AND nearest_mentor.status=1 AND nearest_mentor.delete_time=0 "+
+			"JOIN "+a.t("imgo_admin_role")+" nearest_role ON nearest_role.role_id=nearest_mentor.admin_role_id AND nearest_role.status=1 AND nearest_role.agent_mode=1 "+
+			"WHERE nearest_path.descendant_user_id=p.descendant_user_id)",
+		values(userIDs)...,
+	)
+	if err != nil {
+		return err
+	}
+	for _, mentor := range mentors {
+		if user := byID[number(mentor["descendant_user_id"])]; user != nil {
+			user["mentor_user_id"] = number(mentor["mentor_user_id"])
+			user["mentor_account"] = str(mentor["mentor_account"])
+			user["mentor_name"] = str(mentor["mentor_name"])
+		}
+	}
+	for _, user := range users {
+		if number(user["admin_role_agent_mode"]) == 1 {
+			user["mentor_user_id"] = number(user["user_id"])
+			user["mentor_account"] = str(user["account"])
+			user["mentor_name"] = str(user["realname"])
 		}
 	}
 	return nil

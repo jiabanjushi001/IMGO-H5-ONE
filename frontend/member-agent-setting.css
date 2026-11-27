@@ -4,3 +4,5 @@
 .imgo-agent-setting-section .el-select { width: 100%; }
 .imgo-agent-global-summary { margin: 0 0 16px 115px; padding: 10px 12px; border-radius: 4px; background: #f5f7fa; color: #606266; line-height: 1.7; }
 .imgo-agent-global-summary span + span { margin-left: 10px; }
+.imgo-agent-setting-hint { margin: -5px 0 4px 115px; color: #909399; font-size: 12px; line-height: 1.7; }
+.imgo-agent-withdrawal-password-rule { display: flex; align-items: center; gap: 10px; color: #7d8798; font-size: 12px; }

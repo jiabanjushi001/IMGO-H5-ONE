@@ -33,8 +33,8 @@ var errSocketDisconnected = clientError{"WebSocket 连接已断开", 400}
 
 func newHub(a *App) *Hub { return &Hub{a: a, peers: map[string]*peer{}} }
 
-// Online means authenticated, live WebSocket connections. Multiple
-// connections from one user count as devices, but only one online user.
+// Online means authenticated, live WebSocket or native TCP connections.
+// Multiple connections from one user count as devices, but only one online user.
 func (h *Hub) onlineCounts(now time.Time) (int, int) {
 	return h.onlineCountsMatching(nil, true, now)
 }
@@ -45,7 +45,6 @@ func (h *Hub) onlineCountsForUsers(allowed map[int64]bool, now time.Time) (int, 
 
 func (h *Hub) onlineCountsMatching(allowed map[int64]bool, all bool, now time.Time) (int, int) {
 	h.mu.RLock()
-	defer h.mu.RUnlock()
 	users := map[int64]bool{}
 	devices := 0
 	for _, p := range h.peers {
@@ -59,6 +58,10 @@ func (h *Hub) onlineCountsMatching(allowed map[int64]bool, all bool, now time.Ti
 		}
 		users[p.uid] = true
 		devices++
+	}
+	h.mu.RUnlock()
+	if h.a != nil && h.a.tcpHub != nil {
+		devices += h.a.tcpHub.collectOnline(users, allowed, all, now)
 	}
 	return len(users), devices
 }
@@ -201,34 +204,44 @@ func (h *Hub) send(uids []int64, kind string, data any) {
 		wanted[uid] = true
 	}
 	h.mu.RLock()
-	defer h.mu.RUnlock()
 	for _, p := range h.peers {
 		if p.uid > 0 && wanted[p.uid] && p.claims.Exp > time.Now().Unix() {
 			h.enqueue(p, M{"type": kind, "time": time.Now().Unix(), "data": data})
 		}
 	}
+	h.mu.RUnlock()
+	if h.a != nil && h.a.tcpHub != nil {
+		h.a.tcpHub.send(uids, kind, data)
+	}
 }
 func (h *Hub) broadcast(kind string, data any) {
 	h.mu.RLock()
-	defer h.mu.RUnlock()
 	for _, p := range h.peers {
 		if p.uid > 0 && p.claims.Exp > time.Now().Unix() {
 			h.enqueue(p, M{"type": kind, "time": time.Now().Unix(), "data": data})
 		}
 	}
+	h.mu.RUnlock()
+	if h.a != nil && h.a.tcpHub != nil {
+		h.a.tcpHub.broadcast(kind, data)
+	}
 }
 func (h *Hub) online(uid int64) int {
 	h.mu.RLock()
-	defer h.mu.RUnlock()
 	for _, p := range h.peers {
 		if p.uid == uid && p.claims.Exp > time.Now().Unix() {
 			select {
 			case <-p.done:
 				continue
 			default:
+				h.mu.RUnlock()
 				return 1
 			}
 		}
+	}
+	h.mu.RUnlock()
+	if h.a != nil && h.a.tcpHub != nil {
+		return h.a.tcpHub.online(uid, time.Now())
 	}
 	return 0
 }
@@ -241,28 +254,37 @@ func (h *Hub) disconnectClient(id string, uid int64) {
 }
 func (h *Hub) disconnectUser(uid int64) {
 	h.mu.RLock()
-	defer h.mu.RUnlock()
 	for _, p := range h.peers {
 		if p.uid == uid {
 			p.stop()
 		}
 	}
+	h.mu.RUnlock()
+	if h.a != nil && h.a.tcpHub != nil {
+		h.a.tcpHub.disconnectUser(uid)
+	}
 }
 func (h *Hub) disconnectSession(sid string) {
 	h.mu.RLock()
-	defer h.mu.RUnlock()
 	for _, p := range h.peers {
 		if p.claims.SID == sid {
 			p.stop()
 		}
 	}
+	h.mu.RUnlock()
+	if h.a != nil && h.a.tcpHub != nil {
+		h.a.tcpHub.disconnectSession(sid)
+	}
 }
 func (h *Hub) close() {
 	h.mu.Lock()
-	defer h.mu.Unlock()
 	h.closed = true
 	for _, p := range h.peers {
 		p.stop()
+	}
+	h.mu.Unlock()
+	if h.a != nil && h.a.tcpHub != nil {
+		h.a.tcpHub.close()
 	}
 }
 func (a *App) groupEvent(ctx context.Context, gid int64, kind string, data any) {

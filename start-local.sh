@@ -9,8 +9,8 @@ set -a
 # Normalize Windows CRLF in memory; leave the original .env unchanged.
 eval "$(sed "s/$(printf '\r')$//" ./.env)"
 set +a
-if [ ! -x bin/imgo ]; then
-  mkdir -p bin
-  go build -trimpath -o bin/imgo ./cmd/imgo
-fi
+mkdir -p bin
+# Local development must always rebuild: otherwise an existing binary can
+# silently run stale handlers after Go sources or schema migrations change.
+go build -trimpath -o bin/imgo ./cmd/imgo
 exec ./bin/imgo

@@ -123,7 +123,8 @@ var ImgoAccountSwitcher = {
   data: function () {
     return {
       visible: false,
-      accounts: []
+      accounts: [],
+      switchingKey: ''
     };
   },
   methods: {
@@ -147,15 +148,47 @@ var ImgoAccountSwitcher = {
     switchAccount: function (account) {
       if (this.isCurrent(account)) {
         this.visible = false;
-        return;
+        return Promise.resolve(false);
       }
+      var cookies = imgoAccountVaultCookie();
+      var previous = imgoAccountVaultNormalize({
+        authToken: cookies.get('authToken'),
+        sessionId: cookies.get('sessionId'),
+        userInfo: cookies.get('UserInfo')
+      });
+      var normalized;
       try {
-        imgoAccountVault.switchTo(account);
-        this.$message.success('正在切换到 ' + account.realname);
-        window.setTimeout(function () { window.location.reload(); }, 120);
+        normalized = imgoAccountVault.switchTo(account);
       } catch (error) {
         this.$message.error(error.message || '切换失败，请重新登录');
+        return Promise.resolve(false);
       }
+      this.switchingKey = normalized.key;
+      var sync = this.$api && this.$api.imApi && this.$api.imApi.getContactsAPI;
+      if (typeof sync !== 'function') {
+        if (previous) imgoAccountVault.switchTo(previous);
+        this.switchingKey = '';
+        this.$message.error('切换失败：无法同步图片认证');
+        return Promise.resolve(false);
+      }
+      var self = this;
+      return Promise.resolve().then(function () {
+        return sync.call(self.$api.imApi);
+      }).then(function (result) {
+        if (!result || Number(result.code) !== 0) {
+          throw new Error(result && result.msg ? result.msg : '账号认证失败');
+        }
+        self.$message.success('正在切换到 ' + normalized.realname);
+        window.setTimeout(function () { window.location.reload(); }, 50);
+        return true;
+      }).catch(function (error) {
+        if (previous) imgoAccountVault.switchTo(previous);
+        self.$message.error((error && error.message) || '切换失败，请重新登录该账号');
+        return false;
+      }).then(function (switched) {
+        self.switchingKey = '';
+        return switched;
+      });
     },
     removeAccount: function (account) {
       var self = this;
@@ -196,7 +229,12 @@ var ImgoAccountSwitcher = {
         ]),
         h('div', { class: 'imgo-account-switcher__actions' }, [
           h('el-button', {
-            props: { type: current ? 'info' : 'primary', size: 'mini', disabled: current },
+            props: {
+              type: current ? 'info' : 'primary',
+              size: 'mini',
+              disabled: current || Boolean(this.switchingKey),
+              loading: this.switchingKey === account.key
+            },
             on: { click: function () { self.switchAccount(account); } }
           }, [current ? '使用中' : '切换']),
           !current ? h('el-button', {

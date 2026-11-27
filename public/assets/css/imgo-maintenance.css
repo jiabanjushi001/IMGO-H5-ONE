@@ -96,6 +96,11 @@
 .imgo-admin .imgo-checkin-status.is-unsigned { color:#8d96a7; background:#f2f4f7; }
 .imgo-admin .imgo-checkin-last { margin-top:4px; font-size:12px; color:#8d96a7; }
 .imgo-admin .imgo-checkin-open { padding:3px 0 0; font-size:12px; }
+.imgo-admin .imgo-member-money { display:inline-block; font-weight:700; font-variant-numeric:tabular-nums; white-space:nowrap; }
+.imgo-admin .imgo-member-money.is-balance { color:#34415a; }
+.imgo-admin .imgo-member-money.is-today { color:#1d8d5c; }
+.imgo-admin .imgo-member-money.is-total { color:#4f63e6; }
+.imgo-admin .imgo-member-money.is-unsigned { color:#9aa3b2; font-weight:500; }
 body:has(.imgo-admin) .imgo-checkin-detail { color:#34415a; font-weight:600; }
 body:has(.imgo-admin) .imgo-referral-detail { color:#34415a; font-weight:600; line-height:1.7; }
 body:has(.imgo-admin) .imgo-checkin-last { color:#8d96a7; font-size:12px; }
@@ -105,6 +110,8 @@ body:has(.imgo-admin) .imgo-checkin-history-head strong { color:#24314a; font-si
 body:has(.imgo-admin) .imgo-checkin-history-head span { color:#8993a5; font-size:12px; overflow-wrap:anywhere; }
 body:has(.imgo-admin) .imgo-checkin-history-total { display:flex; flex-direction:column; align-items:center; white-space:nowrap; }
 body:has(.imgo-admin) .imgo-checkin-history-total strong { color:#4f63e6; font-size:25px; line-height:1.2; }
+body:has(.imgo-admin) .imgo-checkin-history-totals { display:flex; align-items:center; gap:24px; }
+body:has(.imgo-admin) .imgo-checkin-history-total.is-reward strong { color:#1d8d5c; }
 body:has(.imgo-admin) .imgo-checkin-history-pagination { text-align:right; padding-top:18px; }
 .imgo-admin .el-pagination { padding:18px 0 0; color:#69758d; }
 .imgo-admin .el-pagination.is-background .el-pager li { border-radius:6px; }
@@ -200,6 +207,7 @@ body:has(.imgo-admin) > .el-dialog__wrapper .el-button--primary { background:#4f
 .imgo-admin .el-main:has(.imgo-member-referral-filter) .imgo-checkin-summary { gap:4px; flex-wrap:wrap; }
 .imgo-admin .el-main:has(.imgo-member-referral-filter) .imgo-checkin-last { margin-top:1px; font-size:11px; line-height:1.2; }
 .imgo-admin .el-main:has(.imgo-member-referral-filter) .imgo-checkin-open { padding:0; margin-top:1px; }
+.imgo-admin .el-main:has(.imgo-member-referral-filter) .imgo-member-money { font-size:12px; }
 .imgo-admin .el-main:has(.imgo-member-referral-filter) .imgo-member-actions-inline { gap:6px; }
 .imgo-inline-remark i { color:#a4b0c2; flex-shrink:0; }
 .imgo-inline-remark:hover { color:#4276d5; }
@@ -249,7 +257,14 @@ body:has(.imgo-admin) > .el-dialog__wrapper .el-button--primary { background:#4f
 .imgo-group-number-join-copy { display:flex; min-width:0; flex-direction:column; gap:2px; }
 .imgo-group-number-join-copy small { color:#9aa5b6; font-size:10px; line-height:1.2; white-space:nowrap; }
 .imgo-group-number-join .el-switch { transform:scale(.82); transform-origin:right center; }
+.imgo-auto-group-existing { flex-wrap:wrap; gap:8px; }
+.imgo-auto-group-existing .el-button { margin-left:0; }
+@media (max-width:600px) {
+  .imgo-auto-group-mode,.imgo-auto-group-existing { align-items:flex-start; flex-direction:column; }
+  .imgo-auto-group-select { width:100% !important; max-width:100% !important; }
+}
 @media (max-width:800px) { .imgo-broadcast-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+.imgo-member-referral-filter .imgo-member-mentor-only{margin:0 12px}.imgo-member-mentor{line-height:20px;white-space:normal;overflow-wrap:anywhere}.imgo-member-mentor .is-unassigned{color:#909399}
 
 /* Admin quick-chat only. The standalone chat page is unaffected. */
 .imgo-admin .messageBoxStyle { background:rgba(27,38,66,.32); backdrop-filter:blur(4px); }
@@ -261,7 +276,8 @@ body:has(.imgo-admin) .sideMenu-message > .el-dialog__header .el-dialog__headerb
 body:has(.imgo-admin) .sideMenu-message > .el-dialog__body { padding:0 !important; flex:1; min-height:0; overflow:hidden; }
 .sideMenu-message > .el-dialog__body > div,.sideMenu-message .chat-box { height:100%; min-height:0; }
 .sideMenu-message .chat-box { box-shadow:none; }
-.sideMenu-message .lemon-wrapper { width:100% !important; height:100% !important; min-height:0 !important; font-family:inherit; transition:none; }
+/* Do not apply the full-panel width to the nested group-details wrapper. */
+.sideMenu-message .chat-box > .lemon-wrapper { width:100% !important; height:100% !important; min-height:0 !important; font-family:inherit; transition:none; }
 .sideMenu-message .lemon-menu { background:#eef1fb; width:64px; flex-shrink:0; box-sizing:border-box; padding-top:20px; border-right:1px solid #e5eaf5; }
 .sideMenu-message .lemon-menu__avatar { border-radius:10px; overflow:hidden; margin-bottom:18px; }
 .sideMenu-message .lemon-menu__item { color:#8a94ae; border-radius:10px; margin:4px 8px; padding:10px 8px; box-sizing:border-box; width:44px; text-align:center; }
@@ -371,6 +387,8 @@ body:has(.imgo-admin) .sideMenu-message > .el-dialog__body { padding:0 !importan
 .imgo-bank-toolbar .el-input { max-width: 280px; }
 .imgo-bank-pagination { text-align: right; padding: 20px 0; }
 .imgo-bank-form .el-input, .imgo-bank-form .el-select { width: 100%; }
+.imgo-bank-qr { display: block; width: 220px; height: 220px; object-fit: contain; border: 1px solid #e5e9f2; border-radius: 10px; background: #f7f8fa; }
+.imgo-bank-empty { color: #909399; }
 .imgo-bank-user { line-height: 1.45; overflow-wrap: anywhere; }
 .imgo-bank-user-account { font-weight: 600; color: #27344c; }
 .imgo-bank-user-name { color: #8993a1; }
@@ -391,6 +409,8 @@ body:has(.imgo-admin) .imgo-finance-detail>div {display:flex;flex-direction:colu
 body:has(.imgo-admin) .imgo-finance-detail span {color:#8a95a8;font-size:12px}
 body:has(.imgo-admin) .imgo-finance-detail strong {font-size:18px}
 body:has(.imgo-admin) .imgo-finance-account {font-variant-numeric:tabular-nums;letter-spacing:.5px}
+body:has(.imgo-admin) .imgo-finance-qr-link {display:inline-flex;width:150px;height:150px;padding:8px;border:1px solid #e4e9f2;border-radius:12px;background:#fff;box-shadow:0 6px 20px rgba(35,49,82,.08)}
+body:has(.imgo-admin) .imgo-finance-qr-link img {display:block;width:100%;height:100%;object-fit:contain;border-radius:8px}
 body:has(.imgo-admin) .imgo-finance-remark {margin-top:24px}
 body:has(.imgo-admin) .imgo-finance-remark label {display:block;margin-bottom:9px;color:#5c687e;font-size:13px}
 @media(max-width:750px){.imgo-finance{padding:16px}.imgo-finance-toolbar .el-input{width:100%}body:has(.imgo-admin) .imgo-finance-detail{grid-template-columns:1fr}.imgo-finance-withdraw-dialog .el-dialog__footer{padding:12px}.imgo-finance-dialog-actions{display:flex;justify-content:flex-end;gap:8px;flex-wrap:wrap}.imgo-finance-dialog-actions .el-button{margin-left:0}}
@@ -417,6 +437,8 @@ body:has(.imgo-admin) .imgo-finance-remark label {display:block;margin-bottom:9p
 .imgo-agent-setting-section .el-select { width: 100%; }
 .imgo-agent-global-summary { margin: 0 0 16px 115px; padding: 10px 12px; border-radius: 4px; background: #f5f7fa; color: #606266; line-height: 1.7; }
 .imgo-agent-global-summary span + span { margin-left: 10px; }
+.imgo-agent-setting-hint { margin: -5px 0 4px 115px; color: #909399; font-size: 12px; line-height: 1.7; }
+.imgo-agent-withdrawal-password-rule { display: flex; align-items: center; gap: 10px; color: #7d8798; font-size: 12px; }
 
 .imgo-member-batch-dialog {
   overflow: hidden;
@@ -785,7 +807,9 @@ body:has(.imgo-admin) .imgo-finance-remark label {display:block;margin-bottom:9p
 .main-container:has(.imgo-chat-design):not(.imgo-admin)>div:has(>.imgo-chat-design) { width:min(1240px,100%); min-width:0; }
 .imgo-chat-design { --el-color-primary:#4276d5; width:100%; border:1px solid #e0e6ef; border-radius:14px; overflow:hidden; box-shadow:0 16px 48px #22365612; color:#344258; font-family:-apple-system,BlinkMacSystemFont,'Segoe UI','PingFang SC','Microsoft YaHei',sans-serif; }
 .main-container:not(.imgo-admin) .imgo-chat-design { height:calc(100dvh - 40px); max-height:900px; }
-.imgo-chat-design .lemon-wrapper { width:100% !important; height:100% !important; min-height:0 !important; font-family:inherit; transition:none; }
+/* Size only the outer chat shell. Group details also use `.lemon-wrapper` and
+   must keep their component-defined 180px width, even for long notices. */
+.imgo-chat-design > .lemon-wrapper { width:100% !important; height:100% !important; min-height:0 !important; font-family:inherit; transition:none; }
 .imgo-chat-design .lemon-menu { background:#eef1fb; width:64px; flex-shrink:0; box-sizing:border-box; padding-top:20px; border-right:1px solid #e5eaf5; }
 .imgo-chat-design .lemon-menu__avatar { border-radius:10px; overflow:hidden; margin-bottom:18px; }
 .imgo-chat-design .lemon-menu__item { color:#8a94ae; border-radius:10px; margin:4px 8px; padding:10px 8px; box-sizing:border-box; width:44px; text-align:center; }
@@ -888,9 +912,43 @@ body:has(.imgo-admin) .imgo-finance-remark label {display:block;margin-bottom:9p
 .imgo-chat-design .el-dialog__body { padding:20px 22px; }
 .imgo-chat-design .el-input__inner { border-radius:7px; }
 .imgo-chat-design .apply-list-item { border-radius:8px; border-bottom-color:#edf0f5; }
+.imgo-chat-design .imgo-group-member-search { box-sizing:border-box; padding:0 12px 10px; }
+.imgo-chat-design .imgo-group-member-search .el-input__inner { height:32px; line-height:32px; border-color:#dfe5ee; border-radius:7px; background:#f7f9fc; font-size:13px; }
+.imgo-chat-design .imgo-group-member-search .el-input__prefix,
+.imgo-chat-design .imgo-group-member-search .el-input__suffix { line-height:32px; }
+.imgo-chat-design .group-user-body { position:relative; }
+.imgo-chat-design .imgo-group-member-empty { position:absolute; z-index:2; top:30px; right:0; left:0; color:#98a2b3; font-size:13px; text-align:center; pointer-events:none; }
 @media(max-height:700px) { .imgo-chat-design .lemon-editor { height:142px; } .imgo-chat-design .lemon-menu__item { margin-top:2px; margin-bottom:2px; padding-top:7px; padding-bottom:7px; } }
 @media(max-width:1000px) { .main-container:has(.imgo-chat-design):not(.imgo-admin) { padding:10px; } .main-container:not(.imgo-admin) .imgo-chat-design { height:calc(100dvh - 20px); } .imgo-chat-design .lemon-sidebar { width:230px; } .imgo-chat-design .imgo-profile-meta { max-width:150px; } }
-@media(max-width:700px) { .main-container:has(.imgo-chat-design):not(.imgo-admin) { padding:0; } .main-container:not(.imgo-admin) .imgo-chat-design { height:100dvh; border-radius:0; border:0; } .imgo-chat-design .lemon-menu { width:50px; } .imgo-chat-design .lemon-menu__item { width:36px; margin-left:7px; margin-right:7px; padding-left:4px; padding-right:4px; } .imgo-chat-design .lemon-sidebar { width:185px; } .imgo-chat-design .lemon-messages { padding:12px; } .imgo-chat-design .imgo-profile-meta { display:none; } }
+@media(max-width:700px) { .main-container:has(.imgo-chat-design):not(.imgo-admin) { padding:0; } .main-container:not(.imgo-admin) .imgo-chat-design { height:100dvh; border-radius:0; border:0; } .imgo-chat-design .lemon-menu { width:50px; } .imgo-chat-design .lemon-menu__item { width:36px; margin-left:7px; margin-right:7px; padding-left:4px; padding-right:4px; } .imgo-chat-design .lemon-sidebar { width:185px; } .imgo-chat-design .lemon-messages { padding:12px; } .imgo-chat-design .imgo-profile-meta { display:none; } .imgo-chat-design .imgo-group-member-search { padding:0 10px 10px; } .imgo-chat-design .imgo-group-member-search .el-input__inner { height:34px; line-height:34px; font-size:14px; } .imgo-chat-design .imgo-group-member-search .el-input__prefix,.imgo-chat-design .imgo-group-member-search .el-input__suffix { line-height:34px; } }
+/* Prepared-video calling for mentor and super-administrator chat accounts. */
+.imgo-prepared-video-shell .el-dialog { border-radius:16px; overflow:hidden; }
+.imgo-prepared-video-shell .el-dialog__header { padding:22px 24px 14px; }
+.imgo-prepared-video-shell .el-dialog__title { color:#202b45; font-weight:700; }
+.imgo-prepared-video-shell .el-dialog__body { padding:8px 24px 24px; }
+.imgo-prepared-video-live,
+.imgo-prepared-video-row { width:100%; border:1px solid #e6e9f3; background:#fff; cursor:pointer; }
+.imgo-prepared-video-live { display:flex; align-items:center; gap:14px; padding:16px; border-radius:12px; text-align:left; }
+.imgo-prepared-video-live:hover,
+.imgo-prepared-video-row:hover { border-color:#5b70f6; background:#f7f8ff; }
+.imgo-prepared-video-live > i { display:flex; align-items:center; justify-content:center; width:44px; height:44px; border-radius:12px; color:#fff; background:linear-gradient(135deg,#647cff,#4f61df); font-size:22px; }
+.imgo-prepared-video-live > span { display:flex; flex:1; flex-direction:column; gap:4px; color:#26314d; }
+.imgo-prepared-video-live small,
+.imgo-prepared-video-heading small { color:#9199aa; font-weight:400; }
+.imgo-prepared-video-live > b { color:#566df5; }
+.imgo-prepared-video-heading { display:flex; align-items:center; justify-content:space-between; gap:16px; margin:22px 0 10px; }
+.imgo-prepared-video-heading > div { display:flex; flex-direction:column; gap:3px; }
+.imgo-prepared-video-list { max-height:300px; overflow:auto; border:1px solid #e8eaf2; border-radius:12px; }
+.imgo-prepared-video-row { display:flex; align-items:center; gap:12px; min-height:58px; padding:10px 14px; border-width:0 0 1px; text-align:left; }
+.imgo-prepared-video-row:last-child { border-bottom:0; }
+.imgo-prepared-video-row > i { color:#596ff1; font-size:20px; }
+.imgo-prepared-video-name { min-width:0; flex:1; overflow:hidden; color:#27324d; text-overflow:ellipsis; white-space:nowrap; }
+.imgo-prepared-video-row small { color:#929aab; }
+.imgo-prepared-video-row strong { color:#566df5; }
+.imgo-prepared-video-empty { display:flex; align-items:center; justify-content:center; min-height:110px; border:1px dashed #d9deeb; border-radius:12px; color:#969eaf; background:#fafbfe; }
+@media (max-width: 640px) {
+  .imgo-prepared-video-shell .el-dialog { width:calc(100vw - 28px) !important; margin-top:8vh !important; }
+}
 
 /* IMGO_CHAT_ACCOUNT_SWITCHER_CSS_BEGIN */
 .imgo-account-switch-dialog {
@@ -1374,6 +1432,10 @@ body:has(.imgo-admin) .imgo-finance-remark label {display:block;margin-bottom:9p
   .imgo-system-alert-secret { display:block; }
   .imgo-system-alert-secret .el-button { margin-top:8px; }
 }
+
+.imgo-checkin-settings{max-width:820px;padding:20px 12px}.imgo-checkin-settings>.el-alert{margin-bottom:26px}.imgo-checkin-settings .el-form{max-width:720px}.imgo-checkin-setting-state,.imgo-checkin-setting-unit{margin-left:12px;color:#909399;font-size:12px}.imgo-checkin-setting-range{display:grid;grid-template-columns:1fr 1fr;gap:0 20px}.imgo-checkin-setting-preview{padding:12px 16px;border:1px solid #e5e9f2;border-radius:8px;background:#f7f9fc;color:#606266;line-height:1.8}@media(max-width:720px){.imgo-checkin-setting-range{grid-template-columns:1fr}.imgo-checkin-settings .el-form-item__label{float:none;width:auto!important;text-align:left}.imgo-checkin-settings .el-form-item__content{margin-left:0!important}}
+
+.imgo-withdrawal-settings{max-width:760px;padding:20px 12px}.imgo-withdrawal-settings>.el-alert{margin-bottom:26px}.imgo-withdrawal-settings .el-form{max-width:680px}.imgo-withdrawal-setting-state,.imgo-withdrawal-setting-unit{margin-left:12px;color:#909399;font-size:12px}.imgo-withdrawal-setting-description{padding:12px 16px;border:1px solid #e5e9f2;border-radius:8px;background:#f7f9fc;color:#606266;line-height:1.8}@media(max-width:720px){.imgo-withdrawal-settings .el-form-item__label{float:none;width:auto!important;text-align:left}.imgo-withdrawal-settings .el-form-item__content{margin-left:0!important}}
 
 /* IMGO_MOBILE_COMPAT_BEGIN
    Shared phone layout for the management shell, management quick chat and

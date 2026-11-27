@@ -12,6 +12,9 @@ function imgoWithdrawalStatusName(value) {
 function imgoWithdrawalStatusColor(value) {
   return ({ 0: 'warning', 1: 'success', 2: 'danger', 3: 'info' })[Number(value)] || 'info'
 }
+function imgoPaymentTypeName(value) {
+  return ({ bank: '银行卡', alipay: '支付宝', wechat: '微信收款码' })[String(value || 'bank')] || '银行卡'
+}
 function imgoFinanceSearchInput(h, value, onInput, onSearch) {
   return h('el-input', {
     props: { value, placeholder: '搜索成员账号或姓名', clearable: true },
@@ -80,7 +83,23 @@ const ImgoWithdrawalDetail = {
   render(h) {
     const detail = this.detail || {}
     const status = Number(detail.status)
+    const paymentType = String(detail.payment_type || 'bank')
     const info = (label, value) => h('div', [h('span', label), value || '—'])
+    const paymentRows = paymentType === 'wechat' || paymentType === 'alipay'
+      ? [
+          info('收款方式', imgoPaymentTypeName(paymentType)),
+          info('收款姓名', detail.receipt_name),
+          info(paymentType === 'alipay' ? '支付宝收款码' : '微信收款码', detail.payment_qr_image
+            ? h('a', { attrs: { href: detail.payment_qr_image, target: '_blank', rel: 'noopener' }, class: 'imgo-finance-qr-link' }, [h('img', { attrs: { src: detail.payment_qr_image, alt: paymentType === 'alipay' ? '支付宝收款码' : '微信收款码' } })])
+            : '收款码图片不可用')
+        ]
+      : [
+            info('收款方式', imgoPaymentTypeName(paymentType)),
+            info('收款姓名', detail.receipt_name),
+            info('收款银行', detail.bank_name),
+            info('支行名称', detail.branch_name),
+            info('收款卡号', h('strong', { class: 'imgo-finance-account' }, detail.receipt_account || '—'))
+          ]
     return h('el-dialog', {
       props: { title: status === 0 || status === 3 ? '编辑提现订单' : '提现订单详情', visible: this.visible, width: '560px', closeOnClickModal: false, appendToBody: true, customClass: 'imgo-finance-withdraw-dialog' },
       on: { close: () => this.$emit('close') }
@@ -91,10 +110,7 @@ const ImgoWithdrawalDetail = {
         info('金额', h('strong', imgoFinanceMoney(detail.amount_cents))),
         info('申请时间', imgoFinanceDate(detail.created_at)),
         info('状态', imgoWithdrawalStatusName(status)),
-        info('收款姓名', detail.receipt_name),
-        info('收款银行', detail.bank_name),
-        info('支行名称', detail.branch_name),
-        info('收款卡号', h('strong', { class: 'imgo-finance-account' }, detail.receipt_account || '—'))
+        ...paymentRows
       ]),
       h('div', { class: 'imgo-finance-remark' }, [
         h('label', status === 3 ? '冻结原因' : '处理备注 / 冻结或拒绝原因'),
@@ -192,7 +208,7 @@ const ImgoWithdrawalOrders = {
     const col = (label, prop, width) => h('el-table-column', { props: { label, prop, width } })
     return h('section', { class: 'imgo-finance' }, [
       h('header', { class: 'imgo-finance-heading' }, [
-        h('div', [h('h1', '提现订单'), h('p', '核对冻结金额和收款银行卡，人工线下打款后再确认。')])
+        h('div', [h('h1', '提现订单'), h('p', '核对冻结金额和收款资料，人工线下打款后再确认。')])
       ]),
       h('div', { class: 'imgo-finance-card' }, [
         h('div', { class: 'imgo-finance-toolbar' }, [
@@ -208,10 +224,10 @@ const ImgoWithdrawalOrders = {
           h('el-table-column', { props: { label: '提现订单号', width: '150' }, scopedSlots: { default: scope => imgoFinanceOrderNumber('TX', scope.row.withdrawal_id) } }),
           col('成员账号', 'account', '145'),
           h('el-table-column', { props: { label: '订单金额', width: '135' }, scopedSlots: { default: scope => h('strong', imgoFinanceMoney(scope.row.amount_cents)) } }),
+          h('el-table-column', { props: { label: '收款方式', width: '125' }, scopedSlots: { default: scope => imgoPaymentTypeName(scope.row.payment_type) } }),
           h('el-table-column', { props: { label: '时间', width: '190' }, scopedSlots: { default: scope => imgoFinanceDate(scope.row.created_at) } }),
           h('el-table-column', { props: { label: '状态', width: '105' }, scopedSlots: { default: scope => h('el-tag', { props: { type: imgoWithdrawalStatusColor(scope.row.status), size: 'small' } }, this.statusName(scope.row.status)) } }),
-          col('收款银行', 'bank_name', '160'),
-          h('el-table-column', { props: { label: '卡号末四位', width: '130' }, scopedSlots: { default: scope => '•••• ' + scope.row.account_last4 } }),
+          h('el-table-column', { props: { label: '收款资料', width: '190' }, scopedSlots: { default: scope => ['wechat', 'alipay'].includes(String(scope.row.payment_type || 'bank')) ? '点击详情查看收款码' : `${scope.row.bank_name || imgoPaymentTypeName(scope.row.payment_type)} · ${scope.row.account_last4 || '—'}` } }),
           col('处理备注', 'remark'),
           h('el-table-column', { props: { label: '操作', width: '115', fixed: 'right', align: 'center' }, scopedSlots: { default: scope => h('el-button', { props: { type: 'text' }, on: { click: () => this.open(scope.row) } }, [0, 3].includes(Number(scope.row.status)) ? '编辑处理' : '查看详情') } })
         ]),

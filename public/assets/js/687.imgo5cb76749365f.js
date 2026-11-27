@@ -431,9 +431,16 @@ const ImgoMemberAgentSettingDialog = {
     return {
       visible: false, row: null, loading: false, saving: false, error: '', serial: 0,
       inheritAutoUser: true, inheritAutoGroup: true,
+      identityEnabled: true,
+      withdrawalEnabled: true,
+      withdrawalEnabledInherited: true,
+      withdrawalPasswordRequired: false,
+      withdrawalPasswordInherited: true,
+      globalWithdrawalPasswordRequired: false,
+      withdrawalMethods: { bank: true, alipay: true, wechat: true },
       autoAddUser: { status: 0, user_ids: [], welcome: '' },
-      autoAddGroup: { status: 0, owner_uid: 0, userMax: 5, name: '' },
-      globalAutoUser: {}, globalAutoGroup: {}, options: [], unavailableNotice: ''
+      autoAddGroup: { status: 0, mode: 'create', group_id: 0, owner_uid: 0, userMax: 5, name: '' },
+      globalAutoUser: {}, globalAutoGroup: {}, options: [], groupOptions: [], groupLoadError: '', unavailableNotice: ''
     }
   },
   computed: {
@@ -453,15 +460,23 @@ const ImgoMemberAgentSettingDialog = {
       this.loading = true
       this.error = ''
       this.options = []
+      this.groupOptions = []
+      this.groupLoadError = ''
       this.unavailableNotice = ''
       try {
-        const [detail, options] = await Promise.all([
+        const [detail, options, groups] = await Promise.all([
           this.$api.agentSettingApi.detail({ agent_user_id: Number(row.user_id) }),
-          this.loadOptions(row)
+          this.loadOptions(row),
+          this.loadGroupOptions().catch(error => {
+            this.groupLoadError = error.message || '读取已有群聊失败'
+            return []
+          })
         ])
         if (serial !== this.serial) return
         if (Number(detail.code) !== 0) throw Error(detail.msg || '读取导师设置失败')
         this.options = options
+        const allowedOwners = new Set(options.map(option => Number(option.user_id)))
+        this.groupOptions = this.isSuperOperator ? groups : groups.filter(group => allowedOwners.has(Number(group.owner_id)))
         this.applyDetail(detail.data || {})
       } catch (error) {
         if (serial === this.serial) this.error = error.message || '读取导师设置失败'
@@ -483,9 +498,34 @@ const ImgoMemberAgentSettingDialog = {
       }
       return options.filter((item, index, all) => all.findIndex(candidate => Number(candidate.user_id) === Number(item.user_id)) === index)
     },
+    async loadGroupOptions() {
+      const groups = []
+      let page = 1
+      while (page <= 50) {
+        const response = await this.$api.groupApi.getGroupList({ page, limit: 200 })
+        if (Number(response.code) !== 0) throw Error(response.msg || '读取已有群聊失败')
+        if (!Array.isArray(response.data)) throw Error('已有群聊数据无效')
+        groups.push(...response.data)
+        if (response.data.length < 200 || groups.length >= Number(response.count || 0)) break
+        page++
+      }
+      return groups.filter((item, index, all) => Number(item.group_id) > 0 && all.findIndex(candidate => Number(candidate.group_id) === Number(item.group_id)) === index)
+    },
     applyDetail(detail) {
       this.inheritAutoUser = detail.inherit_auto_user === true
       this.inheritAutoGroup = detail.inherit_auto_group === true
+      this.identityEnabled = detail.identity_enabled !== false && Number(detail.identity_enabled) !== 0
+      this.withdrawalEnabled = detail.withdrawal_enabled !== false && Number(detail.withdrawal_enabled) !== 0
+      this.withdrawalEnabledInherited = detail.withdrawal_enabled_inherited === true
+      this.withdrawalPasswordRequired = detail.withdrawal_password_required === true || Number(detail.withdrawal_password_required) === 1
+      this.withdrawalPasswordInherited = detail.withdrawal_password_required_inherited !== false
+      this.globalWithdrawalPasswordRequired = detail.global_withdrawal_password_required === true || Number(detail.global_withdrawal_password_required) === 1
+      const withdrawal = detail.withdrawal_methods || {}
+      this.withdrawalMethods = {
+        bank: withdrawal.bank !== false && Number(withdrawal.bank) !== 0,
+        alipay: withdrawal.alipay !== false && Number(withdrawal.alipay) !== 0,
+        wechat: withdrawal.wechat !== false && Number(withdrawal.wechat) !== 0
+      }
       this.globalAutoUser = detail.global_auto_add_user || {}
       this.globalAutoGroup = detail.global_auto_add_group || {}
       const user = this.inheritAutoUser ? this.globalAutoUser : detail.auto_add_user || {}
@@ -493,10 +533,13 @@ const ImgoMemberAgentSettingDialog = {
       const allowed = new Set(this.options.map(option => Number(option.user_id)))
       const userIDs = Array.isArray(user.user_ids) ? user.user_ids.map(Number) : []
       const ownerID = Number(group.owner_uid || 0)
-      this.unavailableNotice = (!this.inheritAutoUser && userIDs.some(id => !allowed.has(id))) || (!this.inheritAutoGroup && ownerID > 0 && !allowed.has(ownerID))
-        ? '已保存的客服或群主账号已停用或不在导师范围，已从可编辑配置移除；保存后这些账号将被清除。' : ''
+      const mode = group.mode === 'existing' ? 'existing' : 'create'
+      const groupID = Number(group.group_id || 0)
+      const allowedGroups = new Set(this.groupOptions.map(option => Number(option.group_id)))
+      this.unavailableNotice = (!this.inheritAutoUser && userIDs.some(id => !allowed.has(id))) || (!this.inheritAutoGroup && mode === 'create' && ownerID > 0 && !allowed.has(ownerID)) || (!this.inheritAutoGroup && mode === 'existing' && groupID > 0 && !allowedGroups.has(groupID))
+        ? '已保存的客服、群主或已有群已停用或不在导师范围，已从可编辑配置移除；请重新选择后保存。' : ''
       this.autoAddUser = { status: Number(user.status) === 1 ? 1 : 0, user_ids: userIDs.filter(id => allowed.has(id)), welcome: user.welcome || '' }
-      this.autoAddGroup = { status: Number(group.status) === 1 ? 1 : 0, owner_uid: allowed.has(ownerID) ? ownerID : 0, userMax: Number(group.userMax || 5), name: group.name || '' }
+      this.autoAddGroup = { status: Number(group.status) === 1 ? 1 : 0, mode, group_id: allowedGroups.has(groupID) ? groupID : 0, owner_uid: allowed.has(ownerID) ? ownerID : 0, userMax: Number(group.userMax || 5), name: group.name || '' }
       if (this.row) {
         this.$set(this.row, 'agent_setting_inherit_auto_user', this.inheritAutoUser)
         this.$set(this.row, 'agent_setting_inherit_auto_group', this.inheritAutoGroup)
@@ -514,16 +557,31 @@ const ImgoMemberAgentSettingDialog = {
         this.$message.error('请选择至少一位自动添加的客服账号')
         return
       }
-      if (!this.inheritAutoGroup && this.autoAddGroup.status === 1 && (!this.autoAddGroup.owner_uid || !this.autoAddGroup.name.trim() || !Number.isInteger(Number(this.autoAddGroup.userMax)) || Number(this.autoAddGroup.userMax) < 5 || Number(this.autoAddGroup.userMax) > 10000)) {
-        this.$message.error('请选择群主、填写群名称和 5 到 10000 的成员上限')
-        return
+      if (!this.inheritAutoGroup && this.autoAddGroup.status === 1) {
+        if (!Number.isInteger(Number(this.autoAddGroup.userMax)) || Number(this.autoAddGroup.userMax) < 5 || Number(this.autoAddGroup.userMax) > 10000) {
+          this.$message.error('请填写 5 到 10000 的成员上限')
+          return
+        }
+        if (this.autoAddGroup.mode === 'existing' && !this.autoAddGroup.group_id) {
+          this.$message.error('请选择要自动加入的已有群聊')
+          return
+        }
+        if (this.autoAddGroup.mode !== 'existing' && (!this.autoAddGroup.owner_uid || !this.autoAddGroup.name.trim())) {
+          this.$message.error('请选择群主并填写群名称')
+          return
+        }
       }
       const payload = {
         agent_user_id: Number(this.row.user_id),
         inherit_auto_user: this.inheritAutoUser,
         inherit_auto_group: this.inheritAutoGroup,
+        identity_enabled: this.identityEnabled,
+        withdrawal_enabled: this.withdrawalEnabled,
+        withdrawal_password_required: this.withdrawalPasswordRequired,
+        withdrawal_password_required_inherited: this.withdrawalPasswordInherited,
+        withdrawal_methods: { ...this.withdrawalMethods },
         auto_add_user: { status: Number(this.autoAddUser.status), user_ids: this.autoAddUser.user_ids.map(Number), welcome: this.autoAddUser.welcome },
-        auto_add_group: { status: Number(this.autoAddGroup.status), owner_uid: Number(this.autoAddGroup.owner_uid), userMax: Number(this.autoAddGroup.userMax), name: this.autoAddGroup.name.trim() }
+        auto_add_group: { status: Number(this.autoAddGroup.status), mode: this.autoAddGroup.mode === 'existing' ? 'existing' : 'create', group_id: Number(this.autoAddGroup.group_id), owner_uid: Number(this.autoAddGroup.owner_uid), userMax: Number(this.autoAddGroup.userMax), name: this.autoAddGroup.name.trim() }
       }
       this.saving = true
       try {
@@ -536,6 +594,11 @@ const ImgoMemberAgentSettingDialog = {
       }
       this.$set(this.row, 'agent_setting_inherit_auto_user', payload.inherit_auto_user)
       this.$set(this.row, 'agent_setting_inherit_auto_group', payload.inherit_auto_group)
+      this.$set(this.row, 'agent_setting_identity_enabled', payload.identity_enabled)
+      this.$set(this.row, 'agent_setting_withdrawal_enabled', payload.withdrawal_enabled)
+      this.$set(this.row, 'agent_setting_withdrawal_password_required', payload.withdrawal_password_required)
+      this.$set(this.row, 'agent_setting_withdrawal_password_required_inherited', payload.withdrawal_password_required_inherited)
+      this.$set(this.row, 'agent_setting_withdrawal_methods', payload.withdrawal_methods)
       this.$emit('saved', payload.agent_user_id)
       this.$message.success('导师设置已保存')
       try {
@@ -559,10 +622,11 @@ const ImgoMemberAgentSettingDialog = {
       props: { value, disabled: this.loading || this.saving }, attrs: { 'aria-label': '继承全局设置' }, on: { input: change }
     })
     const optionNodes = this.options.map(item => h('el-option', { key: item.user_id, props: { value: Number(item.user_id), label: `${item.account || item.user_id}（ID ${item.user_id}）` } }))
+    const groupOptionNodes = this.groupOptions.map(item => h('el-option', { key: item.group_id, props: { value: Number(item.group_id), label: `${item.name || '未命名群聊'}（群号 ${item.group_id}，${Number(item.user_count || 0)}人）` } }))
     const inherited = (config, isGroup) => h('div', { class: 'imgo-agent-global-summary' }, [
       h('span', {}, Number(config.status) === 1 ? '全局已开启' : '全局已关闭'),
-      isGroup ? h('span', {}, config.name || '未设置群名称') : h('span', {}, (Array.isArray(config.user_ids) ? config.user_ids.length : 0) + ' 位客服'),
-      isGroup ? h('span', {}, ` · 群主 ID ${config.owner_uid || '—'} · 人数上限 ${config.userMax || '—'}`) : h('span', {}, ` · 欢迎语：${config.welcome || '无'}`)
+      isGroup ? h('span', {}, config.mode === 'existing' ? `已有群 · 群号 ${config.group_id || '—'}` : config.name || '未设置群名称') : h('span', {}, (Array.isArray(config.user_ids) ? config.user_ids.length : 0) + ' 位客服'),
+      isGroup ? h('span', {}, config.mode === 'existing' ? ` · 人数上限 ${config.userMax || '—'}` : ` · 群主 ID ${config.owner_uid || '—'} · 人数上限 ${config.userMax || '—'}`) : h('span', {}, ` · 欢迎语：${config.welcome || '无'}`)
     ])
     const disabledUser = this.loading || this.saving
     const disabledGroup = this.loading || this.saving
@@ -573,10 +637,18 @@ const ImgoMemberAgentSettingDialog = {
     ]
     const groupFields = [
       field('自动加入群聊', switchField(this.autoAddGroup.status, disabledGroup, value => { this.inheritAutoGroup = false; this.autoAddGroup.status = value }, '自动加入群聊')),
-      field('群主', h('el-select', { props: { value: this.autoAddGroup.owner_uid, filterable: true, disabled: disabledGroup || this.autoAddGroup.status !== 1, placeholder: '选择导师或下级账号' }, on: { input: value => { this.inheritAutoGroup = false; this.autoAddGroup.owner_uid = value } } }, optionNodes)),
-      field('群名称', h('el-input', { props: { value: this.autoAddGroup.name, disabled: disabledGroup || this.autoAddGroup.status !== 1 }, attrs: { maxlength: 100 }, on: { input: value => { this.inheritAutoGroup = false; this.autoAddGroup.name = value } } })),
-      field('人数上限', h('el-input-number', { props: { value: this.autoAddGroup.userMax, min: 5, max: 10000, disabled: disabledGroup || this.autoAddGroup.status !== 1 }, on: { input: value => { this.inheritAutoGroup = false; this.autoAddGroup.userMax = value } } }))
+      field('加入方式', h('el-radio-group', { props: { value: this.autoAddGroup.mode, disabled: disabledGroup || this.autoAddGroup.status !== 1 }, on: { input: value => { this.inheritAutoGroup = false; this.autoAddGroup.mode = value } } }, [
+        h('el-radio-button', { props: { label: 'create' } }, '自动新建群'),
+        h('el-radio-button', { props: { label: 'existing' } }, '加入已有群')
+      ]))
     ]
+    if (this.autoAddGroup.mode === 'existing') {
+      groupFields.push(field('已有群聊', h('el-select', { props: { value: this.autoAddGroup.group_id || '', filterable: true, clearable: true, disabled: disabledGroup || this.autoAddGroup.status !== 1, placeholder: '选择已经创建好的群聊' }, on: { input: value => { this.inheritAutoGroup = false; this.autoAddGroup.group_id = Number(value || 0) } } }, groupOptionNodes)))
+    } else {
+      groupFields.push(field('群主', h('el-select', { props: { value: this.autoAddGroup.owner_uid, filterable: true, disabled: disabledGroup || this.autoAddGroup.status !== 1, placeholder: '选择导师或下级账号' }, on: { input: value => { this.inheritAutoGroup = false; this.autoAddGroup.owner_uid = value } } }, optionNodes)))
+      groupFields.push(field('群名称', h('el-input', { props: { value: this.autoAddGroup.name, disabled: disabledGroup || this.autoAddGroup.status !== 1 }, attrs: { maxlength: 100 }, on: { input: value => { this.inheritAutoGroup = false; this.autoAddGroup.name = value } } })))
+    }
+    groupFields.push(field('人数上限', h('el-input-number', { props: { value: this.autoAddGroup.userMax, min: 5, max: 10000, disabled: disabledGroup || this.autoAddGroup.status !== 1 }, on: { input: value => { this.inheritAutoGroup = false; this.autoAddGroup.userMax = value } } })))
     return h('el-dialog', {
       props: { title: `导师设置 · ${this.row ? this.row.account || this.row.user_id : ''}`, visible: this.visible, width: '680px', appendToBody: true, closeOnClickModal: false, showClose: !this.saving },
       on: { close: this.close }
@@ -585,6 +657,67 @@ const ImgoMemberAgentSettingDialog = {
       this.error ? h('el-button', { props: { type: 'text' }, on: { click: () => this.open(this.row) } }, '重试') : null,
       this.unavailableNotice ? h('el-alert', { props: { title: this.unavailableNotice, type: 'warning', showIcon: true, closable: false } }) : null,
       h('div', { class: 'imgo-agent-setting-body', directives: [{ name: 'loading', value: this.loading }] }, [
+        h('section', { class: 'imgo-agent-setting-section' }, [
+          h('h3', {}, 'H5 实名认证'),
+          h('el-form', { class: 'imgo-agent-identity-form' }, [
+            field('向下级显示', h('el-switch', {
+              props: { value: this.identityEnabled, disabled: this.loading || this.saving },
+              attrs: { 'aria-label': '下级实名认证' },
+              on: { input: value => { this.identityEnabled = Boolean(value) } }
+            }))
+          ]),
+          h('div', { class: 'imgo-agent-setting-hint' }, '开启后，下级 H5 显示实名认证入口和状态；关闭后隐藏相关信息，并禁止直接提交实名认证。')
+        ]),
+        h('section', { class: 'imgo-agent-setting-section' }, [
+          h('h3', {}, '团队提现'),
+          h('el-form', { class: 'imgo-agent-withdrawal-form' }, [
+            field('允许提现', h('el-switch', {
+              props: { value: this.withdrawalEnabled, disabled: this.loading || this.saving },
+              attrs: { 'aria-label': '允许团队提现' },
+              on: { input: value => { this.withdrawalEnabled = Boolean(value); this.withdrawalEnabledInherited = false } }
+            })),
+            field('密码规则', h('div', { class: 'imgo-agent-withdrawal-password-rule' }, [
+              h('el-switch', {
+                props: { value: this.withdrawalPasswordInherited, disabled: this.loading || this.saving },
+                attrs: { 'aria-label': '继承全局提现密码' },
+                on: { input: value => {
+                  this.withdrawalPasswordInherited = Boolean(value)
+                  if (this.withdrawalPasswordInherited) this.withdrawalPasswordRequired = this.globalWithdrawalPasswordRequired
+                } }
+              }),
+              h('span', {}, this.withdrawalPasswordInherited ? '继承全局' : '独立设置')
+            ])),
+            field('要求密码', h('el-switch', {
+              props: { value: this.withdrawalPasswordRequired, disabled: this.loading || this.saving || this.withdrawalPasswordInherited || !this.withdrawalEnabled },
+              attrs: { 'aria-label': '团队提现密码' },
+              on: { input: value => { this.withdrawalPasswordRequired = Boolean(value) } }
+            })),
+            field('银行卡', h('el-switch', {
+              props: { value: this.withdrawalMethods.bank, disabled: this.loading || this.saving || !this.withdrawalEnabled },
+              attrs: { 'aria-label': '下级银行卡提现' },
+              on: { input: value => { this.withdrawalMethods.bank = Boolean(value) } }
+            })),
+            field('支付宝收款码', h('el-switch', {
+              props: { value: this.withdrawalMethods.alipay, disabled: this.loading || this.saving || !this.withdrawalEnabled },
+              attrs: { 'aria-label': '下级支付宝提现' },
+              on: { input: value => { this.withdrawalMethods.alipay = Boolean(value) } }
+            })),
+            field('微信收款码', h('el-switch', {
+              props: { value: this.withdrawalMethods.wechat, disabled: this.loading || this.saving || !this.withdrawalEnabled },
+              attrs: { 'aria-label': '下级微信提现' },
+              on: { input: value => { this.withdrawalMethods.wechat = Boolean(value) } }
+            }))
+          ]),
+          h('div', { class: 'imgo-agent-setting-hint' }, [
+            this.withdrawalEnabledInherited
+              ? '提现功能当前继承超级管理员的全局开关；保存后将成为本导师团队的独立开关。'
+              : '提现功能开关只影响本导师及其团队成员，不影响其他导师团队。',
+            h('br'),
+            this.withdrawalPasswordInherited
+              ? `提现密码当前继承全局设置（${this.globalWithdrawalPasswordRequired ? '必须验证' : '无需验证'}）。`
+              : `提现密码已由本导师独立设置为“${this.withdrawalPasswordRequired ? '必须验证' : '无需验证'}”。`
+          ])
+        ]),
         h('section', { class: 'imgo-agent-setting-section' }, [
           h('h3', {}, '自动添加好友'),
           field('继承全局设置', inheritSwitch(this.inheritAutoUser, value => { this.inheritAutoUser = value })),
@@ -595,6 +728,7 @@ const ImgoMemberAgentSettingDialog = {
           h('h3', {}, '自动加入群聊'),
           field('继承全局设置', inheritSwitch(this.inheritAutoGroup, value => { this.inheritAutoGroup = value })),
           this.inheritAutoGroup ? inherited(this.globalAutoGroup, true) : null,
+          this.groupLoadError ? h('el-alert', { props: { title: this.groupLoadError, type: 'warning', showIcon: true, closable: false } }) : null,
           h('el-form', {}, groupFields)
         ])
       ]),
@@ -614,17 +748,34 @@ const ImgoMemberAgentSettingDialog = {
     roleValue() { return Number(this.row.admin_role_id || 0) },
     roleLabel() { return this.row.admin_role_name || (Number(this.row.user_id) === 1 ? '超级管理员' : '普通用户') }
   },
+  watch: {
+    'row.user_id'() { return this.loadRoles() },
+    isSuperOperator() { return this.loadRoles() }
+  },
   mounted() {
-    if (!this.isSuperOperator || Number(this.row.user_id) === 1) return
-    if (!window.__imgoRoleOptionsPromise) {
-      window.__imgoRoleOptionsPromise = this.$api.roleApi.index({}).then(result => {
-        if (result.code !== 0) throw Error(result.msg || '读取角色失败')
-        return Array.isArray(result.data) ? result.data.filter(role => !role.builtin && Number(role.role_id) > 0) : []
-      }).catch(error => { window.__imgoRoleOptionsPromise = null; throw error })
-    }
-    window.__imgoRoleOptionsPromise.then(roles => { this.roles = roles }).catch(error => this.$message.error(error.message || '读取角色失败'))
+    this.loadRoles()
   },
   methods: {
+    loadRoles() {
+      const userID = Number(this.row.user_id)
+      if (!this.isSuperOperator || userID === 1) {
+        this.roles = []
+        return Promise.resolve([])
+      }
+      if (!window.__imgoRoleOptionsPromise) {
+        window.__imgoRoleOptionsPromise = this.$api.roleApi.index({}).then(result => {
+          if (result.code !== 0) throw Error(result.msg || '读取角色失败')
+          return Array.isArray(result.data) ? result.data.filter(role => !role.builtin && Number(role.role_id) > 0) : []
+        }).catch(error => { window.__imgoRoleOptionsPromise = null; throw error })
+      }
+      return window.__imgoRoleOptionsPromise.then(roles => {
+        if (this.isSuperOperator && Number(this.row.user_id) === userID && userID !== 1) this.roles = roles
+        return roles
+      }).catch(error => {
+        if (Number(this.row.user_id) === userID) this.$message.error(error.message || '读取角色失败')
+        return []
+      })
+    },
     async change(adminRoleID) {
       if (this.saving || Number(adminRoleID) === this.roleValue) return
       const previousID = this.roleValue
@@ -918,7 +1069,7 @@ const ImgoMemberBroadcastDialog = {
 const ImgoCheckInHistory = {
   name: 'ImgoCheckInHistory',
   data() {
-    return { visible: false, member: null, rows: [], total: 0, page: 1, loading: false, requestSerial: 0 }
+    return { visible: false, member: null, rows: [], total: 0, totalRewardCents: 0, page: 1, loading: false, requestSerial: 0 }
   },
   methods: {
     open(member) {
@@ -927,6 +1078,7 @@ const ImgoCheckInHistory = {
       this.page = 1
       this.rows = []
       this.total = Number(member.checkin_days || 0)
+      this.totalRewardCents = Number(member.checkin_total_reward_cents || 0)
       this.visible = true
       this.refresh()
     },
@@ -956,20 +1108,28 @@ const ImgoCheckInHistory = {
     signedAt(value) {
       const seconds = Number(value)
       return seconds > 0 ? new Date(seconds * 1000).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : '—'
+    },
+    reward(value) {
+      return `¥${(Number(value || 0) / 100).toFixed(2)}`
     }
   },
   render(h) {
     const member = this.member || {}
     return h('el-dialog', {
-      props: { title: '签到详情', visible: this.visible, width: '560px', appendToBody: true, closeOnClickModal: false },
+      props: { title: '每日签到奖励详情', visible: this.visible, width: '720px', appendToBody: true, closeOnClickModal: false },
       on: { close: this.close }
     }, this.visible ? [
       h('div', { class: 'imgo-checkin-history-head' }, [
         h('div', [h('strong', member.realname || member.account || `用户 ${member.user_id}`), h('span', `账号：${member.account || '—'} · ID：${member.user_id}`)]),
-        h('div', { class: 'imgo-checkin-history-total' }, [h('strong', String(this.total)), h('span', '累计签到天数')])
+        h('div', { class: 'imgo-checkin-history-totals' }, [
+          h('div', { class: 'imgo-checkin-history-total' }, [h('strong', String(this.total)), h('span', '累计签到天数')]),
+          h('div', { class: 'imgo-checkin-history-total is-reward' }, [h('strong', this.reward(this.totalRewardCents)), h('span', '累计签到奖励')])
+        ])
       ]),
       h('el-table', { class: 'imgo-checkin-history-table', props: { data: this.rows, stripe: true, border: true, maxHeight: 420 }, directives: [{ name: 'loading', value: this.loading }] }, [
         h('el-table-column', { props: { label: '签到日期', prop: 'sign_date', minWidth: '160' } }),
+        h('el-table-column', { props: { label: '周期天数', minWidth: '100' }, scopedSlots: { default: scope => Number(scope.row.cycle_day) > 0 ? `第 ${scope.row.cycle_day} 天` : '—' } }),
+        h('el-table-column', { props: { label: '到账奖励', minWidth: '110' }, scopedSlots: { default: scope => this.reward(scope.row.reward_cents) } }),
         h('el-table-column', { props: { label: '签到时间（北京时间）', minWidth: '220' }, scopedSlots: { default: scope => this.signedAt(scope.row.signed_at) } })
       ]),
       h('el-pagination', {
@@ -1017,7 +1177,7 @@ const ImgoMemberFinanceDialog = {
     money(cents) { return '¥' + (Number(cents || 0) / 100).toFixed(2) },
     date(value) { return value ? new Date(Number(value) * 1000).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : '—' },
     async open(member, mode) {
-      if (!member || Number(member.user_id) < 1 || !['recharge', 'withdraw'].includes(mode)) return
+      if (!member || Number(member.user_id) < 1 || !['recharge', 'debit', 'withdraw'].includes(mode)) return
       this.member = { user_id: Number(member.user_id), account: member.account || '', realname: member.realname || '' }
       this.mode = mode
       this.amount = ''
@@ -1065,8 +1225,9 @@ const ImgoMemberFinanceDialog = {
     async submit() {
       if (!this.member || this.saving || !this.account) return
       const amount = String(this.amount).trim(), note = String(this.note).trim()
-      if (!this.amountCents || note.length > 500 || (this.mode === 'recharge' && note.length < 2)) {
-        this.$message.warning('请输入正确金额；充值备注至少 2 字，最多 500 字')
+      const recharge = this.mode === 'recharge', debit = this.mode === 'debit'
+      if (!this.amountCents || note.length > 500 || ((recharge || debit) && note.length < 2)) {
+        this.$message.warning('请输入正确金额；充值或扣款原因至少 2 字，最多 500 字')
         return
       }
       let bonusValue = ''
@@ -1077,21 +1238,29 @@ const ImgoMemberFinanceDialog = {
           : /^(\d{1,4})(?:\.(\d{1,2}))?$/.test(bonusValue) && Number(bonusValue) > 0 && Number(bonusValue) <= 1000 && this.bonusCents > 0
         if (!valid) { this.$message.warning('请填写有效的赠送金额或百分比（最多 1000%）'); return }
       }
-      const recharge = this.mode === 'recharge'
-      const title = recharge ? '确认充值并立即到账' : '确认提现并立即冻结'
+      if (debit && this.amountCents > Number(this.account.available_cents || 0)) {
+        this.$message.warning('扣款金额不能超过当前可用余额')
+        return
+      }
+      const title = recharge ? '确认充值并立即到账' : debit ? '确认直接扣减余额' : '确认提现并立即冻结'
       const message = recharge
         ? `将为 ${this.member.account} 充值 ${this.money(this.amountCents)}，赠送 ${this.money(this.bonusCents)}，合计 ${this.money(this.amountCents + this.bonusCents)} 立即增加可用余额。`
-        : `将为 ${this.member.account} 创建提现订单 ${this.money(this.amountCents)}，立即从可用余额冻结，待线下打款审核。`
+        : debit
+          ? `将从 ${this.member.account} 的可用余额直接扣减 ${this.money(this.amountCents)}。不会创建提现订单，也不需要绑定银行卡。`
+          : `将为 ${this.member.account} 创建提现订单 ${this.money(this.amountCents)}，立即从可用余额冻结，待线下打款审核。`
       try { await this.$confirm(message, title, { type: 'warning', confirmButtonText: '确认操作', cancelButtonText: '取消' }) }
       catch (_) { return }
       this.saving = true
       try {
         const payload = { user_id: this.member.user_id, amount, note, request_id: this.requestID }
         if (recharge) { payload.bonus_mode = this.bonusMode; payload.bonus_value = bonusValue }
-        const result = await (recharge ? this.$api.walletApi.recharge(payload) : this.$api.walletApi.withdraw(payload))
+        const result = await (recharge ? this.$api.walletApi.recharge(payload) : debit ? this.$api.walletApi.debit(payload) : this.$api.walletApi.withdraw(payload))
         if (result.code !== 0) throw Error(result.msg || '订单提交失败')
-        const orderID = recharge ? result.data.order_id : result.data.withdrawal_id
-        this.$message.success(`${recharge ? '充值' : '提现'}订单 ${recharge ? 'CZ' : 'TX'}-${String(orderID).padStart(8, '0')} 已生成，余额与账变已记录`)
+        if (debit) this.$message.success(`已扣减 ${this.money(this.amountCents)}，余额账变和操作原因已记录`)
+        else {
+          const orderID = recharge ? result.data.order_id : result.data.withdrawal_id
+          this.$message.success(`${recharge ? '充值' : '提现'}订单 ${recharge ? 'CZ' : 'TX'}-${String(orderID).padStart(8, '0')} 已生成，余额与账变已记录`)
+        }
         this.amount = ''
         this.note = ''
         this.bonusMode = 'none'
@@ -1102,11 +1271,11 @@ const ImgoMemberFinanceDialog = {
       finally { this.saving = false }
     },
     eventName(event) {
-      return ({ recharge: '充值本金', recharge_bonus: '充值赠送', credit: '人工入账', withdraw: '提现冻结', refund: '提现退回', paid: '提现打款' })[event] || event
+      return ({ recharge: '充值本金', recharge_bonus: '充值赠送', credit: '人工入账', debit: '人工扣款', withdraw: '提现冻结', refund: '提现退回', paid: '提现打款' })[event] || event
     }
   },
   render(h) {
-    const member = this.member || {}, recharge = this.mode === 'recharge'
+    const member = this.member || {}, recharge = this.mode === 'recharge', debit = this.mode === 'debit'
     const field = (value, placeholder, change, type = 'text') => h('el-input', {
       props: { value, type, clearable: true, rows: type === 'textarea' ? 2 : undefined },
       attrs: { placeholder, maxlength: type === 'textarea' ? 500 : undefined },
@@ -1119,7 +1288,7 @@ const ImgoMemberFinanceDialog = {
       h('el-table', { props: { data: rows, border: true, stripe: true, size: 'mini', maxHeight: 210 }, directives: [{ name: 'loading', value: this.historyLoading }] }, columns)
     ])
     return h('el-dialog', {
-      props: { title: `${recharge ? '充值' : '提现'} · ${member.account || ''}（ID ${member.user_id || '—'}）`, visible: this.visible, width: '700px', appendToBody: true, closeOnClickModal: false, closeOnPressEscape: !this.saving, showClose: !this.saving },
+      props: { title: `${recharge ? '充值' : debit ? '扣款' : '提现'} · ${member.account || ''}（ID ${member.user_id || '—'}）`, visible: this.visible, width: '700px', appendToBody: true, closeOnClickModal: false, closeOnPressEscape: !this.saving, showClose: !this.saving },
       on: { close: this.close }
     }, this.visible ? [
       h('div', { class: 'imgo-member-finance-summary' }, [
@@ -1128,17 +1297,19 @@ const ImgoMemberFinanceDialog = {
         h('el-button', { props: { type: 'text', loading: this.loading }, on: { click: this.refresh } }, '刷新')
       ]),
       h('el-form', { class: 'imgo-member-finance-form' }, [
-        formItem(recharge ? '充值金额' : '提现金额', field(this.amount, '请输入金额（元）', value => this.change('amount', value))),
+        formItem(recharge ? '充值金额' : debit ? '扣款金额' : '提现金额', field(this.amount, '请输入金额（元）', value => this.change('amount', value))),
         recharge ? formItem('赠送方式', h('el-radio-group', { props: { value: this.bonusMode }, on: { input: value => { this.change('bonusMode', value); this.bonusValue = '' } } }, [
           h('el-radio', { props: { label: 'none' } }, '不赠送'),
           h('el-radio', { props: { label: 'percent' } }, '百分比'),
           h('el-radio', { props: { label: 'fixed' } }, '固定金额')
         ])) : null,
         recharge && this.bonusMode !== 'none' ? formItem(this.bonusMode === 'percent' ? '赠送百分比' : '赠送金额', field(this.bonusValue, this.bonusMode === 'percent' ? '如 10 或 2.5（%）' : '固定赠送金额（元）', value => this.change('bonusValue', value))) : null,
-        formItem('备注', field(this.note, recharge ? '必填，至少 2 字；记录本次充值原因' : '可选，记录本次提现原因', value => this.change('note', value), 'textarea')),
+        formItem(debit ? '扣款原因' : '备注', field(this.note, recharge ? '必填，至少 2 字；记录本次充值原因' : debit ? '必填，至少 2 字；如：纠正重复充值' : '可选，记录本次提现原因', value => this.change('note', value), 'textarea')),
         h('div', { class: 'imgo-member-finance-preview' }, recharge
           ? `本金 ${this.money(this.amountCents)} + 赠送 ${this.money(this.bonusCents)} = 立即到账 ${this.money(this.amountCents + this.bonusCents)}`
-          : `提交后冻结 ${this.money(this.amountCents)}；不会自动向银行卡转账。`)
+          : debit
+            ? `确认后直接扣减 ${this.money(this.amountCents)}；不生成提现订单，不检查银行卡。`
+            : `提交后冻结 ${this.money(this.amountCents)}；不会自动向银行卡转账。`)
       ]),
       history('最近充值订单', this.recharges, [
         h('el-table-column', { props: { label: '订单号', width: '145' }, scopedSlots: { default: scope => 'CZ-' + String(scope.row.order_id).padStart(8, '0') } }),
@@ -1161,7 +1332,7 @@ const ImgoMemberFinanceDialog = {
       ]),
       h('span', { slot: 'footer' }, [
         h('el-button', { props: { disabled: this.saving }, on: { click: this.close } }, '关闭'),
-        h('el-button', { props: { type: recharge ? 'primary' : 'warning', disabled: !this.account, loading: this.saving }, on: { click: this.submit } }, recharge ? '确认充值并到账' : '确认提现并冻结')
+        h('el-button', { props: { type: recharge ? 'primary' : debit ? 'danger' : 'warning', disabled: !this.account, loading: this.saving }, on: { click: this.submit } }, recharge ? '确认充值并到账' : debit ? '确认直接扣款' : '确认提现并冻结')
       ])
     ] : [])
   }
@@ -1175,7 +1346,8 @@ const ImgoMemberReferralFilter = {
   props: {
     scope: { type: String, default: '' },
     agentMode: { type: Boolean, default: false },
-    referrerAccount: { type: String, default: '' }
+    referrerAccount: { type: String, default: '' },
+    mentorOnly: { type: Boolean, default: false }
   },
   render(h) {
     return h('div', { class: 'imgo-member-referral-filter' }, [
@@ -1190,6 +1362,14 @@ const ImgoMemberReferralFilter = {
         h('el-option', { props: { label: '直属下级', value: 'direct' } }),
         h('el-option', { props: { label: '全部下级', value: 'all' } })
       ]),
+      h('el-checkbox', {
+        class: 'imgo-member-mentor-only',
+        props: { value: this.mentorOnly },
+        on: {
+          input: value => this.$emit('update:mentor-only', Boolean(value)),
+          change: () => this.$emit('search')
+        }
+      }, '只看导师账号'),
       h('el-button', {
         props: { type: 'primary', icon: 'el-icon-search' },
         on: { click: () => this.$emit('search') }
@@ -1199,10 +1379,11 @@ const ImgoMemberReferralFilter = {
 };
 
 /* IMGO_REFERRAL_FILTER_END */
-s.r(t),s.d(t,{default:function(){return u}});var a=function(){var e=this,t=e._self._c;return t("div",{staticClass:"m-20"},[t("div",{staticClass:"mb-15 lz-flex lz-space-between"},[t("div",[t("el-button",{attrs:{type:"primary",plain:""},staticClass:"mr-15",on:{click:function(){return e.$refs.memberBroadcast.open()}}},[e._v("群发")]),t("el-button",{attrs:{type:"success",plain:""},staticClass:"mr-15",on:{click:function(){return e.$refs.memberBatchCreate.open()}}},[e._v("批量创建账号")]),t("el-button",{staticClass:"mr-15",on:{click:e.addUser}},[e._v("添加成员")]),t("imgo-member-referral-filter",{attrs:{scope:e.params.referral_scope,"agent-mode":Number((e.$store.state.userInfo||{}).agent_mode)===1,"referrer-account":e.params.referrer_account},on:{"update:scope":function(t){e.$set(e.params,"referral_scope",t)},"update:referrer-account":function(t){e.$set(e.params,"referrer_account",t)},search:function(){return e.handleChange()}}})],1),t("div",[t("el-input",{staticStyle:{width:"300px"},attrs:{placeholder:"请输入关键字搜索","prefix-icon":"el-icon-search"},nativeOn:{keyup:function(t){return!t.type.indexOf("key")&&e._k(t.keyCode,"enter",13,t.key,"Enter")?null:e.handleChange.apply(null,arguments)}},model:{value:e.params.keywords,callback:function(t){e.$set(e.params,"keywords",t)},expression:"params.keywords"}},[t("el-button",{attrs:{slot:"append",icon:"el-icon-search"},on:{click:e.handleChange},slot:"append"})],1)],1)]),t("el-table",{staticStyle:{width:"100%",border:"solid 1px #e3e3e3"},attrs:{data:e.userList,stripe:"",height:"calc(100vh - 200px)","header-cell-style":{"background-color":"#f5f7fa",color:"#909399"}},on:{"sort-change":e.sortChange,"row-dblclick":e.handleClick}},[t("el-table-column",{attrs:{fixed:"",prop:"user_id",label:"ID",sortable:"custom",width:"52"}}),t("el-table-column",{attrs:{prop:"realname",label:"姓名",width:"78"}}),t("el-table-column",{attrs:{prop:"account",label:"账号",width:"100"}}),t("el-table-column",{attrs:{prop:"sex",label:"性别",sortable:"custom",width:"68"},scopedSlots:e._u([{key:"default",fn:function(s){return[0==s.row.sex?t("span",{staticClass:"el-dropdown-link"},[e._v("女")]):e._e(),1==s.row.sex?t("span",{staticClass:"el-dropdown-link"},[e._v("男")]):e._e(),2==s.row.sex?t("span",{staticClass:"el-dropdown-link"},[e._v("未知")]):e._e()]}}])}),t("el-table-column",{attrs:{label:"角色",width:"132"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("imgo-member-role-select",{attrs:{row:s.row}})]}}])}),t("el-table-column",{attrs:{label:"签到信息",width:"136"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("div",{staticClass:"imgo-checkin-summary"},[t("span",{staticClass:"imgo-checkin-days"},[e._v("累计 "+e._s(s.row.checkin_days||0)+" 天")]),t("span",{staticClass:"imgo-checkin-status",class:s.row.checkin_today?"is-signed":"is-unsigned"},[e._v(s.row.checkin_today?"今日已签到":"今日未签到")])]),t("div",{staticClass:"imgo-checkin-last"},[e._v("最近："+e._s(s.row.checkin_last_date||"—"))]),t("el-button",{staticClass:"imgo-checkin-open",attrs:{type:"text",size:"mini"},on:{click:function(){return e.$refs.checkinHistory.open(s.row)}}},[e._v("查看详情")])]}}])}),t("el-table-column",{attrs:{label:"邀请码",width:"118"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("imgo-invite-code-copy",{attrs:{code:s.row.invite_code}})]}}])}),t("el-table-column",{attrs:{prop:"direct_invite_count",label:"直属下级人数",width:"92"}}),t("el-table-column",{attrs:{prop:"team_count",label:"团队人数",width:"76"}}),t("el-table-column",{attrs:{prop:"create_time",label:"注册时间",width:"132"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("el-popover",{attrs:{placement:"top-start",title:"位置信息",width:"250",trigger:"hover"}},[e._v(" IP: "+e._s(s.row.register_ip)+" "),t("br"),e._v(" 位置："+e._s(s.row.reg_location||"--")+" "),t("span",{attrs:{slot:"reference"},slot:"reference"},[e._v(e._s((v=>!v?'—':/^\d+$/.test(String(v))?new Date(Number(v)*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):v)(s.row.create_time)))])])]}}])}),t("el-table-column",{attrs:{prop:"last_login_time",label:"最后登录时间",width:"132"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("el-popover",{attrs:{placement:"top-start",title:"位置信息",width:"250",trigger:"hover"}},[e._v(" IP: "+e._s(s.row.last_login_ip)+" "),t("br"),e._v(" 位置："+e._s(s.row.location||"--")+" "),t("span",{attrs:{slot:"reference"},slot:"reference"},[e._v(e._s((v=>!v?'—':/^\d+$/.test(String(v))?new Date(Number(v)*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):v)(s.row.last_login_time)))])])]}}])}),t("el-table-column",{attrs:{prop:"remark",label:"备注","min-width":"120"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("imgo-member-remark",{key:s.row.user_id,attrs:{row:s.row}})]}}])}),t("el-table-column",{attrs:{prop:"status",label:"状态",width:"70"},scopedSlots:e._u([{key:"default",fn:function(s){return[1!=s.row.user_id?t("el-switch",{attrs:{"active-value":1,"inactive-value":0},on:{change:function(t){return e.setStatus(s.row)}},model:{value:s.row.status,callback:function(t){e.$set(s.row,"status",t)},expression:"scope.row.status"}}):t("span",[e._v("--")])]}}])}),t("el-table-column",{attrs:{fixed:"right",label:"操作",width:"164"},scopedSlots:e._u([{key:"default",fn:function(s){return[ t("div",{staticClass:"imgo-member-actions-inline"},[
+s.r(t),s.d(t,{default:function(){return u}});var a=function(){var e=this,t=e._self._c;return t("div",{staticClass:"m-20"},[t("div",{staticClass:"mb-15 lz-flex lz-space-between"},[t("div",[t("el-button",{attrs:{type:"primary",plain:""},staticClass:"mr-15",on:{click:function(){return e.$refs.memberBroadcast.open()}}},[e._v("群发")]),t("el-button",{attrs:{type:"success",plain:""},staticClass:"mr-15",on:{click:function(){return e.$refs.memberBatchCreate.open()}}},[e._v("批量创建账号")]),t("el-button",{staticClass:"mr-15",on:{click:e.addUser}},[e._v("添加成员")]),t("imgo-member-referral-filter",{attrs:{scope:e.params.referral_scope,"agent-mode":Number((e.$store.state.userInfo||{}).agent_mode)===1,"referrer-account":e.params.referrer_account,"mentor-only":Number(e.params.mentor_only)===1},on:{"update:scope":function(t){e.$set(e.params,"referral_scope",t)},"update:referrer-account":function(t){e.$set(e.params,"referrer_account",t)},"update:mentor-only":function(t){e.$set(e.params,"mentor_only",t?1:0)},search:function(){return e.handleChange()}}})],1),t("div",[t("el-input",{staticStyle:{width:"300px"},attrs:{placeholder:"请输入关键字搜索","prefix-icon":"el-icon-search"},nativeOn:{keyup:function(t){return!t.type.indexOf("key")&&e._k(t.keyCode,"enter",13,t.key,"Enter")?null:e.handleChange.apply(null,arguments)}},model:{value:e.params.keywords,callback:function(t){e.$set(e.params,"keywords",t)},expression:"params.keywords"}},[t("el-button",{attrs:{slot:"append",icon:"el-icon-search"},on:{click:e.handleChange},slot:"append"})],1)],1)]),t("el-table",{staticStyle:{width:"100%",border:"solid 1px #e3e3e3"},attrs:{data:e.userList,stripe:"",height:"calc(100vh - 200px)","header-cell-style":{"background-color":"#f5f7fa",color:"#909399"}},on:{"sort-change":e.sortChange,"row-dblclick":e.handleClick}},[t("el-table-column",{attrs:{fixed:"",prop:"user_id",label:"ID",sortable:"custom",width:"52"}}),t("el-table-column",{attrs:{prop:"realname",label:"姓名",width:"78"}}),t("el-table-column",{attrs:{prop:"account",label:"账号",width:"100"}}),t("el-table-column",{attrs:{prop:"sex",label:"性别",sortable:"custom",width:"68"},scopedSlots:e._u([{key:"default",fn:function(s){return[0==s.row.sex?t("span",{staticClass:"el-dropdown-link"},[e._v("女")]):e._e(),1==s.row.sex?t("span",{staticClass:"el-dropdown-link"},[e._v("男")]):e._e(),2==s.row.sex?t("span",{staticClass:"el-dropdown-link"},[e._v("未知")]):e._e()]}}])}),t("el-table-column",{attrs:{label:"角色",width:"132"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("imgo-member-role-select",{attrs:{row:s.row}})]}}])}),t("el-table-column",{attrs:{label:"导师",width:"170"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("div",{staticClass:"imgo-member-mentor"},[s.row.mentor_account?t("span",[e._v(e._s(s.row.mentor_account)+(s.row.mentor_name?" ("+e._s(s.row.mentor_name)+")":""))]):t("span",{staticClass:"is-unassigned"},[e._v("未分配")])])]}}])}),t("el-table-column",{attrs:{label:"直属上级",width:"170"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("div",{staticClass:"imgo-member-parent"},[s.row.parent_account?t("span",[e._v(e._s(s.row.parent_account)+(s.row.parent_name?" ("+e._s(s.row.parent_name)+")":""))]):t("span",{staticClass:"is-unassigned"},[e._v("无上级")])])]}}])}),t("el-table-column",{attrs:{label:"余额",width:"108"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("span",{staticClass:"imgo-member-money is-balance"},[e._v("¥"+e._s((Number(s.row.balance_cents||0)/100).toFixed(2)))])]}}])}),t("el-table-column",{attrs:{label:"今日签到奖励",width:"118"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("span",{staticClass:"imgo-member-money",class:s.row.checkin_today?"is-today":"is-unsigned"},[e._v(s.row.checkin_today?"¥"+e._s((Number(s.row.checkin_today_reward_cents||0)/100).toFixed(2)):"未签到")])]}}])}),t("el-table-column",{attrs:{label:"累计签到奖励",width:"118"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("span",{staticClass:"imgo-member-money is-total"},[e._v("¥"+e._s((Number(s.row.checkin_total_reward_cents||0)/100).toFixed(2)))])]}}])}),t("el-table-column",{attrs:{label:"签到信息",width:"136"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("div",{staticClass:"imgo-checkin-summary"},[t("span",{staticClass:"imgo-checkin-days"},[e._v("累计 "+e._s(s.row.checkin_days||0)+" 天")]),t("span",{staticClass:"imgo-checkin-status",class:s.row.checkin_today?"is-signed":"is-unsigned"},[e._v(s.row.checkin_today?"今日已签到":"今日未签到")])]),t("div",{staticClass:"imgo-checkin-last"},[e._v("最近："+e._s(s.row.checkin_last_date||"—"))]),t("el-button",{staticClass:"imgo-checkin-open",attrs:{type:"text",size:"mini"},on:{click:function(){return e.$refs.checkinHistory.open(s.row)}}},[e._v("每日奖励详情")])]}}])}),t("el-table-column",{attrs:{label:"邀请码",width:"118"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("imgo-invite-code-copy",{attrs:{code:s.row.invite_code}})]}}])}),t("el-table-column",{attrs:{prop:"direct_invite_count",label:"直属下级人数",width:"92"}}),t("el-table-column",{attrs:{prop:"team_count",label:"团队人数",width:"76"}}),t("el-table-column",{attrs:{prop:"create_time",label:"注册时间",width:"132"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("el-popover",{attrs:{placement:"top-start",title:"位置信息",width:"250",trigger:"hover"}},[e._v(" IP: "+e._s(s.row.register_ip)+" "),t("br"),e._v(" 位置："+e._s(s.row.reg_location||"--")+" "),t("span",{attrs:{slot:"reference"},slot:"reference"},[e._v(e._s((v=>!v?'—':/^\d+$/.test(String(v))?new Date(Number(v)*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):v)(s.row.create_time)))])])]}}])}),t("el-table-column",{attrs:{prop:"last_login_time",label:"最后登录时间",width:"132"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("el-popover",{attrs:{placement:"top-start",title:"位置信息",width:"250",trigger:"hover"}},[e._v(" IP: "+e._s(s.row.last_login_ip)+" "),t("br"),e._v(" 位置："+e._s(s.row.location||"--")+" "),t("span",{attrs:{slot:"reference"},slot:"reference"},[e._v(e._s((v=>!v?'—':/^\d+$/.test(String(v))?new Date(Number(v)*1000).toLocaleString('zh-CN',{timeZone:'Asia/Shanghai',hour12:false}):v)(s.row.last_login_time)))])])]}}])}),t("el-table-column",{attrs:{prop:"remark",label:"备注","min-width":"120"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("imgo-member-remark",{key:s.row.user_id,attrs:{row:s.row}})]}}])}),t("el-table-column",{attrs:{prop:"status",label:"状态",width:"70"},scopedSlots:e._u([{key:"default",fn:function(s){return[1!=s.row.user_id?t("el-switch",{attrs:{"active-value":1,"inactive-value":0},on:{change:function(t){return e.setStatus(s.row)}},model:{value:s.row.status,callback:function(t){e.$set(s.row,"status",t)},expression:"scope.row.status"}}):t("span",[e._v("--")])]}}])}),t("el-table-column",{attrs:{fixed:"right",label:"操作",width:"210"},scopedSlots:e._u([{key:"default",fn:function(s){return[ t("div",{staticClass:"imgo-member-actions-inline"},[
   t("el-button",{attrs:{type:"text",size:"small",disabled:true,title:"功能暂未开放"}},[e._v("会话")]),
-  Number((e.$store.state.userInfo||{}).user_id)===1?t("el-button",{attrs:{type:"text",size:"small"},on:{click:function(){return e.$refs.memberFinance.open(s.row,"recharge")}}},[e._v("充值")]):e._e(),
-  Number((e.$store.state.userInfo||{}).user_id)===1?t("el-button",{attrs:{type:"text",size:"small"},on:{click:function(){return e.$refs.memberFinance.open(s.row,"withdraw")}}},[e._v("提现")]):e._e(),
+  (Number((e.$store.state.userInfo||{}).user_id)===1||(Number((e.$store.state.userInfo||{}).agent_mode)===1&&Number((e.$store.state.userInfo||{}).user_id)!==Number(s.row.user_id)))?t("el-button",{attrs:{type:"text",size:"small"},on:{click:function(){return e.$refs.memberFinance.open(s.row,"recharge")}}},[e._v("充值")]):e._e(),
+	  (Number((e.$store.state.userInfo||{}).user_id)===1||(Number((e.$store.state.userInfo||{}).agent_mode)===1&&Number((e.$store.state.userInfo||{}).user_id)!==Number(s.row.user_id)))?t("el-button",{attrs:{type:"text",size:"small"},on:{click:function(){return e.$refs.memberFinance.open(s.row,"debit")}}},[e._v("扣款")]):e._e(),
+  (Number((e.$store.state.userInfo||{}).user_id)===1||(Number((e.$store.state.userInfo||{}).agent_mode)===1&&Number((e.$store.state.userInfo||{}).user_id)!==Number(s.row.user_id)))?t("el-button",{attrs:{type:"text",size:"small"},on:{click:function(){return e.$refs.memberFinance.open(s.row,"withdraw")}}},[e._v("提现")]):e._e(),
   t("el-dropdown",{attrs:{trigger:"click",placement:"bottom-end"},on:{command:function(command){
    if(command==="googleAuth"&&Number((e.$store.state.userInfo||{}).user_id)===1)return e.$refs.memberGoogleAuth.open(s.row);
    if(Number(s.row.is_self)===1&&Number((e.$store.state.userInfo||{}).user_id)===Number(s.row.user_id)){
@@ -1214,6 +1395,26 @@ s.r(t),s.d(t,{default:function(){return u}});var a=function(){var e=this,t=e._se
    if(command==="edit")return e.editUser(s.row);
    if(command==="password")return e.editPass(s.row);
    if(command==="inviteCode")return e.$refs.memberInviteCode.open(s.row);
+   if(command==="withdrawalEnable"||command==="withdrawalDisable"||command==="withdrawalInherit"){
+    const mode=command==="withdrawalEnable"?"enabled":command==="withdrawalDisable"?"disabled":"inherit";
+    const actionText=mode==="enabled"?"开启此人提现":mode==="disabled"?"关闭此人提现":"恢复继承团队提现";
+    const detail=mode==="enabled"?"该成员将可以提现，即使其导师团队已关闭提现。":mode==="disabled"?"该成员将不能提交新的提现申请，即使其导师团队已开启提现。":"该成员不再使用个人开关，之后跟随导师团队或系统总开关。";
+    return e.$confirm(detail,actionText,{confirmButtonText:"确定",cancelButtonText:"取消",type:mode==="disabled"?"warning":"info"}).then(function(){
+     return e.$api.userApi.setWithdrawal({user_id:s.row.user_id,mode:mode});
+    }).then(function(result){
+     if(!result||Number(result.code)!==0)throw Error(result&&result.msg||"设置失败");
+     e.$set(s.row,"withdrawal_enabled",result.data?result.data.withdrawal_enabled:null);
+     e.$message.success(actionText+"成功");
+    }).catch(function(error){if(error&&error!=="cancel"&&error!=="close")e.$message.error(error.msg||error.message||"设置失败");});
+   }
+   if(command==="groupFriendAdd"){
+    const enabled=Number(s.row.group_friend_add)===1,next=enabled?0:1;
+    return e.$confirm(enabled?"关闭后，该账号将不能绕过群成员隐私添加群友，确定关闭吗？":"开启后，该账号可在群内查看成员资料并添加为好友，但不会获得拉人进群或群管理权限，确定开启吗？","群添加权限",{confirmButtonText:"确定",cancelButtonText:"取消",type:"warning"}).then(function(){
+     return e.$api.userApi.setGroupFriendAdd({user_id:s.row.user_id,group_friend_add:next});
+    }).then(function(result){
+     if(result&&Number(result.code)===0){e.$set(s.row,"group_friend_add",next);e.$message.success(next?"已开启群添加权限":"已关闭群添加权限");}
+    }).catch(function(error){if(error&&error!=="cancel"&&error!=="close")e.$message.error(error.msg||error.message||"设置失败");});
+   }
    if(command==="agentSetting"&&Number(s.row.admin_role_agent_mode)===1&&(Number((e.$store.state.userInfo||{}).user_id)===1||(Number((e.$store.state.userInfo||{}).user_id)===Number(s.row.user_id)&&Number(s.row.is_self)===1)))return e.$refs.memberAgentSetting.open(s.row);
   }}},[
    t("el-button",{attrs:{type:"text",size:"small"}},[e._v("更多"),t("i",{staticClass:"el-icon-arrow-down"})]),
@@ -1223,12 +1424,16 @@ s.r(t),s.d(t,{default:function(){return u}});var a=function(){var e=this,t=e._se
     Number(s.row.is_self)!==1&&s.row.user_id>1?t("el-dropdown-item",{attrs:{command:"edit"}},[e._v("编辑")]):e._e(),
     Number(s.row.is_self)===1&&Number((e.$store.state.userInfo||{}).user_id)===Number(s.row.user_id)?e._e():t("el-dropdown-item",{attrs:{command:"password"}},[e._v("改密")]),
     Number(s.row.is_self)===1&&Number((e.$store.state.userInfo||{}).user_id)===Number(s.row.user_id)?e._e():t("el-dropdown-item",{attrs:{command:"inviteCode"}},[e._v("修改邀请码")]),
+    (Number((e.$store.state.userInfo||{}).user_id)===1||Number((e.$store.state.userInfo||{}).agent_mode)===1)&&Number(s.row.is_self)!==1&&Number(s.row.user_id)>1&&Number(s.row.withdrawal_enabled)!==1?t("el-dropdown-item",{attrs:{command:"withdrawalEnable"}},[e._v("个人开启提现")]):e._e(),
+    (Number((e.$store.state.userInfo||{}).user_id)===1||Number((e.$store.state.userInfo||{}).agent_mode)===1)&&Number(s.row.is_self)!==1&&Number(s.row.user_id)>1&&(null==s.row.withdrawal_enabled||Number(s.row.withdrawal_enabled)!==0)?t("el-dropdown-item",{attrs:{command:"withdrawalDisable"}},[e._v("个人关闭提现")]):e._e(),
+    (Number((e.$store.state.userInfo||{}).user_id)===1||Number((e.$store.state.userInfo||{}).agent_mode)===1)&&Number(s.row.is_self)!==1&&Number(s.row.user_id)>1&&null!=s.row.withdrawal_enabled?t("el-dropdown-item",{attrs:{command:"withdrawalInherit"}},[e._v("恢复团队提现设置")]):e._e(),
+    Number(s.row.is_self)!==1&&Number(s.row.user_id)>1?t("el-dropdown-item",{attrs:{command:"groupFriendAdd"}},[e._v(Number(s.row.group_friend_add)===1?"关闭群添加":"开启群添加")]):e._e(),
     Number((e.$store.state.userInfo||{}).user_id)===1?t("el-dropdown-item",{attrs:{command:"googleAuth"}},[e._v("谷歌设置")]):e._e(),
     Number(s.row.admin_role_agent_mode)===1&&(Number((e.$store.state.userInfo||{}).user_id)===1||(Number((e.$store.state.userInfo||{}).user_id)===Number(s.row.user_id)&&Number(s.row.is_self)===1))?t("el-dropdown-item",{attrs:{command:"agentSetting"}},[e._v("导师设置")]):e._e()
    ],1)
   ],1)
  ],1)
-]}}])})],1),t("div",{staticClass:"mt-15"},[t("el-pagination",{attrs:{background:"","current-page":e.params.page,"page-sizes":[20,50,100,200,300,400,500],"page-size":e.params.limit,layout:"total, sizes, prev, pager, next, jumper",total:e.total},on:{"size-change":e.handleChange,"current-change":e.getUserList,"update:currentPage":function(t){return e.$set(e.params,"page",t)},"update:current-page":function(t){return e.$set(e.params,"page",t)},"update:pageSize":function(t){return e.$set(e.params,"limit",t)},"update:page-size":function(t){return e.$set(e.params,"limit",t)}}})],1),t("imgo-check-in-history",{ref:"checkinHistory"}),t("imgo-member-finance-dialog",{ref:"memberFinance"}),t("imgo-member-invite-code-dialog",{ref:"memberInviteCode"}),t("imgo-member-google-auth-dialog",{ref:"memberGoogleAuth"}),t("imgo-member-batch-create-dialog",{ref:"memberBatchCreate",on:{saved:e.handleChange}}),t("imgo-member-agent-setting-dialog",{ref:"memberAgentSetting",on:{saved:e.handleChange}}),t("imgo-member-broadcast-dialog",{ref:"memberBroadcast"}),t("el-dialog",{attrs:{title:e.currentUser.realname+" 的会话管理",visible:e.dialogueBox,modal:!0,width:"80%","append-to-body":""},on:{"update:visible":function(t){e.dialogueBox=t},close:function(t){e.dialogueBox=!1}}},[t("dialogue",{key:e.componentKey,attrs:{userInfo:e.currentUser}})],1),t("el-dialog",{attrs:{title:e.formTitle,visible:e.dialogVisible,modal:!0,width:"500px","append-to-body":""},on:{"update:visible":function(t){e.dialogVisible=t},close:function(t){e.dialogVisible=!1}}},[t("el-form",{ref:"userinfo",attrs:{model:e.detail,rules:e.rules,"label-width":"100px"}},[t("el-form-item",{attrs:{label:"账号",prop:"account"}},[t("el-input",{attrs:{placeholder:"请输入邮箱或者手机号"},model:{value:e.detail.account,callback:function(t){e.$set(e.detail,"account",t)},expression:"detail.account"}})],1),t("el-form-item",{directives:[{name:"show",rawName:"v-show",value:"add"==e.formType,expression:"formType=='add'"}],attrs:{label:"密码",prop:"password"}},[t("el-input",{attrs:{"show-password":"",placeholder:"请输入密码"},model:{value:e.detail.password,callback:function(t){e.$set(e.detail,"password",t)},expression:"detail.password"}})],1),t("el-form-item",{attrs:{label:"姓名",prop:"realname"}},[t("el-input",{attrs:{placeholder:"请输入用户名称"},model:{value:e.detail.realname,callback:function(t){e.$set(e.detail,"realname",t)},expression:"detail.realname"}})],1),t("el-form-item",{attrs:{label:"e-mail",prop:"email"}},[t("el-input",{attrs:{placeholder:"请输入邮箱地址"},model:{value:e.detail.email,callback:function(t){e.$set(e.detail,"email",t)},expression:"detail.email"}})],1),t("el-form-item",{attrs:{label:"专属客服",prop:"cs_uid"}},[t("user-select",{attrs:{width:"180px",radio:!0},model:{value:e.detail.cs_uid,callback:function(t){e.$set(e.detail,"cs_uid",t)},expression:"detail.cs_uid"}})],1),t("el-form-item",{attrs:{label:"性别",prop:"sex"}},[t("el-radio-group",{model:{value:e.detail.sex,callback:function(t){e.$set(e.detail,"sex",t)},expression:"detail.sex"}},[t("el-radio",{attrs:{label:2,border:""}},[e._v("未知")]),t("el-radio",{attrs:{label:1,border:""}},[e._v("男")]),t("el-radio",{attrs:{label:0,border:""}},[e._v("女")])],1)],1),t("el-form-item",{attrs:{label:"状态",prop:"status"}},[t("el-radio-group",{model:{value:e.detail.status,callback:function(t){e.$set(e.detail,"status",t)},expression:"detail.status"}},[t("el-radio",{attrs:{label:1,border:""}},[e._v("正常")]),t("el-radio",{attrs:{label:0,border:""}},[e._v("禁用")])],1)],1),t("el-form-item",{attrs:{label:"好友上限",prop:"friend_limit"}},[t("el-input-number",{staticClass:"ml-10",attrs:{min:-1,max:1e3},model:{value:e.detail.friend_limit,callback:function(t){e.$set(e.detail,"friend_limit",t)},expression:"detail.friend_limit"}}),t("span",{staticClass:"ml-10 c-999 f-12"},[e._v("个，0表示不限制，-1表示禁止创建")])],1),t("el-form-item",{attrs:{label:"群聊上限",prop:"group_limit"}},[t("el-input-number",{staticClass:"ml-10",attrs:{min:-1,max:1e3},model:{value:e.detail.group_limit,callback:function(t){e.$set(e.detail,"group_limit",t)},expression:"detail.group_limit"}}),t("span",{staticClass:"ml-10 c-999 f-12"},[e._v("个，0表示不限制-1表示禁止创建")])],1),"add"==e.formType?t("el-form-item",{attrs:{label:"上级邀请码",prop:"parent_invite_code"}},[t("el-input",{attrs:{maxlength:6,placeholder:"选填，填写后将验证上级是否存在",disabled:Number((e.$store.state.userInfo||{}).user_id)!==1&&Number((e.$store.state.userInfo||{}).agent_mode)===1},model:{value:e.detail.parent_invite_code,callback:function(t){e.$set(e.detail,"parent_invite_code",t)},expression:"detail.parent_invite_code"}})]):e._e(),"edit"==e.formType?t("el-form-item",{attrs:{label:"签到信息"}},[t("div",{staticClass:"imgo-checkin-detail"},[e._v("累计 "+e._s(e.detail.checkin_days||0)+" 天 · "+(e.detail.checkin_today?"今日已签到":"今日未签到"))]),t("div",{staticClass:"imgo-checkin-last"},[e._v("最近签到："+e._s(e.detail.checkin_last_date||"—"))])]):e._e(),"edit"==e.formType?t("el-form-item",{attrs:{label:"邀请关系"}},[t("div",{staticClass:"imgo-referral-detail"},[e._v("邀请码："+e._s(e.detail.invite_code||"—")+" · 直属下级："+e._s(e.detail.direct_invite_count||0)+" 人 · 团队："+e._s(e.detail.team_count||0)+" 人")])]):e._e(),t("el-form-item",{attrs:{label:"备注",prop:"remark"}},[t("el-input",{attrs:{type:"textarea",rows:2},model:{value:e.detail.remark,callback:function(t){e.$set(e.detail,"remark",t)},expression:"detail.remark"}})],1),t("el-form-item",[t("el-button",{attrs:{type:"primary"},on:{click:function(t){return e.submitForm("userinfo")}}},[e._v("保存")])],1)],1)],1),t("el-dialog",{attrs:{title:"修改密码",visible:e.dialogPass,modal:!0,width:"400px","append-to-body":""},on:{"update:visible":function(t){e.dialogPass=t}}},[t("el-form",{attrs:{"label-width":"100px"}},[t("el-form-item",{attrs:{label:"新密码"}},[t("el-input",{attrs:{"show-password":"",placeholder:"请输入密码"},model:{value:e.password,callback:function(t){e.password=t},expression:"password"}})],1),t("el-form-item",{attrs:{label:"重复密码"}},[t("el-input",{attrs:{"show-password":"",placeholder:"请输入重复输入密码"},model:{value:e.repass,callback:function(t){e.repass=t},expression:"repass"}})],1),t("el-form-item",[t("el-button",{attrs:{type:"primary"},on:{click:function(t){return e.editPassword()}}},[e._v("保存")])],1)],1)],1)],1)},r=[],i=(s(7658),s(3822)),l=s(6647),o=s(7076),n={components:{userSelect:l.Z,dialogue:o.Z,ImgoCheckInHistory,ImgoMemberFinanceDialog,ImgoMemberReferralFilter,ImgoMemberRemark,ImgoMemberInviteCodeDialog,ImgoInviteCodeCopy,ImgoMemberRoleSelect,ImgoMemberAgentSettingDialog,ImgoMemberBroadcastDialog,ImgoMemberGoogleAuthDialog,ImgoMemberBatchCreateDialog},data(){return{componentKey:0,total:0,params:{page:1,limit:20,keywords:"",order_field:"",order_type:1,referral_scope:Number((this.$store.state.userInfo||{}).agent_mode)===1?"all":"",referrer_account:""},userList:[],formTitle:"添加成员",formType:"add",dialogVisible:!1,dialogueBox:!1,detail:{},originDetail:{realname:"",password:"123456",email:"",sex:2,role:0,friend_limit:0,group_limit:0,remark:"",status:1},rules:{account:[{min:4,max:32,message:"长度在 4 到 32 个字符",trigger:"blur"}],realname:[{required:!0,message:"请输入用户名称",trigger:"blur"},{min:2,max:16,message:"长度在 2 到 16 个字符",trigger:"blur"}],email:[{type:"email",message:"请输入正确的邮箱地址",trigger:["blur","change"]}],password:[{required:!0,message:"请输入密码",trigger:"blur"},{min:6,max:30,message:"长度在 6 到 30 个字符",trigger:"blur"}]},dialogPass:!1,password:"",repass:"",currentUser:{}}},computed:{...(0,i.rn)({globalConfig:e=>e.globalConfig})},watch:{dialogVisible(e){e||(this.detail=this.originDetail)}},mounted(){this.detail=this.originDetail,this.getUserList();let e=this.globalConfig.sysInfo.regauth??0,t="请输入账号：4-32个字符";switch(parseInt(e)){case 1:t="请输入正确的手机号";break;case 2:t="请输入正确的邮箱";break;case 3:t="请输入正确的手机号或者邮箱";break;default:t="请输入正确的账号";break}let s={required:!0,message:t,trigger:"blur"};this.rules.account.push(s);let a={type:"email",message:t,trigger:"blur",validator:this.validateContact},r={type:"phone",message:t,trigger:"blur",validator:this.validateContact};1==e?this.rules.account.push(r):2==e?this.rules.account.push(a):3==e&&(this.rules.account.push(a),this.rules.account.push(r))},methods:{getUserList(){this.$api.userApi.getUserList(this.params).then((e=>{0==e.code&&(this.userList=e.data,this.total=e.count,this.params.page=e.page)}))},sortChange(e){this.params.order_field=e.prop,null==e.order&&(this.params.order_field=null),this.params.order_type="ascending"==e.order?1:2,this.getUserList()},handleClick(e){this.$user(e.user_id,{isManage:!0,editDataCallbak:e=>{this.editUser(e)}})},openDialogue(e){this.currentUser=e,this.componentKey++,this.dialogueBox=!0},handleChange(){this.params.page=1,this.getUserList()},async addUser(){
+]}}])})],1),t("div",{staticClass:"mt-15"},[t("el-pagination",{attrs:{background:"","current-page":e.params.page,"page-sizes":[20,50,100,200,300,400,500],"page-size":e.params.limit,layout:"total, sizes, prev, pager, next, jumper",total:e.total},on:{"size-change":e.handleChange,"current-change":e.getUserList,"update:currentPage":function(t){return e.$set(e.params,"page",t)},"update:current-page":function(t){return e.$set(e.params,"page",t)},"update:pageSize":function(t){return e.$set(e.params,"limit",t)},"update:page-size":function(t){return e.$set(e.params,"limit",t)}}})],1),t("imgo-check-in-history",{ref:"checkinHistory"}),t("imgo-member-finance-dialog",{ref:"memberFinance"}),t("imgo-member-invite-code-dialog",{ref:"memberInviteCode"}),t("imgo-member-google-auth-dialog",{ref:"memberGoogleAuth"}),t("imgo-member-batch-create-dialog",{ref:"memberBatchCreate",on:{saved:e.handleChange}}),t("imgo-member-agent-setting-dialog",{ref:"memberAgentSetting",on:{saved:e.handleChange}}),t("imgo-member-broadcast-dialog",{ref:"memberBroadcast"}),t("el-dialog",{attrs:{title:e.currentUser.realname+" 的会话管理",visible:e.dialogueBox,modal:!0,width:"80%","append-to-body":""},on:{"update:visible":function(t){e.dialogueBox=t},close:function(t){e.dialogueBox=!1}}},[t("dialogue",{key:e.componentKey,attrs:{userInfo:e.currentUser}})],1),t("el-dialog",{attrs:{title:e.formTitle,visible:e.dialogVisible,modal:!0,width:"500px","append-to-body":""},on:{"update:visible":function(t){e.dialogVisible=t},close:function(t){e.dialogVisible=!1}}},[t("el-form",{ref:"userinfo",attrs:{model:e.detail,rules:e.rules,"label-width":"100px"}},[t("el-form-item",{attrs:{label:"账号",prop:"account"}},[t("el-input",{attrs:{placeholder:"请输入邮箱或者手机号"},model:{value:e.detail.account,callback:function(t){e.$set(e.detail,"account",t)},expression:"detail.account"}})],1),t("el-form-item",{directives:[{name:"show",rawName:"v-show",value:"add"==e.formType,expression:"formType=='add'"}],attrs:{label:"密码",prop:"password"}},[t("el-input",{attrs:{"show-password":"",placeholder:"请输入密码"},model:{value:e.detail.password,callback:function(t){e.$set(e.detail,"password",t)},expression:"detail.password"}})],1),t("el-form-item",{attrs:{label:"姓名",prop:"realname"}},[t("el-input",{attrs:{placeholder:"请输入用户名称"},model:{value:e.detail.realname,callback:function(t){e.$set(e.detail,"realname",t)},expression:"detail.realname"}})],1),t("el-form-item",{attrs:{label:"e-mail",prop:"email"}},[t("el-input",{attrs:{placeholder:"请输入邮箱地址"},model:{value:e.detail.email,callback:function(t){e.$set(e.detail,"email",t)},expression:"detail.email"}})],1),t("el-form-item",{attrs:{label:"专属客服",prop:"cs_uid"}},[t("user-select",{attrs:{width:"180px",radio:!0},model:{value:e.detail.cs_uid,callback:function(t){e.$set(e.detail,"cs_uid",t)},expression:"detail.cs_uid"}})],1),t("el-form-item",{attrs:{label:"性别",prop:"sex"}},[t("el-radio-group",{model:{value:e.detail.sex,callback:function(t){e.$set(e.detail,"sex",t)},expression:"detail.sex"}},[t("el-radio",{attrs:{label:2,border:""}},[e._v("未知")]),t("el-radio",{attrs:{label:1,border:""}},[e._v("男")]),t("el-radio",{attrs:{label:0,border:""}},[e._v("女")])],1)],1),t("el-form-item",{attrs:{label:"状态",prop:"status"}},[t("el-radio-group",{model:{value:e.detail.status,callback:function(t){e.$set(e.detail,"status",t)},expression:"detail.status"}},[t("el-radio",{attrs:{label:1,border:""}},[e._v("正常")]),t("el-radio",{attrs:{label:0,border:""}},[e._v("禁用")])],1)],1),t("el-form-item",{attrs:{label:"好友上限",prop:"friend_limit"}},[t("el-input-number",{staticClass:"ml-10",attrs:{min:-1,max:1e3},model:{value:e.detail.friend_limit,callback:function(t){e.$set(e.detail,"friend_limit",t)},expression:"detail.friend_limit"}}),t("span",{staticClass:"ml-10 c-999 f-12"},[e._v("个，0表示不限制，-1表示禁止创建")])],1),t("el-form-item",{attrs:{label:"群聊上限",prop:"group_limit"}},[t("el-input-number",{staticClass:"ml-10",attrs:{min:-1,max:1e3},model:{value:e.detail.group_limit,callback:function(t){e.$set(e.detail,"group_limit",t)},expression:"detail.group_limit"}}),t("span",{staticClass:"ml-10 c-999 f-12"},[e._v("个，0表示不限制-1表示禁止创建")])],1),"add"==e.formType?t("el-form-item",{attrs:{label:"上级邀请码",prop:"parent_invite_code"}},[t("el-input",{attrs:{maxlength:6,placeholder:"选填，填写后将验证上级是否存在",disabled:Number((e.$store.state.userInfo||{}).user_id)!==1&&Number((e.$store.state.userInfo||{}).agent_mode)===1},model:{value:e.detail.parent_invite_code,callback:function(t){e.$set(e.detail,"parent_invite_code",t)},expression:"detail.parent_invite_code"}})]):e._e(),"edit"==e.formType?t("el-form-item",{attrs:{label:"签到信息"}},[t("div",{staticClass:"imgo-checkin-detail"},[e._v("累计 "+e._s(e.detail.checkin_days||0)+" 天 · "+(e.detail.checkin_today?"今日已签到":"今日未签到")+" · 今日奖励 ¥"+e._s((Number(e.detail.checkin_today_reward_cents||0)/100).toFixed(2))+" · 累计奖励 ¥"+e._s((Number(e.detail.checkin_total_reward_cents||0)/100).toFixed(2)))]),t("div",{staticClass:"imgo-checkin-last"},[e._v("最近签到："+e._s(e.detail.checkin_last_date||"—"))])]):e._e(),"edit"==e.formType?t("el-form-item",{attrs:{label:"邀请关系"}},[t("div",{staticClass:"imgo-referral-detail"},[e._v("邀请码："+e._s(e.detail.invite_code||"—")+" · 直属下级："+e._s(e.detail.direct_invite_count||0)+" 人 · 团队："+e._s(e.detail.team_count||0)+" 人")])]):e._e(),t("el-form-item",{attrs:{label:"备注",prop:"remark"}},[t("el-input",{attrs:{type:"textarea",rows:2},model:{value:e.detail.remark,callback:function(t){e.$set(e.detail,"remark",t)},expression:"detail.remark"}})],1),t("el-form-item",[t("el-button",{attrs:{type:"primary"},on:{click:function(t){return e.submitForm("userinfo")}}},[e._v("保存")])],1)],1)],1),t("el-dialog",{attrs:{title:"修改密码",visible:e.dialogPass,modal:!0,width:"400px","append-to-body":""},on:{"update:visible":function(t){e.dialogPass=t}}},[t("el-form",{attrs:{"label-width":"100px"}},[t("el-form-item",{attrs:{label:"新密码"}},[t("el-input",{attrs:{"show-password":"",placeholder:"请输入密码"},model:{value:e.password,callback:function(t){e.password=t},expression:"password"}})],1),t("el-form-item",{attrs:{label:"重复密码"}},[t("el-input",{attrs:{"show-password":"",placeholder:"请输入重复输入密码"},model:{value:e.repass,callback:function(t){e.repass=t},expression:"repass"}})],1),t("el-form-item",[t("el-button",{attrs:{type:"primary"},on:{click:function(t){return e.editPassword()}}},[e._v("保存")])],1)],1)],1)],1)},r=[],i=(s(7658),s(3822)),l=s(6647),o=s(7076),n={components:{userSelect:l.Z,dialogue:o.Z,ImgoCheckInHistory,ImgoMemberFinanceDialog,ImgoMemberReferralFilter,ImgoMemberRemark,ImgoMemberInviteCodeDialog,ImgoInviteCodeCopy,ImgoMemberRoleSelect,ImgoMemberAgentSettingDialog,ImgoMemberBroadcastDialog,ImgoMemberGoogleAuthDialog,ImgoMemberBatchCreateDialog},data(){return{componentKey:0,total:0,params:{page:1,limit:20,keywords:"",order_field:"",order_type:1,referral_scope:Number((this.$store.state.userInfo||{}).agent_mode)===1?"all":"",referrer_account:"",mentor_only:0},userList:[],formTitle:"添加成员",formType:"add",dialogVisible:!1,dialogueBox:!1,detail:{},originDetail:{realname:"",password:"123456",email:"",sex:2,role:0,friend_limit:0,group_limit:0,remark:"",status:1},rules:{account:[{min:4,max:32,message:"长度在 4 到 32 个字符",trigger:"blur"}],realname:[{required:!0,message:"请输入用户名称",trigger:"blur"},{min:2,max:16,message:"长度在 2 到 16 个字符",trigger:"blur"}],email:[{type:"email",message:"请输入正确的邮箱地址",trigger:["blur","change"]}],password:[{required:!0,message:"请输入密码",trigger:"blur"},{min:6,max:30,message:"长度在 6 到 30 个字符",trigger:"blur"}]},dialogPass:!1,password:"",repass:"",currentUser:{}}},computed:{...(0,i.rn)({globalConfig:e=>e.globalConfig})},watch:{dialogVisible(e){e||(this.detail=this.originDetail)}},mounted(){this.detail=this.originDetail,this.getUserList();let e=this.globalConfig.sysInfo.regauth??0,t="请输入账号：4-32个字符";switch(parseInt(e)){case 1:t="请输入正确的手机号";break;case 2:t="请输入正确的邮箱";break;case 3:t="请输入正确的手机号或者邮箱";break;default:t="请输入正确的账号";break}let s={required:!0,message:t,trigger:"blur"};this.rules.account.push(s);let a={type:"email",message:t,trigger:"blur",validator:this.validateContact},r={type:"phone",message:t,trigger:"blur",validator:this.validateContact};1==e?this.rules.account.push(r):2==e?this.rules.account.push(a):3==e&&(this.rules.account.push(a),this.rules.account.push(r))},methods:{getUserList(){this.$api.userApi.getUserList(this.params).then((e=>{0==e.code&&(this.userList=e.data,this.total=e.count,this.params.page=e.page)}))},sortChange(e){this.params.order_field=e.prop,null==e.order&&(this.params.order_field=null),this.params.order_type="ascending"==e.order?1:2,this.getUserList()},handleClick(e){this.$user(e.user_id,{isManage:!0,editDataCallbak:e=>{this.editUser(e)}})},openDialogue(e){this.currentUser=e,this.componentKey++,this.dialogueBox=!0},handleChange(){this.params.page=1,this.getUserList()},async addUser(){
   const user=this.$store.state.userInfo||{};
   const locked=Number(user.user_id)!==1&&Number(user.agent_mode)===1;
   let code='';

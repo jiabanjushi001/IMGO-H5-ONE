@@ -6,6 +6,8 @@
 .imgo-bank-toolbar .el-input { max-width: 280px; }
 .imgo-bank-pagination { text-align: right; padding: 20px 0; }
 .imgo-bank-form .el-input, .imgo-bank-form .el-select { width: 100%; }
+.imgo-bank-qr { display: block; width: 220px; height: 220px; object-fit: contain; border: 1px solid #e5e9f2; border-radius: 10px; background: #f7f8fa; }
+.imgo-bank-empty { color: #909399; }
 .imgo-bank-user { line-height: 1.45; overflow-wrap: anywhere; }
 .imgo-bank-user-account { font-weight: 600; color: #27344c; }
 .imgo-bank-user-name { color: #8993a1; }

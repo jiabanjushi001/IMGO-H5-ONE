@@ -38,6 +38,14 @@ func TestAgentSettingMentorCanOnlyManageSelf(t *testing.T) {
 			WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(7))
 		mock.ExpectQuery("SELECT auto_add_user,auto_add_group FROM `yu_imgo_agent_setting`").WithArgs(int64(7)).
 			WillReturnRows(sqlmock.NewRows([]string{"auto_add_user", "auto_add_group"}))
+		mock.ExpectQuery("SELECT identity_enabled FROM `yu_imgo_agent_setting`").WithArgs(int64(7)).
+			WillReturnRows(sqlmock.NewRows([]string{"identity_enabled"}))
+		mock.ExpectQuery("SELECT withdrawal_methods FROM `yu_imgo_agent_setting`").WithArgs(int64(7)).
+			WillReturnRows(sqlmock.NewRows([]string{"withdrawal_methods"}))
+		mock.ExpectQuery("SELECT withdrawal_enabled FROM `yu_imgo_agent_setting`").WithArgs(int64(7)).
+			WillReturnRows(sqlmock.NewRows([]string{"withdrawal_enabled"}))
+		mock.ExpectQuery("SELECT withdrawal_password_required FROM `yu_imgo_agent_setting`").WithArgs(int64(7)).
+			WillReturnRows(sqlmock.NewRows([]string{"withdrawal_password_required"}))
 		mock.ExpectQuery("SELECT value FROM `yu_config`").WithArgs("chatInfo").WillReturnRows(sqlmock.NewRows([]string{"value"}))
 		if _, err := a.manageAgentSetting(r); err != nil {
 			t.Fatal(err)
@@ -67,6 +75,14 @@ func TestAgentSettingDetailReturnsIndependentInheritance(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(7))
 	mock.ExpectQuery("SELECT auto_add_user,auto_add_group FROM `yu_imgo_agent_setting`").WithArgs(int64(7)).
 		WillReturnRows(sqlmock.NewRows([]string{"auto_add_user", "auto_add_group"}).AddRow(nil, `{"status":0}`))
+	mock.ExpectQuery("SELECT identity_enabled FROM `yu_imgo_agent_setting`").WithArgs(int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"identity_enabled"}).AddRow(0))
+	mock.ExpectQuery("SELECT withdrawal_methods FROM `yu_imgo_agent_setting`").WithArgs(int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"withdrawal_methods"}).AddRow(`{"bank":true,"alipay":false,"wechat":true}`))
+	mock.ExpectQuery("SELECT withdrawal_enabled FROM `yu_imgo_agent_setting`").WithArgs(int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"withdrawal_enabled"}).AddRow(0))
+	mock.ExpectQuery("SELECT withdrawal_password_required FROM `yu_imgo_agent_setting`").WithArgs(int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"withdrawal_password_required"}).AddRow(1))
 	mock.ExpectQuery("SELECT value FROM `yu_config`").WithArgs("chatInfo").WillReturnRows(sqlmock.NewRows([]string{"value"}))
 	got, err := a.manageAgentSetting(settingRequest(a, "/manage/agentSetting/detail", M{"agent_user_id": 7}))
 	if err != nil {
@@ -76,6 +92,19 @@ func TestAgentSettingDetailReturnsIndependentInheritance(t *testing.T) {
 	if v["inherit_auto_user"] != true || v["inherit_auto_group"] != false || number(obj(v["auto_add_group"])["status"]) != 0 {
 		t.Fatalf("detail = %#v", v)
 	}
+	if v["identity_enabled"] != false {
+		t.Fatalf("identity toggle missing from detail: %#v", v)
+	}
+	if v["withdrawal_enabled"] != false || v["withdrawal_enabled_inherited"] != false {
+		t.Fatalf("withdrawal team toggle missing from detail: %#v", v)
+	}
+	if v["withdrawal_password_required"] != true || v["withdrawal_password_required_inherited"] != false {
+		t.Fatalf("withdrawal password override missing from detail: %#v", v)
+	}
+	methods := obj(v["withdrawal_methods"])
+	if !withdrawalMethodEnabled(methods, paymentTypeBank) || withdrawalMethodEnabled(methods, paymentTypeAlipay) || !withdrawalMethodEnabled(methods, paymentTypeWechat) {
+		t.Fatalf("withdrawal switches missing from detail: %#v", v)
+	}
 	if _, ok := v["global_auto_add_user"]; !ok {
 		t.Fatalf("missing global user summary: %#v", v)
 	}
@@ -84,6 +113,107 @@ func TestAgentSettingDetailReturnsIndependentInheritance(t *testing.T) {
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
+	}
+}
+
+func TestAgentSettingSavePersistsIdentityToggle(t *testing.T) {
+	a, mock := testApp(t)
+	mock.ExpectQuery("SELECT .* FROM `yu_user`.*`yu_imgo_admin_role`").WithArgs(int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(7))
+	mock.ExpectExec("INSERT INTO `yu_imgo_agent_setting` .*identity_enabled").
+		WithArgs(int64(7), nil, nil, false, int64(1), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	_, err := a.manageAgentSetting(settingRequest(a, "/manage/agentSetting/save", M{
+		"agent_user_id": 7, "inherit_auto_user": true, "inherit_auto_group": true,
+		"identity_enabled": false,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAgentSettingSavePersistsWithdrawalMethodSwitches(t *testing.T) {
+	a, mock := testApp(t)
+	mock.ExpectQuery("SELECT .* FROM `yu_user`.*`yu_imgo_admin_role`").WithArgs(int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(7))
+	mock.ExpectExec("INSERT INTO `yu_imgo_agent_setting` .*identity_enabled,withdrawal_methods,withdrawal_enabled").
+		WithArgs(int64(7), nil, nil, true, `{"alipay":false,"bank":true,"wechat":false}`, false, int64(1), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	_, err := a.manageAgentSetting(settingRequest(a, "/manage/agentSetting/save", M{
+		"agent_user_id": 7, "inherit_auto_user": true, "inherit_auto_group": true,
+		"identity_enabled":   true,
+		"withdrawal_methods": M{"bank": true, "alipay": false, "wechat": false},
+		"withdrawal_enabled": false,
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAgentSettingSavePersistsWithdrawalPasswordOverrideAndInheritance(t *testing.T) {
+	for _, tc := range []struct {
+		name      string
+		inherited bool
+		required  bool
+		stored    any
+	}{
+		{name: "override enabled", inherited: false, required: true, stored: true},
+		{name: "override disabled", inherited: false, required: false, stored: false},
+		{name: "inherit global", inherited: true, required: true, stored: nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, mock := testApp(t)
+			mock.ExpectQuery("SELECT .* FROM `yu_user`.*`yu_imgo_admin_role`").WithArgs(int64(7)).
+				WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(7))
+			mock.ExpectExec("INSERT INTO `yu_imgo_agent_setting` .*withdrawal_password_required").
+				WithArgs(int64(7), nil, nil, tc.stored, int64(1), sqlmock.AnyArg()).
+				WillReturnResult(sqlmock.NewResult(0, 1))
+			_, err := a.manageAgentSetting(settingRequest(a, "/manage/agentSetting/save", M{
+				"agent_user_id": 7, "inherit_auto_user": true, "inherit_auto_group": true,
+				"withdrawal_password_required_inherited": tc.inherited,
+				"withdrawal_password_required":           tc.required,
+			}))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err = mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
+func TestAgentSettingRejectsInvalidWithdrawalPasswordRule(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		data M
+	}{
+		{name: "invalid inheritance", data: M{"withdrawal_password_required_inherited": "invalid"}},
+		{name: "missing override", data: M{"withdrawal_password_required_inherited": false}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, mock := testApp(t)
+			mock.ExpectQuery("SELECT .* FROM `yu_user`.*`yu_imgo_admin_role`").WithArgs(int64(7)).
+				WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(7))
+			payload := M{"agent_user_id": 7, "inherit_auto_user": true, "inherit_auto_group": true}
+			for key, value := range tc.data {
+				payload[key] = value
+			}
+			_, err := a.manageAgentSetting(settingRequest(a, "/manage/agentSetting/save", payload))
+			var client clientError
+			if !errors.As(err, &client) || client.code != 400 {
+				t.Fatalf("invalid password rule accepted: %v", err)
+			}
+			if err = mock.ExpectationsWereMet(); err != nil {
+				t.Fatal(err)
+			}
+		})
 	}
 }
 
@@ -125,6 +255,53 @@ func TestAgentSettingSaveAcceptsFormBooleanFlags(t *testing.T) {
 		t.Fatal(err)
 	}
 	if err = mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestSuperAdminAgentSettingCanSelectAnyExistingGroup(t *testing.T) {
+	a, mock := testApp(t)
+	mock.ExpectQuery("SELECT .* FROM `yu_user`.*`yu_imgo_admin_role`").WithArgs(int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(7))
+	mock.ExpectQuery("SELECT group_id FROM `yu_group` WHERE group_id=\\? AND status=1 AND COALESCE\\(delete_time,0\\)=0").
+		WithArgs(int64(77)).
+		WillReturnRows(sqlmock.NewRows([]string{"group_id"}).AddRow(77))
+	mock.ExpectExec("INSERT INTO `yu_imgo_agent_setting`").
+		WithArgs(int64(7), nil, `{"group_id":77,"mode":"existing","status":1,"userMax":20}`, int64(1), sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	_, err := a.manageAgentSetting(settingRequest(a, "/manage/agentSetting/save", M{
+		"agent_user_id": 7, "inherit_auto_user": true, "inherit_auto_group": false,
+		"auto_add_group": M{"status": 1, "mode": autoGroupModeExisting, "group_id": 77, "userMax": 20},
+	}))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestAgentSettingExistingGroupMustBeInsideMentorScope(t *testing.T) {
+	a, mock := testApp(t)
+	r := settingRequest(a, "/manage/agentSetting/save", M{
+		"agent_user_id": 7, "inherit_auto_user": true, "inherit_auto_group": false,
+		"auto_add_group": M{"status": 1, "mode": autoGroupModeExisting, "group_id": 77, "userMax": 20},
+	})
+	r.user = M{"user_id": int64(7), "admin_role_id": int64(3)}
+	mock.ExpectQuery("SELECT agent_mode FROM `yu_imgo_admin_role`").WithArgs(int64(3)).
+		WillReturnRows(sqlmock.NewRows([]string{"agent_mode"}).AddRow(1))
+	mock.ExpectQuery("SELECT .* FROM `yu_user`.*`yu_imgo_admin_role`").WithArgs(int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(7))
+	mock.ExpectQuery("SELECT owner_id FROM `yu_group` WHERE group_id=\\? AND status=1 AND COALESCE\\(delete_time,0\\)=0").
+		WithArgs(int64(77)).
+		WillReturnRows(sqlmock.NewRows([]string{"owner_id"}).AddRow(99))
+	mock.ExpectQuery("SELECT 1 FROM `yu_user` u WHERE").WithArgs(int64(99), int64(7), int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"1"}))
+
+	_, err := a.manageAgentSetting(r)
+	assertDenied(t, err)
+	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
 	}
 }

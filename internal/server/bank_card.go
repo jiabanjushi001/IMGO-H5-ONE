@@ -204,6 +204,10 @@ func (a *App) manageBankCard(r *request) (any, error) {
 		return nil, err
 	}
 	r.c.Header("Cache-Control", "no-store")
+	paymentType := strings.ToLower(strings.TrimSpace(r.s("payment_type")))
+	if action(r) != "index" && paymentType != "" && paymentType != paymentTypeBank {
+		return a.managePaymentMethod(r, scope, paymentType)
+	}
 	switch action(r) {
 	case "index":
 		where, args := "u.delete_time=0", []any{}
@@ -211,6 +215,13 @@ func (a *App) manageBankCard(r *request) (any, error) {
 			predicate, params := scope.userPredicate("b")
 			where += " AND " + predicate
 			args = append(args, params...)
+		}
+		if paymentType != "" {
+			if !validPaymentType(paymentType) {
+				return nil, r.fail("收款类型无效")
+			}
+			where += " AND b.payment_type=?"
+			args = append(args, paymentType)
 		}
 		if s := strings.TrimSpace(r.s("keywords")); s != "" {
 			where += " AND (u.account LIKE ? OR u.realname LIKE ? OR b.receipt_name LIKE ? OR b.bank_name LIKE ? OR b.branch_name LIKE ?)"
@@ -226,15 +237,20 @@ func (a *App) manageBankCard(r *request) (any, error) {
 			where += " AND b.status=?"
 			args = append(args, status)
 		}
-		n, err := r.one("SELECT COUNT(*) n FROM "+a.t("imgo_bank_card")+" b JOIN "+a.t("user")+" u ON u.user_id=b.user_id WHERE "+where, args...)
+		source := "(SELECT user_id,'bank' AS payment_type,receipt_name,bank_name,branch_name,account_last4,0 AS qr_file_id,status,remark,version,created_at,updated_at FROM " + a.t("imgo_bank_card") + " UNION ALL SELECT user_id,payment_type,receipt_name,'' AS bank_name,'' AS branch_name,account_last4,qr_file_id,status,remark,version,created_at,updated_at FROM " + a.t("imgo_payment_method") + ") b JOIN " + a.t("user") + " u ON u.user_id=b.user_id"
+		n, err := r.one("SELECT COUNT(*) n FROM "+source+" WHERE "+where, args...)
 		if err != nil {
 			return nil, err
 		}
 		r.count = number(n["n"])
 		limit, offset := r.pagination()
-		items, err := r.list("SELECT b.user_id,b.receipt_name,b.bank_name,b.branch_name,b.account_last4,b.status,b.remark,b.version,b.created_at,b.updated_at,u.account AS login_account,u.realname AS user_name FROM "+a.t("imgo_bank_card")+" b JOIN "+a.t("user")+" u ON u.user_id=b.user_id WHERE "+where+" ORDER BY b.updated_at DESC,b.user_id DESC LIMIT ? OFFSET ?", append(args, limit, offset)...)
+		items, err := r.list("SELECT b.user_id,b.payment_type,b.receipt_name,b.bank_name,b.branch_name,b.account_last4,b.qr_file_id,b.status,b.remark,b.version,b.created_at,b.updated_at,u.account AS login_account,u.realname AS user_name FROM "+source+" WHERE "+where+" ORDER BY b.updated_at DESC,b.user_id DESC LIMIT ? OFFSET ?", append(args, limit, offset)...)
 		for _, card := range items {
-			card["receipt_account_masked"] = "•••• •••• •••• " + str(card["account_last4"])
+			if str(card["payment_type"]) == paymentTypeWechat || str(card["payment_type"]) == paymentTypeAlipay {
+				card["receipt_account_masked"] = paymentQRCodeLabel(str(card["payment_type"]))
+			} else {
+				card["receipt_account_masked"] = "•••• " + str(card["account_last4"])
+			}
 			delete(card, "account_last4")
 		}
 		return items, err

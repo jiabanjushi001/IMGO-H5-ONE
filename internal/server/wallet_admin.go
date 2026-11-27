@@ -110,6 +110,90 @@ func (a *App) manageWalletCredit(r *request, scope adminScope) (any, error) {
 	return M{"credited": true, "entry_id": id}, nil
 }
 
+func (a *App) priorWalletDebit(r *request, userID int64, requestID string, cents int64) (M, error) {
+	entry, err := r.one("SELECT entry_id,available_delta FROM "+a.t("imgo_wallet_entry")+" WHERE user_id=? AND event='debit' AND request_id=?", userID, requestID)
+	if err != nil {
+		return nil, err
+	}
+	if number(entry["available_delta"]) != -cents {
+		return nil, clientError{"重复扣款请求的金额不一致", 409}
+	}
+	return M{"debited": true, "entry_id": entry["entry_id"]}, nil
+}
+
+// manageWalletDebit corrects an excessive administrator credit without
+// creating a withdrawal order. Only available balance can be deducted; bank
+// cards and payment methods are intentionally unrelated to this operation.
+func (a *App) manageWalletDebit(r *request, scope adminScope) (any, error) {
+	uid := r.n("user_id")
+	cents, valid := parseWalletAmount(r.s("amount"))
+	requestID := r.s("request_id")
+	note := strings.TrimSpace(r.s("note"))
+	if uid < 1 || !valid || !walletRequestID.MatchString(requestID) || len(note) < 2 || len(note) > 500 {
+		return nil, r.fail("用户、金额、请求编号或扣款说明无效")
+	}
+	if previous, err := a.priorWalletDebit(r, uid, requestID, cents); err == nil {
+		return previous, nil
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return nil, err
+	}
+	if _, err := r.one("SELECT user_id FROM "+a.t("user")+" WHERE user_id=? AND delete_time=0", uid); err != nil {
+		return nil, err
+	}
+	ctx := r.ctx()
+	tx, err := a.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback()
+	if !scope.Global {
+		if err := a.requireScopedUser(ctx, tx, scope, uid); err != nil {
+			return nil, err
+		}
+	}
+	now := time.Now().Unix()
+	if _, err = tx.ExecContext(ctx, "INSERT IGNORE INTO "+a.t("imgo_wallet")+" (user_id,available_cents,pending_cents,updated_at) VALUES (?,0,0,?)", uid, now); err != nil {
+		return nil, err
+	}
+	wallet, err := one(ctx, tx, "SELECT available_cents,pending_cents FROM "+a.t("imgo_wallet")+" WHERE user_id=? FOR UPDATE", uid)
+	if err != nil {
+		return nil, err
+	}
+	if !scope.Global {
+		if err := a.requireScopedUser(ctx, tx, scope, uid); err != nil {
+			return nil, err
+		}
+	}
+	if number(wallet["available_cents"]) < cents {
+		return nil, clientError{"可用余额不足，不能扣成负数", 409}
+	}
+	result, err := tx.ExecContext(ctx, "UPDATE "+a.t("imgo_wallet")+" SET available_cents=available_cents-?,updated_at=? WHERE user_id=? AND available_cents>=?", cents, now, uid, cents)
+	if err != nil {
+		return nil, err
+	}
+	if affected, _ := result.RowsAffected(); affected != 1 {
+		return nil, clientError{"可用余额不足，请刷新后重试", 409}
+	}
+	result, err = tx.ExecContext(ctx, "INSERT INTO "+a.t("imgo_wallet_entry")+" (user_id,event,request_id,available_delta,pending_delta,reference_id,actor_id,note,created_at) VALUES (?,'debit',?,?,0,0,?,?,?)", uid, requestID, -cents, r.uid(), note, now)
+	if err != nil {
+		var duplicate *mysql.MySQLError
+		if errors.As(err, &duplicate) && duplicate.Number == 1062 {
+			_ = tx.Rollback()
+			return a.priorWalletDebit(r, uid, requestID, cents)
+		}
+		return nil, err
+	}
+	id, err := result.LastInsertId()
+	if err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
+	}
+	a.queueSystemAlert(systemAlertEvent{Type: "balance_adjustment", OccurredAt: time.Now(), IP: a.clientIP(r.c), Actor: systemAlertUserIdentity(r.user), ActorID: r.uid(), TargetID: uid, AmountCents: -cents, Detail: fmt.Sprintf("人工扣款流水 #%d；%s", id, note)})
+	return M{"debited": true, "entry_id": id}, nil
+}
+
 func (a *App) manageWalletReview(r *request, scope adminScope, expectedUserID int64) (any, error) {
 	id := r.n("withdrawal_id")
 	status, valid := bankStatus(r.p["status"])
@@ -271,7 +355,7 @@ func (a *App) manageWallet(r *request) (any, error) {
 	var reviewUserID int64
 	if !scope.Global {
 		switch action(r) {
-		case "account", "entries", "credit", "recharge", "withdraw":
+		case "account", "entries", "credit", "debit", "recharge", "withdraw":
 			if err := a.requireScopedUser(r.ctx(), a.db, scope, r.n("user_id")); err != nil {
 				return nil, err
 			}
@@ -327,6 +411,8 @@ func (a *App) manageWallet(r *request) (any, error) {
 		return a.manageWalletWithdraw(r, scope)
 	case "credit":
 		return a.manageWalletCredit(r, scope)
+	case "debit":
+		return a.manageWalletDebit(r, scope)
 	case "review":
 		return a.manageWalletReview(r, scope, reviewUserID)
 	case "freeze":
@@ -363,7 +449,7 @@ func (a *App) manageWallet(r *request) (any, error) {
 		}
 		r.count = number(n["n"])
 		limit, offset := r.pagination()
-		return r.list("SELECT w.withdrawal_id,w.user_id,w.amount_cents,w.status,w.bank_name,w.account_last4,w.created_at,w.processed_at,w.remark,u.account,u.realname FROM "+a.t("imgo_withdrawal")+" w JOIN "+a.t("user")+" u ON u.user_id=w.user_id WHERE "+where+" ORDER BY w.withdrawal_id DESC LIMIT ? OFFSET ?", append(args, limit, offset)...)
+		return r.list("SELECT w.withdrawal_id,w.user_id,w.amount_cents,w.status,w.payment_type,w.bank_name,w.account_last4,w.created_at,w.processed_at,w.remark,u.account,u.realname FROM "+a.t("imgo_withdrawal")+" w JOIN "+a.t("user")+" u ON u.user_id=w.user_id WHERE "+where+" ORDER BY w.withdrawal_id DESC LIMIT ? OFFSET ?", append(args, limit, offset)...)
 	case "detail":
 		if r.n("withdrawal_id") < 1 {
 			return nil, r.fail("提现记录ID无效")
@@ -374,19 +460,25 @@ func (a *App) manageWallet(r *request) (any, error) {
 			where += " AND " + predicate
 			args = append(args, params...)
 		}
-		item, err := r.one("SELECT w.withdrawal_id,w.user_id,w.amount_cents,w.status,w.receipt_name,w.bank_name,w.branch_name,w.account_cipher,w.account_last4,w.created_at,w.processed_at,w.processed_by,w.remark,u.account,u.realname FROM "+a.t("imgo_withdrawal")+" w JOIN "+a.t("user")+" u ON u.user_id=w.user_id WHERE "+where, args...)
+		item, err := r.one("SELECT w.withdrawal_id,w.user_id,w.amount_cents,w.status,w.payment_type,w.receipt_name,w.bank_name,w.branch_name,w.account_cipher,w.account_last4,w.payment_qr_file_id,f.src AS payment_qr_src,w.created_at,w.processed_at,w.processed_by,w.remark,u.account,u.realname FROM "+a.t("imgo_withdrawal")+" w JOIN "+a.t("user")+" u ON u.user_id=w.user_id LEFT JOIN "+a.t("file")+" f ON f.file_id=w.payment_qr_file_id AND f.status=1 AND COALESCE(f.delete_time,0)=0 WHERE "+where, args...)
 		if errors.Is(err, sql.ErrNoRows) && !scope.Global {
 			return nil, deny()
 		}
 		if err != nil {
 			return nil, err
 		}
-		account, err := decryptBankAccount(a.cfg.JWTKey, str(item["account_cipher"]))
-		if err != nil {
-			return nil, err
+		if str(item["payment_type"]) == paymentTypeBank {
+			account, err := decryptBankAccount(a.cfg.JWTKey, str(item["account_cipher"]))
+			if err != nil {
+				return nil, err
+			}
+			item["receipt_account"] = account
+		}
+		if src := str(item["payment_qr_src"]); src != "" {
+			item["payment_qr_image"] = a.mediaPath(src)
 		}
 		delete(item, "account_cipher")
-		item["receipt_account"] = account
+		delete(item, "payment_qr_src")
 		return item, nil
 	default:
 		return nil, r.fail("未知操作")

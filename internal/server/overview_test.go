@@ -73,6 +73,9 @@ func TestAgentOverviewScopesCardsTrendsAndOnlineSamples(t *testing.T) {
 		mock.ExpectQuery("SELECT COUNT\\(\\*\\).*FROM `yu_" + tc.table + "` .*" + regexp.QuoteMeta(tc.scope)).WithArgs(args...).
 			WillReturnRows(sqlmock.NewRows([]string{"COUNT(*)", "COALESCE(SUM(create_time>=?),0)"}).AddRow(2, 1))
 	}
+	mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM `yu_user` u WHERE u.last_chat_time>=\\? AND u.delete_time=0 AND .*scope_path.descendant_user_id=u.user_id").
+		WithArgs(sqlmock.AnyArg(), int64(7), int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"today_online_users"}).AddRow(2))
 	mock.ExpectQuery("SELECT .*FROM `yu_imgo_referral_path`.*path.descendant_user_id<>\\?").WithArgs(int64(7), int64(7)).
 		WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(7).AddRow(12).AddRow(13))
 	mock.ExpectQuery("SELECT COALESCE\\(MAX\\(users\\),0\\).*FROM `yu_imgo_agent_online_sample`.*agent_user_id=\\?").
@@ -104,7 +107,7 @@ func TestAgentOverviewScopesCardsTrendsAndOnlineSamples(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := obj(data)
-	if number(obj(got["totals"])["online_users"]) != 1 || number(obj(got["today"])["peak_users"]) != 1 {
+	if number(obj(got["totals"])["online_users"]) != 1 || number(obj(got["totals"])["today_online_users"]) != 2 || number(obj(got["today"])["peak_users"]) != 1 {
 		t.Fatalf("agent online leaked other connections: %#v", got)
 	}
 	if samples, ok := got["online"].([]M); !ok || len(samples) != 0 {
@@ -283,6 +286,8 @@ func TestOverviewGlobalRolesKeepGlobalMetrics(t *testing.T) {
 				mock.ExpectQuery("SELECT COUNT\\(\\*\\).*FROM `yu_" + table + "` .*WHERE .* AND 1=1$").
 					WithArgs(sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"total", "added"}).AddRow(5, 2))
 			}
+			mock.ExpectQuery("SELECT COUNT\\(\\*\\) FROM `yu_user` u WHERE u.last_chat_time>=\\? AND u.delete_time=0 AND 1=1").
+				WithArgs(sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"today_online_users"}).AddRow(3))
 			mock.ExpectQuery("SELECT COALESCE\\(MAX\\(users\\),0\\).*FROM `yu_imgo_online_sample` WHERE sample_at>=\\?").
 				WithArgs(sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"peak_users", "peak_devices"}).AddRow(4, 4))
 			for _, table := range []string{"user", "user", "message", "group", "file"} {
@@ -307,7 +312,7 @@ func TestOverviewGlobalRolesKeepGlobalMetrics(t *testing.T) {
 				t.Fatal(err)
 			}
 			got := obj(data)
-			if number(obj(got["totals"])["users"]) != 5 || number(obj(got["totals"])["online_users"]) != 1 || number(obj(got["today"])["peak_users"]) != 4 {
+			if number(obj(got["totals"])["users"]) != 5 || number(obj(got["totals"])["online_users"]) != 1 || number(obj(got["totals"])["today_online_users"]) != 3 || number(obj(got["today"])["peak_users"]) != 4 {
 				t.Fatalf("global overview = %#v", got)
 			}
 			if err := mock.ExpectationsWereMet(); err != nil {

@@ -10,6 +10,7 @@ import (
 	"github.com/qiniu/go-sdk/v7/auth"
 	qiniu "github.com/qiniu/go-sdk/v7/storage"
 	cos "github.com/tencentyun/cos-go-sdk-v5"
+	"net"
 	"net/http"
 	"net/url"
 	"os"
@@ -71,6 +72,27 @@ func (s *qiniuStore) Put(ctx context.Context, key, file, mime string) error {
 func (s *qiniuStore) SignedGet(_ context.Context, key string) (string, error) {
 	return qiniu.MakePrivateURLv2(s.credentials, s.domain, key, time.Now().Add(5*time.Minute).Unix()), nil
 }
+
+func normalizeAliyunCNAME(value string) (string, error) {
+	value = strings.TrimSpace(value)
+	if value == "" {
+		return "", clientError{"云存储缺少配置项：aliyun.domain", 503}
+	}
+	if !strings.Contains(value, "://") {
+		value = "https://" + value
+	}
+	u, err := url.Parse(value)
+	if err != nil || u == nil {
+		return "", clientError{"ESA/CNAME 域名必须为已绑定 OSS 的 HTTPS 自定义域名", 400}
+	}
+	host := strings.ToLower(strings.TrimSuffix(u.Hostname(), "."))
+	invalidPath := u.Path != "" && u.Path != "/"
+	if u.Scheme != "https" || host == "" || u.User != nil || u.Port() != "" || invalidPath || u.RawQuery != "" || u.Fragment != "" || net.ParseIP(host) != nil || !strings.Contains(host, ".") || host == "localhost" || strings.HasSuffix(host, ".local") || strings.HasSuffix(host, ".internal") || host == "aliyuncs.com" || strings.HasSuffix(host, ".aliyuncs.com") {
+		return "", clientError{"ESA/CNAME 域名必须为已绑定 OSS 的 HTTPS 自定义域名", 400}
+	}
+	return "https://" + host, nil
+}
+
 func newObjectStore(disk string, c M) (objectStore, error) {
 	required := func(keys ...string) error {
 		for _, key := range keys {
@@ -98,7 +120,19 @@ func newObjectStore(disk string, c M) (objectStore, error) {
 			region = strings.TrimPrefix(strings.Split(u.Hostname(), ".")[0], "oss-")
 			region = strings.TrimSuffix(region, "-internal")
 		}
-		cfg := oss.LoadDefaultConfig().WithRegion(region).WithEndpoint(endpoint).WithCredentialsProvider(credentials.NewStaticCredentialsProvider(str(c["accessId"]), str(c["accessSecret"]))).WithHttpClient(&http.Client{Timeout: 60 * time.Second})
+		requestEndpoint := endpoint
+		useCNAME := false
+		if strings.TrimSpace(str(c["domain"])) != "" {
+			requestEndpoint, e = normalizeAliyunCNAME(str(c["domain"]))
+			if e != nil {
+				return nil, e
+			}
+			useCNAME = true
+		}
+		cfg := oss.LoadDefaultConfig().WithRegion(region).WithEndpoint(requestEndpoint).WithCredentialsProvider(credentials.NewStaticCredentialsProvider(str(c["accessId"]), str(c["accessSecret"]))).WithHttpClient(&http.Client{Timeout: 60 * time.Second})
+		if useCNAME {
+			cfg = cfg.WithUseCName(true)
+		}
 		return &ossStore{oss.NewClient(cfg), str(c["bucket"])}, nil
 	case "qcloud":
 		if e := required("bucket", "region", "secretId", "secretKey"); e != nil {

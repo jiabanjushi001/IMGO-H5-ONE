@@ -24,15 +24,22 @@ func expectMemberDecorators(mock sqlmock.Sqlmock, userIDs []int64) {
 	for i, id := range userIDs {
 		args[i] = id
 	}
-	checkInArgs := append([]driver.Value{sqlmock.AnyArg()}, args...)
+	checkInArgs := append([]driver.Value{sqlmock.AnyArg(), sqlmock.AnyArg()}, args...)
 	mock.ExpectQuery("SELECT user_id,COUNT\\(\\*\\) total_days").WithArgs(checkInArgs...).
-		WillReturnRows(sqlmock.NewRows([]string{"user_id", "total_days", "last_date", "signed_today"}))
+		WillReturnRows(sqlmock.NewRows([]string{"user_id", "total_days", "last_date", "signed_today", "today_reward_cents", "total_reward_cents"}))
+	walletArgs := append([]driver.Value{withdrawalStatusFrozen}, args...)
+	mock.ExpectQuery("SELECT w.user_id,w.available_cents,w.pending_cents").WithArgs(walletArgs...).
+		WillReturnRows(sqlmock.NewRows([]string{"user_id", "available_cents", "pending_cents", "frozen_cents"}))
 	mock.ExpectQuery("SELECT user_id,invite_code FROM `yu_imgo_referral`").WithArgs(args...).
 		WillReturnRows(sqlmock.NewRows([]string{"user_id", "invite_code"}))
 	mock.ExpectQuery("SELECT p.ancestor_user_id,COUNT\\(\\*\\) team_count").WithArgs(args...).
 		WillReturnRows(sqlmock.NewRows([]string{"ancestor_user_id", "team_count", "direct_count"}))
+	mock.ExpectQuery("SELECT p.descendant_user_id,parent.user_id parent_user_id,parent.account parent_account,parent.realname parent_name").WithArgs(args...).
+		WillReturnRows(sqlmock.NewRows([]string{"descendant_user_id", "parent_user_id", "parent_account", "parent_name"}).AddRow(8, 7, "mentor", "导师七"))
 	mock.ExpectQuery("SELECT role_id,name,agent_mode FROM `yu_imgo_admin_role`").WithArgs(int64(3)).
 		WillReturnRows(sqlmock.NewRows([]string{"role_id", "name", "agent_mode"}).AddRow(3, "导师专员", 1))
+	mock.ExpectQuery("SELECT p.descendant_user_id,mentor.user_id mentor_user_id").WithArgs(args...).
+		WillReturnRows(sqlmock.NewRows([]string{"descendant_user_id", "mentor_user_id", "mentor_account", "mentor_name"}).AddRow(8, 7, "mentor", "导师七"))
 }
 
 func TestAgentManageUserListScopesEmptyDirectAndAll(t *testing.T) {
@@ -85,6 +92,28 @@ func TestAgentManageUserListMarksSelfAndReturnsItFirst(t *testing.T) {
 	if len(list) != 2 || number(list[0]["user_id"]) != 7 || number(list[0]["is_self"]) != 1 || number(list[1]["is_self"]) != 0 {
 		t.Fatalf("self row not first/marked: %#v", list)
 	}
+	if str(list[0]["mentor_account"]) != "mentor" || number(list[0]["mentor_user_id"]) != 7 || str(list[1]["mentor_account"]) != "mentor" {
+		t.Fatalf("mentor ownership missing: %#v", list)
+	}
+	if number(list[0]["parent_user_id"]) != 0 || number(list[1]["parent_user_id"]) != 7 || str(list[1]["parent_account"]) != "mentor" || str(list[1]["parent_name"]) != "导师七" {
+		t.Fatalf("direct parent missing: %#v", list)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func TestManageUserListCanShowOnlyMentorAccounts(t *testing.T) {
+	a, mock := testApp(t)
+	where := "delete_time=0 AND EXISTS (SELECT 1 FROM `yu_imgo_admin_role` mentor_filter WHERE mentor_filter.role_id=admin_role_id AND mentor_filter.status=1 AND mentor_filter.agent_mode=1)"
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*) n FROM `yu_user` WHERE " + where)).
+		WillReturnRows(sqlmock.NewRows([]string{"n"}).AddRow(0))
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT * FROM `yu_user` WHERE "+where+" ORDER BY user_id DESC LIMIT ? OFFSET ?")).
+		WithArgs(int64(20), int64(0)).WillReturnRows(sqlmock.NewRows([]string{"user_id"}))
+	result, err := a.manageUser(bankRequest(a, "/manage/user/index", 1, M{"mentor_only": 1}))
+	if err != nil || len(result.([]M)) != 0 {
+		t.Fatalf("mentor-only result=%#v error=%v", result, err)
+	}
 	if err := mock.ExpectationsWereMet(); err != nil {
 		t.Fatal(err)
 	}
@@ -134,6 +163,38 @@ func TestAgentManageUserRejectsOutOfScopeReadAndWrites(t *testing.T) {
 				t.Fatal(err)
 			}
 		})
+	}
+}
+
+func TestManageUserEditPasswordClearsLoginFailureLock(t *testing.T) {
+	a, mock := testApp(t)
+	const account = "15177301318"
+	const userID = int64(4768)
+	for range 5 {
+		a.recordFailure("login-fail:" + account)
+	}
+	if got := number(a.get("login-fail:"+account, false)); got != 5 {
+		t.Fatalf("login failure count = %d, want 5", got)
+	}
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT account FROM `yu_user` WHERE user_id=? AND delete_time=0")).
+		WithArgs(userID).
+		WillReturnRows(sqlmock.NewRows([]string{"account"}).AddRow(account))
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE `yu_user` SET `password`=?,`salt`=? WHERE user_id=? AND delete_time=0")).
+		WithArgs(sqlmock.AnyArg(), "", userID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec(regexp.QuoteMeta("DELETE FROM `yu_imgo_session` WHERE user_id=?")).
+		WithArgs(userID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	if _, err := a.manageUser(bankRequest(a, "/manage/user/editPassword", 1, M{"user_id": userID, "password": "123123"})); err != nil {
+		t.Fatal(err)
+	}
+	if got := a.get("login-fail:"+account, false); got != nil {
+		t.Fatalf("login failure lock remains after administrator password reset: %#v", got)
+	}
+	if err := mock.ExpectationsWereMet(); err != nil {
+		t.Fatal(err)
 	}
 }
 

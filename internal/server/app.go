@@ -55,6 +55,7 @@ type App struct {
 	batchTaskMu      sync.Mutex
 	batchTasks       map[string]struct{}
 	maintenanceMu    sync.Mutex
+	directUploadMu   sync.Mutex
 	avatarFont       *opentype.Font
 	outbound         *http.Client
 	ipdb             *ipDatabase
@@ -63,6 +64,7 @@ type App struct {
 	db               *sql.DB
 	cfg              Config
 	hub              *Hub
+	tcpHub           *tcpHub
 	mu               sync.Mutex
 	cache            map[string]cacheItem
 	routes           map[string]endpoint
@@ -160,6 +162,7 @@ func New(c Config) (*App, error) {
 		a.avatarFont, _ = opentype.Parse(data)
 	}
 	a.hub = newHub(a)
+	a.tcpHub = newTCPHub(a)
 	a.register()
 	a.startSystemAlerts()
 	a.startMaintenance()
@@ -240,16 +243,17 @@ func (a *App) config(ctx context.Context, name string) M {
 func (a *App) Router() *gin.Engine {
 	gin.SetMode(gin.ReleaseMode)
 	g := gin.New()
-	g.Use(gin.Recovery())
+	g.Use(a.requestContextMiddleware())
+	g.Use(a.recoveryMiddleware())
 	if e := g.SetTrustedProxies(nil); e != nil {
 		panic("disable Gin trusted proxies")
 	}
 	g.Use(func(c *gin.Context) {
 		c.Header("Access-Control-Allow-Origin", "*")
-		c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, Content-Length, X-CSRF-Token, Token, session, sessionId, clientId, cid, X-Im-AppId, X-Im-TimeStamp, X-Im-Sign, X-Requested-With, Range")
+		c.Header("Access-Control-Allow-Headers", "Authorization, Content-Type, Content-Length, X-CSRF-Token, X-Request-ID, Token, session, sessionId, clientId, cid, X-Im-AppId, X-Im-TimeStamp, X-Im-Sign, X-Requested-With, Range")
 		c.Header("Access-Control-Allow-Methods", "GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS")
 		c.Header("Access-Control-Max-Age", "600")
-		c.Header("Access-Control-Expose-Headers", "Content-Disposition, Content-Length, Content-Range, Accept-Ranges")
+		c.Header("Access-Control-Expose-Headers", "Content-Disposition, Content-Length, Content-Range, Accept-Ranges, X-Request-ID")
 		c.Header("X-Content-Type-Options", "nosniff")
 		c.Header("Referrer-Policy", "same-origin")
 		if c.Request.Method == "OPTIONS" {
@@ -284,6 +288,7 @@ func parseParams(c *gin.Context) (M, error) {
 		dec.UseNumber()
 		var body M
 		if e := dec.Decode(&body); e != nil && !errors.Is(e, io.EOF) {
+			c.Set(requestDetailContextKey, e.Error())
 			return nil, clientError{"JSON 格式错误", 400}
 		}
 		for k, v := range body {
@@ -297,6 +302,7 @@ func parseParams(c *gin.Context) (M, error) {
 			e = c.Request.ParseForm()
 		}
 		if e != nil {
+			c.Set(requestDetailContextKey, e.Error())
 			return nil, clientError{"请求体格式或大小不正确", 400}
 		}
 		for k, v := range decodeForm(c.Request.PostForm) {
@@ -313,6 +319,7 @@ func effectivePath(c *gin.Context) string {
 	return path
 }
 func (a *App) dispatch(c *gin.Context) {
+	started := time.Now()
 	p := effectivePath(c)
 	if strings.HasPrefix(p, "/downloadapp/") {
 		c.Request.URL.RawQuery = "platform=" + strings.TrimPrefix(p, "/downloadapp/")
@@ -323,14 +330,17 @@ func (a *App) dispatch(c *gin.Context) {
 		a.asset(c)
 		return
 	}
+	c.Set(requestStageContextKey, "parse_request")
 	params, e := parseParams(c)
 	if c.Request.MultipartForm != nil {
 		defer c.Request.MultipartForm.RemoveAll()
 	}
 	r := &request{app: a, c: c, p: params, page: 1}
 	if e == nil && !ep.public {
+		c.Set(requestStageContextKey, "authenticate")
 		r.user, r.claims, e = a.authenticate(c.Request.Context(), c.GetHeader("Authorization"))
 		if e == nil {
+			c.Set(requestUserContextKey, r.uid())
 			maxAge := int(r.claims.Exp - time.Now().Unix())
 			if maxAge > 0 {
 				a.setMediaCookie(c, c.GetHeader("Authorization"), maxAge)
@@ -348,6 +358,7 @@ func (a *App) dispatch(c *gin.Context) {
 	}
 	var data any
 	if e == nil {
+		c.Set(requestStageContextKey, "handler")
 		data, e = ep.handler(r)
 	}
 	if strings.HasPrefix(p, "/manage/") {
@@ -363,10 +374,13 @@ func (a *App) dispatch(c *gin.Context) {
 		} else if errors.Is(e, sql.ErrNoRows) {
 			code = 404
 			msg = "记录不存在"
-		} else {
-			a.log.Error("request failed", "path", p, "error", e)
 		}
-		c.JSON(200, M{"code": code, "msg": msg, "data": []any{}, "count": 0, "page": r.page})
+		a.logRequestFailure(r, p, started, code, msg, e)
+		displayMessage := msg
+		if strings.HasPrefix(p, "/common/upload/") {
+			displayMessage += "（请求编号：" + requestID(c) + "）"
+		}
+		c.JSON(200, M{"code": code, "msg": displayMessage, "request_id": requestID(c), "data": []any{}, "count": 0, "page": r.page})
 		return
 	}
 	if c.Writer.Written() {

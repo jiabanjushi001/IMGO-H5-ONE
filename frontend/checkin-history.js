@@ -2,7 +2,7 @@
 const ImgoCheckInHistory = {
   name: 'ImgoCheckInHistory',
   data() {
-    return { visible: false, member: null, rows: [], total: 0, page: 1, loading: false, requestSerial: 0 }
+    return { visible: false, member: null, rows: [], total: 0, totalRewardCents: 0, page: 1, loading: false, requestSerial: 0 }
   },
   methods: {
     open(member) {
@@ -11,6 +11,7 @@ const ImgoCheckInHistory = {
       this.page = 1
       this.rows = []
       this.total = Number(member.checkin_days || 0)
+      this.totalRewardCents = Number(member.checkin_total_reward_cents || 0)
       this.visible = true
       this.refresh()
     },
@@ -40,20 +41,28 @@ const ImgoCheckInHistory = {
     signedAt(value) {
       const seconds = Number(value)
       return seconds > 0 ? new Date(seconds * 1000).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : '—'
+    },
+    reward(value) {
+      return `¥${(Number(value || 0) / 100).toFixed(2)}`
     }
   },
   render(h) {
     const member = this.member || {}
     return h('el-dialog', {
-      props: { title: '签到详情', visible: this.visible, width: '560px', appendToBody: true, closeOnClickModal: false },
+      props: { title: '每日签到奖励详情', visible: this.visible, width: '720px', appendToBody: true, closeOnClickModal: false },
       on: { close: this.close }
     }, this.visible ? [
       h('div', { class: 'imgo-checkin-history-head' }, [
         h('div', [h('strong', member.realname || member.account || `用户 ${member.user_id}`), h('span', `账号：${member.account || '—'} · ID：${member.user_id}`)]),
-        h('div', { class: 'imgo-checkin-history-total' }, [h('strong', String(this.total)), h('span', '累计签到天数')])
+        h('div', { class: 'imgo-checkin-history-totals' }, [
+          h('div', { class: 'imgo-checkin-history-total' }, [h('strong', String(this.total)), h('span', '累计签到天数')]),
+          h('div', { class: 'imgo-checkin-history-total is-reward' }, [h('strong', this.reward(this.totalRewardCents)), h('span', '累计签到奖励')])
+        ])
       ]),
       h('el-table', { class: 'imgo-checkin-history-table', props: { data: this.rows, stripe: true, border: true, maxHeight: 420 }, directives: [{ name: 'loading', value: this.loading }] }, [
         h('el-table-column', { props: { label: '签到日期', prop: 'sign_date', minWidth: '160' } }),
+        h('el-table-column', { props: { label: '周期天数', minWidth: '100' }, scopedSlots: { default: scope => Number(scope.row.cycle_day) > 0 ? `第 ${scope.row.cycle_day} 天` : '—' } }),
+        h('el-table-column', { props: { label: '到账奖励', minWidth: '110' }, scopedSlots: { default: scope => this.reward(scope.row.reward_cents) } }),
         h('el-table-column', { props: { label: '签到时间（北京时间）', minWidth: '220' }, scopedSlots: { default: scope => this.signedAt(scope.row.signed_at) } })
       ]),
       h('el-pagination', {

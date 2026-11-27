@@ -82,8 +82,8 @@ func TestAgentCanAddDescendantToOwnGroup(t *testing.T) {
 	mock.ExpectQuery("SELECT \\* FROM `yu_group`").WithArgs(int64(9)).
 		WillReturnRows(sqlmock.NewRows([]string{"group_id", "owner_id", "name", "setting"}).AddRow(9, 7, "导师的群", `{}`))
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT group_id,owner_id FROM `yu_group`.*FOR UPDATE").WithArgs(int64(9)).
-		WillReturnRows(sqlmock.NewRows([]string{"group_id", "owner_id"}).AddRow(9, 7))
+	mock.ExpectQuery("SELECT group_id,owner_id,setting FROM `yu_group`.*FOR UPDATE").WithArgs(int64(9)).
+		WillReturnRows(sqlmock.NewRows([]string{"group_id", "owner_id", "setting"}).AddRow(9, 7, `{}`))
 	expectLockedResourceUser(mock, 13, true)
 	mock.ExpectQuery("SELECT COUNT\\(\\*\\) n FROM `yu_group_user`").WithArgs(int64(9)).
 		WillReturnRows(sqlmock.NewRows([]string{"n"}).AddRow(1))

@@ -32,13 +32,13 @@ const actionNames = {
   addgroupuser: '添加群成员', setmanager: '设置群管理员', removeuser: '移除群成员', setnospeak: '群禁言', removegroup: '退出/解散群',
   setnotice: '群公告', groupsetting: '群设置', joingroup: '加入群聊', changeowner: '转让群主', clearmessage: '清空消息',
   uploadfile: '上传文件', uploadimage: '上传图片', uploadavatar: '上传头像', uploademoji: '上传表情',
-  getapplymsg: '好友申请', setnickname: '好友备注', move: '排序', submit: '提交', withdraw: '提现', history: '历史记录', entries: '流水',
+  getapplymsg: '好友申请', setnickname: '好友备注', move: '排序', submit: '提交', withdraw: '提现', setwithdrawal: '设置个人提现', setwithdrawalpassword: '设置提现密码', history: '历史记录', entries: '流水',
   getinfo: '读取配置', getconfig: '读取配置项', getallconfig: '全部配置', setconfig: '保存配置', getinvitelink: '邀请链接', sendtestemail: '测试邮件',
   getsecurity: '读取安全设置', setsecurity: '保存安全设置', overview: '概况统计', noticelist: '公告列表', delnotice: '删除公告', publishnotice: '发布公告',
   gettasklist: '任务列表', starttask: '启动任务', stoptask: '停止任务', settaskconfig: '任务配置', gettasklog: '任务日志', cleartasklog: '清理任务日志',
   setremark: '设置备注', setinvitecode: '修改邀请码', setstatus: '修改状态', setrole: '设置角色', checkinhistory: '签到记录', batchadd: '提交批量创建账号任务', batchstatus: '查询批量创建账号进度',
   broadcast: '群发', broadcastoptions: '群发可选成员', googleauthdetail: '谷歌验证状态', googleauthbind: '绑定谷歌验证', googleauthunbind: '解绑谷歌验证',
-  permissions: '权限目录', account: '账户汇总', credit: '余额调整', review: '提现审核', freeze: '冻结/解除提现订单', recharges: '充值记录', recharge: '充值',
+  permissions: '权限目录', account: '账户汇总', credit: '余额调整', debit: '余额扣减', review: '提现审核', freeze: '冻结/解除提现订单', recharges: '充值记录', recharge: '充值',
   dealmsg: '处理消息', gettasklog: '任务日志', setnumberjoin: '群号加入开关', delgroupuser: '移除群成员', createuser: '创建用户', binduid: '绑定 WebSocket 用户',
   bindgroup: '绑定群连接', offline: '离线通知', avatar: '头像', download: '下载', scanqr: '扫码解析', downloadapp: '下载客户端', downapp: '下载客户端'
 }

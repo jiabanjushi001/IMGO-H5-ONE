@@ -452,14 +452,22 @@ func TestAgentScopeWalletDetailRejectsOwnerChangedAfterPrecheck(t *testing.T) {
 	}
 }
 
-func TestAgentScopeGroupCandidateListContainsOnlyDescendants(t *testing.T) {
+func TestAgentScopeGroupCandidateListContainsFriendsAndDescendants(t *testing.T) {
 	a, mock := testApp(t)
+	mock.ExpectQuery("SELECT group_id,setting FROM `yu_group`").WithArgs(int64(9)).WillReturnRows(
+		sqlmock.NewRows([]string{"group_id", "setting"}).AddRow(9, `{"manager_invite":1}`),
+	)
+	mock.ExpectQuery("SELECT gu.\\*").WithArgs(int64(9), int64(7)).WillReturnRows(
+		sqlmock.NewRows([]string{"role"}).AddRow(2),
+	)
 	expectAgentMemberScope(mock)
-	mock.ExpectQuery("SELECT owner_id FROM `yu_group`").WithArgs(int64(9)).WillReturnRows(sqlmock.NewRows([]string{"owner_id"}).AddRow(12))
-	expectResourceUser(mock, 12, true)
-	mock.ExpectQuery("SELECT user_id,account,realname,avatar,name_py FROM `yu_user`.*scope_path.descendant_user_id=u.user_id").WithArgs(int64(7), int64(9), int64(7), int64(7)).WillReturnRows(sqlmock.NewRows([]string{"user_id", "account", "realname"}).AddRow(13, "child13", "下级"))
+	mock.ExpectQuery("SELECT user_id,account,realname,avatar,name_py FROM `yu_user`.*invite_friend.*OR.*scope_path.descendant_user_id=u.user_id").
+		WithArgs(int64(7), int64(9), int64(7), int64(7), int64(7)).
+		WillReturnRows(sqlmock.NewRows([]string{"user_id", "account", "realname"}).
+			AddRow(13, "friend13", "好友").
+			AddRow(14, "child14", "下级"))
 	result, err := a.group(agentMemberRequest(a, "/enterprise/group/getAllUser", M{"group_id": 9}))
-	if err != nil || len(result.([]M)) != 1 {
+	if err != nil || len(result.([]M)) != 2 {
 		t.Fatalf("result=%v error=%v", result, err)
 	}
 	if err := mock.ExpectationsWereMet(); err != nil {

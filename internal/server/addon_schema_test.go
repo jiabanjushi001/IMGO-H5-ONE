@@ -19,7 +19,7 @@ func TestAddonDDLIncludesAgentTables(t *testing.T) {
 	joinedDDL := strings.Join(a.addonTableDDL(), "\n")
 	for _, name := range []string{
 		"imgo_agent_setting", "imgo_agent_auto_state", "imgo_agent_online_sample",
-		"imgo_batch_user_task", "imgo_identity_verification",
+		"imgo_batch_user_task", "imgo_identity_verification", "imgo_withdrawal_password",
 	} {
 		if !strings.Contains(joinedDDL, name) {
 			t.Fatalf("missing %s", name)
@@ -28,8 +28,26 @@ func TestAddonDDLIncludesAgentTables(t *testing.T) {
 	if !strings.Contains(joinedDDL, "quick_replies JSON NULL") {
 		t.Fatal("agent settings must include per-mentor quick replies")
 	}
+	if !strings.Contains(joinedDDL, "check_in_setting JSON NULL") {
+		t.Fatal("agent settings must include per-mentor check-in rules")
+	}
+	if !strings.Contains(joinedDDL, "identity_enabled TINYINT NOT NULL DEFAULT 1") {
+		t.Fatal("agent settings must include a backwards-compatible identity switch")
+	}
+	if !strings.Contains(joinedDDL, "withdrawal_methods JSON NULL") {
+		t.Fatal("agent settings must include per-mentor withdrawal method switches")
+	}
+	if !strings.Contains(joinedDDL, "withdrawal_password_required TINYINT NULL DEFAULT NULL") {
+		t.Fatal("agent settings must include an inheritable withdrawal password switch")
+	}
+	if !strings.Contains(joinedDDL, "password_hash VARCHAR(255)") || !strings.Contains(joinedDDL, "locked_until BIGINT") {
+		t.Fatal("withdrawal passwords must be hashed and support temporary lockout")
+	}
 	if !strings.Contains(joinedDDL, "request_cipher LONGTEXT") || !strings.Contains(joinedDDL, "active_actor_user_id BIGINT NULL") {
 		t.Fatal("batch tasks must persist encrypted input and enforce one active task per actor")
+	}
+	if !strings.Contains(joinedDDL, "reward_cents BIGINT NOT NULL DEFAULT 0") || !strings.Contains(joinedDDL, "cycle_day INT NOT NULL DEFAULT 0") {
+		t.Fatal("check-in table must persist the credited reward and cycle day")
 	}
 }
 
@@ -219,7 +237,13 @@ func TestStartupAddonUpgrade(t *testing.T) {
 	if _, err = db.Exec("SELECT last_chat_time,last_chat_ip FROM test_user LIMIT 0"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err = db.Exec("SELECT admin_role_id FROM test_user LIMIT 0"); err != nil {
+	if _, err = db.Exec("SELECT reward_cents,cycle_day FROM test_imgo_check_in LIMIT 0"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec("SELECT check_in_setting,identity_enabled,withdrawal_methods,withdrawal_enabled,withdrawal_password_required FROM test_imgo_agent_setting LIMIT 0"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = db.Exec("SELECT admin_role_id,group_friend_add,withdrawal_enabled FROM test_user LIMIT 0"); err != nil {
 		t.Fatal(err)
 	}
 	for _, table := range []string{"test_imgo_admin_role", "test_imgo_admin_permission", "test_imgo_admin_role_permission"} {

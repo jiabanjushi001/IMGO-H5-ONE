@@ -129,6 +129,7 @@ CREATE TABLE `yu_user` (
   `setting` json DEFAULT NULL COMMENT '用户设置',
   `friend_limit` int(11) NOT NULL DEFAULT '0' COMMENT '好友上限',
   `group_limit` int(11) NOT NULL DEFAULT '0' COMMENT '群聊上限',
+  `withdrawal_enabled` tinyint(1) DEFAULT NULL COMMENT '个人提现开关，NULL继承导师团队',
   `create_time` int(11) UNSIGNED NOT NULL COMMENT '创建时间',
   `update_time` int(11) UNSIGNED DEFAULT NULL,
   `login_count` mediumint(8) UNSIGNED DEFAULT '0' COMMENT '登录次数',
@@ -189,6 +190,7 @@ CREATE TABLE `yu_imgo_agent_setting` (
   auto_add_user JSON NULL,
   auto_add_group JSON NULL,
   quick_replies JSON NULL,
+  withdrawal_enabled TINYINT NULL DEFAULT NULL,
   updated_by BIGINT NOT NULL,
   updated_at BIGINT NOT NULL
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;

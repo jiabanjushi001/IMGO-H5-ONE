@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"strconv"
+	"strings"
 	"time"
 )
 
@@ -42,6 +43,17 @@ func (a *App) agentSetting(ctx context.Context, db DB, agentID int64) (M, M, boo
 		return nil, nil, false, false, err
 	}
 	return obj(row["auto_add_user"]), obj(row["auto_add_group"]), row["auto_add_user"] == nil, row["auto_add_group"] == nil, nil
+}
+
+func (a *App) agentIdentityEnabled(ctx context.Context, db DB, agentID int64) (bool, error) {
+	row, err := one(ctx, db, "SELECT identity_enabled FROM "+a.t("imgo_agent_setting")+" WHERE agent_user_id=?", agentID)
+	if errors.Is(err, sql.ErrNoRows) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	return number(row["identity_enabled"]) == 1, nil
 }
 
 func (a *App) registrationChatConfig(ctx context.Context, db DB) (M, error) {
@@ -201,10 +213,30 @@ func (a *App) manageAgentSetting(r *request) (any, error) {
 		if err != nil {
 			return nil, err
 		}
+		identityEnabled, err := a.agentIdentityEnabled(r.ctx(), a.db, agentID)
+		if err != nil {
+			return nil, err
+		}
+		withdrawalMethods, err := a.agentWithdrawalMethods(r.ctx(), a.db, agentID)
+		if err != nil {
+			return nil, err
+		}
+		withdrawalEnabled, withdrawalInherited, err := a.agentWithdrawalSetting(r.ctx(), a.db, agentID)
+		if err != nil {
+			return nil, err
+		}
+		withdrawalPasswordRequired, withdrawalPasswordInherited, err := a.agentWithdrawalPasswordSetting(r.ctx(), a.db, agentID)
+		if err != nil {
+			return nil, err
+		}
 		chat := a.config(r.ctx(), "chatInfo")
 		return M{"agent_user_id": agentID, "inherit_auto_user": userInherited, "inherit_auto_group": groupInherited,
 			"auto_add_user": user, "auto_add_group": group,
-			"global_auto_add_user": obj(chat["autoAddUser"]), "global_auto_add_group": obj(chat["autoAddGroup"])}, nil
+			"identity_enabled": identityEnabled, "withdrawal_methods": withdrawalMethods,
+			"withdrawal_enabled": withdrawalEnabled, "withdrawal_enabled_inherited": withdrawalInherited,
+			"withdrawal_password_required": withdrawalPasswordRequired, "withdrawal_password_required_inherited": withdrawalPasswordInherited,
+			"global_withdrawal_password_required": a.withdrawalSettings(r.ctx()).PasswordRequired,
+			"global_auto_add_user":                obj(chat["autoAddUser"]), "global_auto_add_group": obj(chat["autoAddGroup"])}, nil
 	case "save":
 		userInherited, ok := agentSettingBool(r.p["inherit_auto_user"])
 		if !ok {
@@ -242,21 +274,96 @@ func (a *App) manageAgentSetting(r *request) (any, error) {
 			if err := validAutoStatus(group); err != nil {
 				return nil, err
 			}
-			if limit, ok := group["userMax"]; ok {
-				if err := validateAutoGroupUserMax(limit); err != nil {
-					return nil, err
-				}
+			scope := adminScope{Global: r.uid() == 1}
+			if !scope.Global {
+				scope.AgentUserID = agentID
+				scope.referralTable = a.t("imgo_referral_path")
 			}
-			if owner := number(group["owner_uid"]); owner > 0 {
-				if err := a.validateAgentSettingUser(r.ctx(), agentID, owner); err != nil {
-					return nil, err
+			mode, err := a.validateAutoGroupSetting(r.ctx(), a.db, group, &scope)
+			if err != nil {
+				return nil, err
+			}
+			if mode == autoGroupModeCreate {
+				if owner := number(group["owner_uid"]); owner > 0 {
+					if err := a.validateAgentSettingUser(r.ctx(), agentID, owner); err != nil {
+						return nil, err
+					}
+				} else if number(group["status"]) == 1 {
+					return nil, clientError{"自动建群的群主无效", 400}
 				}
-			} else if number(group["status"]) == 1 {
-				return nil, clientError{"自动建群的群主无效", 400}
 			}
 			groupValue = js(group)
 		}
-		_, err = a.db.ExecContext(r.ctx(), "INSERT INTO "+a.t("imgo_agent_setting")+" (agent_user_id,auto_add_user,auto_add_group,updated_by,updated_at) VALUES (?,?,?,?,?) ON DUPLICATE KEY UPDATE auto_add_user=VALUES(auto_add_user),auto_add_group=VALUES(auto_add_group),updated_by=VALUES(updated_by),updated_at=VALUES(updated_at)", agentID, userValue, groupValue, r.uid(), time.Now().Unix())
+		identityRaw, identityPresent := r.p["identity_enabled"]
+		withdrawalRaw, withdrawalPresent := r.p["withdrawal_methods"]
+		withdrawalEnabledRaw, withdrawalEnabledPresent := r.p["withdrawal_enabled"]
+		withdrawalPasswordInheritedRaw, withdrawalPasswordInheritedPresent := r.p["withdrawal_password_required_inherited"]
+		var identityEnabled bool
+		if identityPresent {
+			var valid bool
+			identityEnabled, valid = agentSettingBool(identityRaw)
+			if !valid {
+				return nil, clientError{"实名认证开关无效", 400}
+			}
+		}
+		var withdrawalMethods M
+		if withdrawalPresent {
+			withdrawalMethods, err = normalizeWithdrawalMethods(obj(withdrawalRaw))
+			if err != nil {
+				return nil, err
+			}
+		}
+		var withdrawalEnabled bool
+		if withdrawalEnabledPresent {
+			var valid bool
+			withdrawalEnabled, valid = agentSettingBool(withdrawalEnabledRaw)
+			if !valid {
+				return nil, clientError{"提现功能开关无效", 400}
+			}
+		}
+		var withdrawalPasswordRequired any
+		if withdrawalPasswordInheritedPresent {
+			inherited, valid := agentSettingBool(withdrawalPasswordInheritedRaw)
+			if !valid {
+				return nil, clientError{"提现密码继承标志无效", 400}
+			}
+			if !inherited {
+				required, valid := agentSettingBool(r.p["withdrawal_password_required"])
+				if !valid {
+					return nil, clientError{"提现密码开关无效", 400}
+				}
+				withdrawalPasswordRequired = required
+			}
+		}
+		columns := []string{"agent_user_id", "auto_add_user", "auto_add_group"}
+		values := []any{agentID, userValue, groupValue}
+		updates := []string{"auto_add_user=VALUES(auto_add_user)", "auto_add_group=VALUES(auto_add_group)"}
+		if identityPresent {
+			columns = append(columns, "identity_enabled")
+			values = append(values, identityEnabled)
+			updates = append(updates, "identity_enabled=VALUES(identity_enabled)")
+		}
+		if withdrawalPresent {
+			columns = append(columns, "withdrawal_methods")
+			values = append(values, js(withdrawalMethods))
+			updates = append(updates, "withdrawal_methods=VALUES(withdrawal_methods)")
+		}
+		if withdrawalEnabledPresent {
+			columns = append(columns, "withdrawal_enabled")
+			values = append(values, withdrawalEnabled)
+			updates = append(updates, "withdrawal_enabled=VALUES(withdrawal_enabled)")
+		}
+		if withdrawalPasswordInheritedPresent {
+			columns = append(columns, "withdrawal_password_required")
+			values = append(values, withdrawalPasswordRequired)
+			updates = append(updates, "withdrawal_password_required=VALUES(withdrawal_password_required)")
+		}
+		columns = append(columns, "updated_by", "updated_at")
+		values = append(values, r.uid(), time.Now().Unix())
+		updates = append(updates, "updated_by=VALUES(updated_by)", "updated_at=VALUES(updated_at)")
+		placeholders := strings.TrimSuffix(strings.Repeat("?,", len(columns)), ",")
+		query := "INSERT INTO " + a.t("imgo_agent_setting") + " (" + strings.Join(columns, ",") + ") VALUES (" + placeholders + ") ON DUPLICATE KEY UPDATE " + strings.Join(updates, ",")
+		_, err = a.db.ExecContext(r.ctx(), query, values...)
 		return nil, err
 	}
 	return nil, r.fail("未知操作")

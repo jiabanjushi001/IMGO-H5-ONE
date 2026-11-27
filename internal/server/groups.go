@@ -3,7 +3,10 @@ package server
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
+	"maps"
+	"strconv"
 	"strings"
 	"time"
 )
@@ -28,31 +31,68 @@ func (a *App) group(r *request) (any, error) {
 	}
 	if act == "getalluser" {
 		scopeWhere, args := "", []any{r.uid(), gid}
-		if number(r.user["admin_role_id"]) > 0 {
+		if gid > 0 {
+			group, err := r.one("SELECT group_id,setting FROM "+a.t("group")+" WHERE group_id=? AND status=1 AND COALESCE(delete_time,0)=0", gid)
+			if err != nil {
+				return nil, err
+			}
+			member, err := a.member(r.ctx(), a.db, gid, r.uid())
+			if err != nil || !canInviteGroupMember(number(member["role"]), number(obj(group["setting"])["manager_invite"])) {
+				return nil, deny()
+			}
+			audience, err := a.groupInviteAudience(r.ctx(), r.user)
+			if err != nil {
+				return nil, err
+			}
+			if !audience.All {
+				predicate, params := a.groupInviteAudiencePredicate(audience, "u", false)
+				scopeWhere = " AND " + predicate
+				args = append(args, params...)
+			}
+		} else if number(r.user["admin_role_id"]) > 0 {
 			scope, err := a.adminScope(r.ctx(), r.user)
 			if err != nil {
 				return nil, err
 			}
 			if !scope.Global {
-				// A missing group id means the caller is choosing members for a new
-				// group. Existing-group checks only apply while adding members later.
-				if gid > 0 {
-					if err := a.requireScopedGroup(r.ctx(), a.db, scope, gid); err != nil {
-						return nil, err
-					}
-				}
 				predicate, params := scope.userPredicate("u")
 				scopeWhere = " AND " + predicate
 				args = append(args, params...)
 			}
 		}
-		list, e := r.list("SELECT user_id,account,realname,avatar,name_py FROM "+a.t("user")+" u WHERE status=1 AND delete_time=0 AND user_id<>? AND user_id NOT IN (SELECT user_id FROM "+a.t("group_user")+" WHERE group_id=? AND status=1)"+scopeWhere+" ORDER BY user_id LIMIT 2000", args...)
+		where := " FROM " + a.t("user") + " u WHERE status=1 AND delete_time=0 AND user_id<>? AND user_id NOT IN (SELECT user_id FROM " + a.t("group_user") + " WHERE group_id=? AND status=1)" + scopeWhere
+		order := " ORDER BY user_id LIMIT 2000"
+		excludedIDs := ids(r.p["user_ids"])
+		exclude := map[int64]bool{}
+		if r.n("limit") > 0 {
+			if keyword := strings.TrimSpace(r.s("keywords")); keyword != "" {
+				where += " AND (u.realname LIKE ? OR u.account LIKE ?)"
+				pattern := "%" + keyword + "%"
+				args = append(args, pattern, pattern)
+			}
+			if len(excludedIDs) > 0 {
+				where += " AND u.user_id NOT IN (" + marks(len(excludedIDs)) + ")"
+				args = append(args, values(excludedIDs)...)
+			}
+			total, err := r.one("SELECT COUNT(*) n"+where, args...)
+			if err != nil {
+				return nil, err
+			}
+			r.count = number(total["n"])
+			limit, offset := r.pagination()
+			if r.count == 0 || r.page-1 > (r.count-1)/limit {
+				return []M{}, nil
+			}
+			order = " ORDER BY user_id LIMIT ? OFFSET ?"
+			args = append(args, limit, offset)
+		} else {
+			for _, id := range excludedIDs {
+				exclude[id] = true
+			}
+		}
+		list, e := r.list("SELECT user_id,account,realname,avatar,name_py"+where+order, args...)
 		if e != nil {
 			return nil, e
-		}
-		exclude := map[int64]bool{}
-		for _, n := range ids(r.p["user_ids"]) {
-			exclude[n] = true
 		}
 		out := []M{}
 		for _, u := range list {
@@ -143,6 +183,17 @@ func (a *App) group(r *request) (any, error) {
 		value := fmt.Sprintf("%d.%d", gid, exp.Unix())
 		v["qrUrl"] = a.scanURL("g", value+"."+a.signLink(value))
 		v["qrExpire"] = exp.Format("01月02日")
+		if role > 0 && r.n("include_qr_image") == 1 {
+			canShare := number(a.config(r.ctx(), "sysInfo")["showGroupQr"]) == 1
+			v["canShareQr"] = canShare
+			if canShare {
+				qr, err := qrPNGData(str(v["qrUrl"]), 320)
+				if err != nil {
+					return nil, err
+				}
+				v["qrImage"] = qr
+			}
+		}
 		if role == 0 && !adminRead {
 			// An invitation preview must not mint a fresh invitation or expose settings.
 			v = M{"id": v["id"], "group_id": gid, "name": g["name"], "displayName": g["name"], "isJoin": 0, "groupUserCount": n["n"], "setting": M{"invite": obj(g["setting"])["invite"]}, "avatar": a.mediaPath("/avatar/群/120/" + fmt.Sprint(gid))}
@@ -202,7 +253,11 @@ func (a *App) group(r *request) (any, error) {
 		if !canInviteGroupMember(role, number(obj(g["setting"])["manager_invite"])) {
 			return nil, deny()
 		}
-		return nil, a.addMembers(r, g, ids(r.p["user_ids"]))
+		audience, err := a.groupInviteAudience(r.ctx(), r.user)
+		if err != nil {
+			return nil, err
+		}
+		return nil, a.addInvitedMembers(r, g, ids(r.p["user_ids"]), audience)
 	case "editgroupname":
 		if role > 2 {
 			return nil, deny()
@@ -310,27 +365,12 @@ func (a *App) group(r *request) (any, error) {
 		}
 		e = update(r.ctx(), a.db, a.t("group"), M{"notice": sanitizeText(r.s("notice"))}, "group_id=?", gid)
 	case "groupsetting":
-		if role > 2 {
-			return nil, deny()
-		}
-		requested := obj(r.p["setting"])
-		settings := pick(requested, "manage", "invite", "manager_invite", "nospeak", "history")
-		current := obj(g["setting"])
-		settings["number_join"] = number(current["number_join"])
-		if role == 2 {
-			for _, key := range []string{"manage", "invite", "manager_invite", "history", "profile", "number_join"} {
-				if value, exists := requested[key]; exists && number(value) != number(current[key]) {
-					return nil, deny()
-				}
-			}
-			settings = current
-			settings["nospeak"] = number(requested["nospeak"])
-			r.p["setting"] = settings
-		}
-		if number(settings["nospeak"]) < 0 || number(settings["nospeak"]) > 2 {
-			return nil, r.fail("群禁言设置无效")
+		settings, err := mergeGroupSettings(obj(g["setting"]), obj(r.p["setting"]), role)
+		if err != nil {
+			return nil, err
 		}
 		e = update(r.ctx(), a.db, a.t("group"), M{"setting": js(settings)}, "group_id=?", gid)
+		r.p["setting"] = settings
 	case "changeowner":
 		if role != 1 {
 			return nil, deny()
@@ -353,8 +393,128 @@ func (a *App) group(r *request) (any, error) {
 	return nil, nil
 }
 
+func mergeGroupSettings(current, requested M, role int64) (M, error) {
+	if role != 1 && role != 2 {
+		return nil, deny()
+	}
+	result := maps.Clone(current)
+	for _, key := range []string{"manage", "invite", "manager_invite", "profile", "history", "nospeak", "number_join"} {
+		value, supplied := requested[key]
+		if !supplied {
+			continue
+		}
+		if role == 2 && key != "nospeak" && number(value) != number(current[key]) {
+			return nil, deny()
+		}
+		if key == "number_join" || (role == 2 && key != "nospeak") {
+			continue
+		}
+		max := int64(1)
+		if key == "nospeak" {
+			max = 2
+		}
+		n, err := strconv.ParseInt(str(value), 10, 64)
+		if boolValue, ok := value.(bool); ok {
+			n, err = number(boolValue), nil
+		}
+		if err != nil || n < 0 || n > max {
+			return nil, clientError{"群设置值无效", 400}
+		}
+		result[key] = n
+	}
+	return result, nil
+}
+
+// requireGroupMemberInteraction applies only to actions explicitly initiated
+// from a group. Finding a user by their account keeps its existing rules.
+func (a *App) requireGroupMemberInteraction(r *request, target int64) error {
+	if r.s("group_id") == "" {
+		return nil
+	}
+	gid := groupID(r)
+	member, err := a.member(r.ctx(), a.db, gid, r.uid())
+	if err != nil {
+		return err
+	}
+	role := number(member["role"])
+	if role != 1 && role != 2 && r.uid() != 1 && number(r.user["group_friend_add"]) != 1 &&
+		number(obj(member["group_setting"])["profile"]) != 1 {
+		return clientError{"该群未开放成员资料与添加好友", 403}
+	}
+	_, err = a.member(r.ctx(), a.db, gid, target)
+	return err
+}
+
 func canInviteGroupMember(role, managerInvite int64) bool {
 	return role == 1 || role == 2 && managerInvite == 1
+}
+
+type groupInviteAudience struct {
+	All             bool
+	InviterID       int64
+	DescendantScope *adminScope
+}
+
+func (a *App) groupInviteAudience(ctx context.Context, user M) (groupInviteAudience, error) {
+	uid := number(user["user_id"])
+	if uid < 1 {
+		return groupInviteAudience{}, deny()
+	}
+	audience := groupInviteAudience{InviterID: uid}
+	if uid == 1 {
+		audience.All = true
+		return audience, nil
+	}
+	if number(user["admin_role_id"]) < 1 {
+		return audience, nil
+	}
+	scope, err := a.adminScope(ctx, user)
+	if err != nil {
+		return groupInviteAudience{}, err
+	}
+	if scope.Global {
+		audience.All = true
+		return audience, nil
+	}
+	audience.DescendantScope = &scope
+	return audience, nil
+}
+
+func (a *App) groupInviteAudiencePredicate(audience groupInviteAudience, alias string, lock bool) (string, []any) {
+	if audience.All {
+		return "1=1", nil
+	}
+	if !safeSQLAlias(alias) || audience.InviterID < 1 {
+		panic("invalid group invite audience")
+	}
+	friend := "EXISTS (SELECT 1 FROM " + a.t("friend") + " invite_friend WHERE invite_friend.create_user=? AND invite_friend.friend_user_id=" + alias + ".user_id AND invite_friend.status=1)"
+	args := []any{audience.InviterID}
+	if audience.DescendantScope == nil {
+		return friend, args
+	}
+	descendant, descendantArgs := audience.DescendantScope.userPredicateWithLock(alias, lock)
+	return "(" + friend + " OR " + descendant + ")", append(args, descendantArgs...)
+}
+
+func (a *App) requireGroupInviteTarget(ctx context.Context, db DB, audience groupInviteAudience, userID int64) error {
+	if audience.All {
+		return nil
+	}
+	if userID < 1 {
+		return deny()
+	}
+	_, locking := db.(*sql.Tx)
+	predicate, args := a.groupInviteAudiencePredicate(audience, "u", locking)
+	params := append([]any{userID}, args...)
+	query := "SELECT 1 FROM " + a.t("user") + " u WHERE u.user_id=? AND u.status=1 AND u.delete_time=0 AND " + predicate
+	if locking {
+		query += " FOR SHARE"
+	}
+	_, err := one(ctx, db, query, params...)
+	if errors.Is(err, sql.ErrNoRows) {
+		return deny()
+	}
+	return err
 }
 
 func groupEventName(act string) string {
@@ -500,6 +660,18 @@ func (a *App) requireCreateGroupUsers(ctx context.Context, db DB, scope adminSco
 	return nil
 }
 func (a *App) addMembers(r *request, g M, users []int64, scopes ...adminScope) error {
+	var scope *adminScope
+	if len(scopes) > 0 {
+		scope = &scopes[0]
+	}
+	return a.addMembersAuthorized(r, g, users, scope, nil)
+}
+
+func (a *App) addInvitedMembers(r *request, g M, users []int64, audience groupInviteAudience) error {
+	return a.addMembersAuthorized(r, g, users, nil, &audience)
+}
+
+func (a *App) addMembersAuthorized(r *request, g M, users []int64, scope *adminScope, audience *groupInviteAudience) error {
 	if len(users) < 1 || len(users) > 100 {
 		return r.fail("邀请人数须为 1–100")
 	}
@@ -509,16 +681,27 @@ func (a *App) addMembers(r *request, g M, users []int64, scopes ...adminScope) e
 		return e
 	}
 	defer tx.Rollback()
-	locked, e := one(r.ctx(), tx, "SELECT group_id,owner_id FROM "+a.t("group")+" WHERE group_id=? AND status=1 FOR UPDATE", gid)
+	locked, e := one(r.ctx(), tx, "SELECT group_id,owner_id,setting FROM "+a.t("group")+" WHERE group_id=? AND status=1 FOR UPDATE", gid)
 	if e != nil {
 		return e
 	}
-	if len(scopes) > 0 && !scopes[0].Global {
-		if err := a.requireScopedGroupOwner(r.ctx(), tx, scopes[0], number(locked["owner_id"])); err != nil {
+	if scope != nil && !scope.Global {
+		if err := a.requireScopedGroupOwner(r.ctx(), tx, *scope, number(locked["owner_id"])); err != nil {
 			return err
 		}
 		for _, uid := range users {
-			if err := a.requireScopedUser(r.ctx(), tx, scopes[0], uid); err != nil {
+			if err := a.requireScopedUser(r.ctx(), tx, *scope, uid); err != nil {
+				return err
+			}
+		}
+	}
+	if audience != nil {
+		member, err := one(r.ctx(), tx, "SELECT role FROM "+a.t("group_user")+" WHERE group_id=? AND user_id=? AND status=1 FOR SHARE", gid, r.uid())
+		if err != nil || !canInviteGroupMember(number(member["role"]), number(obj(locked["setting"])["manager_invite"])) {
+			return deny()
+		}
+		for _, uid := range users {
+			if err := a.requireGroupInviteTarget(r.ctx(), tx, *audience, uid); err != nil {
 				return err
 			}
 		}

@@ -7,17 +7,34 @@ const ImgoMemberRoleSelect = {
     roleValue() { return Number(this.row.admin_role_id || 0) },
     roleLabel() { return this.row.admin_role_name || (Number(this.row.user_id) === 1 ? '超级管理员' : '普通用户') }
   },
+  watch: {
+    'row.user_id'() { return this.loadRoles() },
+    isSuperOperator() { return this.loadRoles() }
+  },
   mounted() {
-    if (!this.isSuperOperator || Number(this.row.user_id) === 1) return
-    if (!window.__imgoRoleOptionsPromise) {
-      window.__imgoRoleOptionsPromise = this.$api.roleApi.index({}).then(result => {
-        if (result.code !== 0) throw Error(result.msg || '读取角色失败')
-        return Array.isArray(result.data) ? result.data.filter(role => !role.builtin && Number(role.role_id) > 0) : []
-      }).catch(error => { window.__imgoRoleOptionsPromise = null; throw error })
-    }
-    window.__imgoRoleOptionsPromise.then(roles => { this.roles = roles }).catch(error => this.$message.error(error.message || '读取角色失败'))
+    this.loadRoles()
   },
   methods: {
+    loadRoles() {
+      const userID = Number(this.row.user_id)
+      if (!this.isSuperOperator || userID === 1) {
+        this.roles = []
+        return Promise.resolve([])
+      }
+      if (!window.__imgoRoleOptionsPromise) {
+        window.__imgoRoleOptionsPromise = this.$api.roleApi.index({}).then(result => {
+          if (result.code !== 0) throw Error(result.msg || '读取角色失败')
+          return Array.isArray(result.data) ? result.data.filter(role => !role.builtin && Number(role.role_id) > 0) : []
+        }).catch(error => { window.__imgoRoleOptionsPromise = null; throw error })
+      }
+      return window.__imgoRoleOptionsPromise.then(roles => {
+        if (this.isSuperOperator && Number(this.row.user_id) === userID && userID !== 1) this.roles = roles
+        return roles
+      }).catch(error => {
+        if (Number(this.row.user_id) === userID) this.$message.error(error.message || '读取角色失败')
+        return []
+      })
+    },
     async change(adminRoleID) {
       if (this.saving || Number(adminRoleID) === this.roleValue) return
       const previousID = this.roleValue

@@ -79,6 +79,24 @@ func TestCloudSignedURLs(t *testing.T) {
 		})
 	}
 }
+
+func TestAliyunSignedURLUsesESAHost(t *testing.T) {
+	store, err := newObjectStore("aliyun", M{"bucket": "example", "endpoint": "oss-cn-hangzhou.aliyuncs.com", "domain": "https://oss.example.com", "accessId": "dummy-id", "accessSecret": "dummy-secret"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := store.SignedGet(context.Background(), "image/test.png")
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, err := url.Parse(raw)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u.Host != "oss.example.com" || u.Path != "/image/test.png" || u.Query().Get("x-oss-signature") == "" {
+		t.Fatalf("bad ESA signed URL: %s", raw)
+	}
+}
 func TestModerationFailsClosed(t *testing.T) {
 	for _, tc := range []struct {
 		body    string

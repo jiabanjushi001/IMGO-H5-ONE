@@ -5,9 +5,11 @@ import (
 	"flag"
 	"imgo/internal/server"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 )
@@ -78,6 +80,17 @@ func main() {
 	app.StartBatchUserTasks()
 	app.StartOverviewMetrics()
 	httpServer := newHTTPServer(cfg.Addr, app.Router())
+	tcpAddr := strings.TrimSpace(os.Getenv("IMGO_TCP_ADDR"))
+	tcpCertFile := strings.TrimSpace(os.Getenv("IMGO_TCP_TLS_CERT"))
+	tcpKeyFile := strings.TrimSpace(os.Getenv("IMGO_TCP_TLS_KEY"))
+	var tcpListener net.Listener
+	if tcpAddr != "" {
+		tcpListener, e = server.ListenTCP(tcpAddr, tcpCertFile, tcpKeyFile)
+		if e != nil {
+			slog.Error("TCP startup", "error", e)
+			os.Exit(1)
+		}
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	go func() {
@@ -87,10 +100,28 @@ func main() {
 			stop()
 		}
 	}()
+	tcpDone := make(chan struct{})
+	if tcpListener != nil {
+		go func() {
+			defer close(tcpDone)
+			slog.Info("Imgo TCP listening", "address", tcpAddr, "tls", tcpCertFile != "")
+			if e := app.ServeTCP(ctx, tcpListener); e != nil {
+				slog.Error("TCP serve", "error", e)
+				stop()
+			}
+		}()
+	} else {
+		close(tcpDone)
+	}
 	<-ctx.Done()
 	shutdown, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
 	if e = httpServer.Shutdown(shutdown); e != nil {
 		slog.Error("shutdown", "error", e)
+	}
+	select {
+	case <-tcpDone:
+	case <-shutdown.Done():
+		slog.Error("TCP shutdown", "error", shutdown.Err())
 	}
 }

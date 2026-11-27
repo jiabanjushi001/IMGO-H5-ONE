@@ -60,6 +60,7 @@ func (a *App) contact(r *request, id string) (M, error) {
 		v["name_py"] = g["name_py"]
 		v["avatar"] = a.groupAvatarURL(gid)
 		v["setting"] = obj(g["setting"])
+		v["notice"] = g["notice"]
 		if history, ok := obj(g["setting"])["history"]; ok && number(history) == 0 {
 			joinedAfter = number(m["create_time"])
 		}
@@ -227,6 +228,7 @@ func (a *App) contacts(r *request, uid int64, scopes ...adminScope) (any, error)
 		v["is_notice"] = g["is_notice"]
 		v["is_top"] = g["is_top"]
 		v["setting"] = obj(g["setting"])
+		v["notice"] = g["notice"]
 		after := int64(0)
 		if history, ok := obj(g["setting"])["history"]; ok && number(history) == 0 {
 			after = number(g["joined_at"])
@@ -352,6 +354,9 @@ func (a *App) friend(r *request) (any, error) {
 		if uid <= 0 || uid == r.uid() {
 			return nil, r.fail("不能添加自己")
 		}
+		if e := a.requireGroupMemberInteraction(r, uid); e != nil {
+			return nil, e
+		}
 		if _, e := r.one("SELECT user_id FROM "+a.t("user")+" WHERE user_id=? AND status=1 AND delete_time=0", uid); e != nil {
 			return nil, e
 		}
@@ -457,9 +462,6 @@ func (a *App) rtc(r *request) (any, error) {
 	if g != 0 {
 		return nil, r.fail("音视频通话只支持私聊")
 	}
-	if e := a.canChat(r, to, g, true); e != nil {
-		return nil, e
-	}
 	event := r.s("event")
 	if event == "" {
 		event = "calling"
@@ -468,18 +470,37 @@ func (a *App) rtc(r *request) (any, error) {
 	if !allowed[event] {
 		return nil, r.fail("通话事件无效")
 	}
-	ext := pick(r.p, "type", "status", "event", "callTime", "sdp", "iceCandidate", "code", "isMobile")
+	// Only a new call must pass the private-chat write policy. Once the call
+	// message exists, accept/SDP/ICE/hangup events are authorised below by
+	// accessibleMessage, which verifies that the sender is a call participant.
+	// Reapplying the friend/customer-service rule here prevents a normal user
+	// from answering a call initiated by an administrator or mentor.
+	if e := a.canChat(r, to, g, event == "calling"); e != nil {
+		return nil, e
+	}
+	ext := pick(r.p, "type", "status", "event", "callTime", "sdp", "iceCandidate", "code", "isMobile", "video_mode", "video_file_id")
 	ext["event"] = event
 	if number(ext["code"]) == 0 {
 		ext["code"] = 901
 	}
 	if event == "calling" {
 		ext["status"] = 3
+		videoMode := strings.ToLower(strings.TrimSpace(r.s("video_mode")))
+		if r.n("type") != 1 {
+			delete(ext, "video_mode")
+			delete(ext, "video_file_id")
+		} else if videoMode == "recorded" {
+			if _, err := a.validateRecordedCallVideo(r); err != nil {
+				return nil, err
+			}
+			ext["video_mode"] = "recorded"
+			ext["video_file_id"] = r.n("video_file_id")
+		} else {
+			ext["video_mode"] = "live"
+			delete(ext, "video_file_id")
+		}
 	}
-	content := "语音通话"
-	if r.n("type") == 1 {
-		content = "视频通话"
-	}
+	content := rtcCallingContent(r.n("type"))
 	switch number(ext["code"]) {
 	case 902:
 		content = "已取消"
@@ -559,6 +580,13 @@ func (a *App) rtc(r *request) (any, error) {
 		a.hub.send([]int64{r.uid()}, "webrtc", own)
 	}
 	return data, nil
+}
+
+func rtcCallingContent(callType int64) string {
+	if callType == 1 {
+		return "视频通话"
+	}
+	return "语音通话"
 }
 
 var _ = fmt.Sprint

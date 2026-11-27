@@ -31,7 +31,7 @@ const ImgoMemberFinanceDialog = {
     money(cents) { return '¥' + (Number(cents || 0) / 100).toFixed(2) },
     date(value) { return value ? new Date(Number(value) * 1000).toLocaleString('zh-CN', { timeZone: 'Asia/Shanghai', hour12: false }) : '—' },
     async open(member, mode) {
-      if (!member || Number(member.user_id) < 1 || !['recharge', 'withdraw'].includes(mode)) return
+      if (!member || Number(member.user_id) < 1 || !['recharge', 'debit', 'withdraw'].includes(mode)) return
       this.member = { user_id: Number(member.user_id), account: member.account || '', realname: member.realname || '' }
       this.mode = mode
       this.amount = ''
@@ -79,8 +79,9 @@ const ImgoMemberFinanceDialog = {
     async submit() {
       if (!this.member || this.saving || !this.account) return
       const amount = String(this.amount).trim(), note = String(this.note).trim()
-      if (!this.amountCents || note.length > 500 || (this.mode === 'recharge' && note.length < 2)) {
-        this.$message.warning('请输入正确金额；充值备注至少 2 字，最多 500 字')
+      const recharge = this.mode === 'recharge', debit = this.mode === 'debit'
+      if (!this.amountCents || note.length > 500 || ((recharge || debit) && note.length < 2)) {
+        this.$message.warning('请输入正确金额；充值或扣款原因至少 2 字，最多 500 字')
         return
       }
       let bonusValue = ''
@@ -91,21 +92,29 @@ const ImgoMemberFinanceDialog = {
           : /^(\d{1,4})(?:\.(\d{1,2}))?$/.test(bonusValue) && Number(bonusValue) > 0 && Number(bonusValue) <= 1000 && this.bonusCents > 0
         if (!valid) { this.$message.warning('请填写有效的赠送金额或百分比（最多 1000%）'); return }
       }
-      const recharge = this.mode === 'recharge'
-      const title = recharge ? '确认充值并立即到账' : '确认提现并立即冻结'
+      if (debit && this.amountCents > Number(this.account.available_cents || 0)) {
+        this.$message.warning('扣款金额不能超过当前可用余额')
+        return
+      }
+      const title = recharge ? '确认充值并立即到账' : debit ? '确认直接扣减余额' : '确认提现并立即冻结'
       const message = recharge
         ? `将为 ${this.member.account} 充值 ${this.money(this.amountCents)}，赠送 ${this.money(this.bonusCents)}，合计 ${this.money(this.amountCents + this.bonusCents)} 立即增加可用余额。`
-        : `将为 ${this.member.account} 创建提现订单 ${this.money(this.amountCents)}，立即从可用余额冻结，待线下打款审核。`
+        : debit
+          ? `将从 ${this.member.account} 的可用余额直接扣减 ${this.money(this.amountCents)}。不会创建提现订单，也不需要绑定银行卡。`
+          : `将为 ${this.member.account} 创建提现订单 ${this.money(this.amountCents)}，立即从可用余额冻结，待线下打款审核。`
       try { await this.$confirm(message, title, { type: 'warning', confirmButtonText: '确认操作', cancelButtonText: '取消' }) }
       catch (_) { return }
       this.saving = true
       try {
         const payload = { user_id: this.member.user_id, amount, note, request_id: this.requestID }
         if (recharge) { payload.bonus_mode = this.bonusMode; payload.bonus_value = bonusValue }
-        const result = await (recharge ? this.$api.walletApi.recharge(payload) : this.$api.walletApi.withdraw(payload))
+        const result = await (recharge ? this.$api.walletApi.recharge(payload) : debit ? this.$api.walletApi.debit(payload) : this.$api.walletApi.withdraw(payload))
         if (result.code !== 0) throw Error(result.msg || '订单提交失败')
-        const orderID = recharge ? result.data.order_id : result.data.withdrawal_id
-        this.$message.success(`${recharge ? '充值' : '提现'}订单 ${recharge ? 'CZ' : 'TX'}-${String(orderID).padStart(8, '0')} 已生成，余额与账变已记录`)
+        if (debit) this.$message.success(`已扣减 ${this.money(this.amountCents)}，余额账变和操作原因已记录`)
+        else {
+          const orderID = recharge ? result.data.order_id : result.data.withdrawal_id
+          this.$message.success(`${recharge ? '充值' : '提现'}订单 ${recharge ? 'CZ' : 'TX'}-${String(orderID).padStart(8, '0')} 已生成，余额与账变已记录`)
+        }
         this.amount = ''
         this.note = ''
         this.bonusMode = 'none'
@@ -116,11 +125,11 @@ const ImgoMemberFinanceDialog = {
       finally { this.saving = false }
     },
     eventName(event) {
-      return ({ recharge: '充值本金', recharge_bonus: '充值赠送', credit: '人工入账', withdraw: '提现冻结', refund: '提现退回', paid: '提现打款' })[event] || event
+      return ({ recharge: '充值本金', recharge_bonus: '充值赠送', credit: '人工入账', debit: '人工扣款', withdraw: '提现冻结', refund: '提现退回', paid: '提现打款' })[event] || event
     }
   },
   render(h) {
-    const member = this.member || {}, recharge = this.mode === 'recharge'
+    const member = this.member || {}, recharge = this.mode === 'recharge', debit = this.mode === 'debit'
     const field = (value, placeholder, change, type = 'text') => h('el-input', {
       props: { value, type, clearable: true, rows: type === 'textarea' ? 2 : undefined },
       attrs: { placeholder, maxlength: type === 'textarea' ? 500 : undefined },
@@ -133,7 +142,7 @@ const ImgoMemberFinanceDialog = {
       h('el-table', { props: { data: rows, border: true, stripe: true, size: 'mini', maxHeight: 210 }, directives: [{ name: 'loading', value: this.historyLoading }] }, columns)
     ])
     return h('el-dialog', {
-      props: { title: `${recharge ? '充值' : '提现'} · ${member.account || ''}（ID ${member.user_id || '—'}）`, visible: this.visible, width: '700px', appendToBody: true, closeOnClickModal: false, closeOnPressEscape: !this.saving, showClose: !this.saving },
+      props: { title: `${recharge ? '充值' : debit ? '扣款' : '提现'} · ${member.account || ''}（ID ${member.user_id || '—'}）`, visible: this.visible, width: '700px', appendToBody: true, closeOnClickModal: false, closeOnPressEscape: !this.saving, showClose: !this.saving },
       on: { close: this.close }
     }, this.visible ? [
       h('div', { class: 'imgo-member-finance-summary' }, [
@@ -142,17 +151,19 @@ const ImgoMemberFinanceDialog = {
         h('el-button', { props: { type: 'text', loading: this.loading }, on: { click: this.refresh } }, '刷新')
       ]),
       h('el-form', { class: 'imgo-member-finance-form' }, [
-        formItem(recharge ? '充值金额' : '提现金额', field(this.amount, '请输入金额（元）', value => this.change('amount', value))),
+        formItem(recharge ? '充值金额' : debit ? '扣款金额' : '提现金额', field(this.amount, '请输入金额（元）', value => this.change('amount', value))),
         recharge ? formItem('赠送方式', h('el-radio-group', { props: { value: this.bonusMode }, on: { input: value => { this.change('bonusMode', value); this.bonusValue = '' } } }, [
           h('el-radio', { props: { label: 'none' } }, '不赠送'),
           h('el-radio', { props: { label: 'percent' } }, '百分比'),
           h('el-radio', { props: { label: 'fixed' } }, '固定金额')
         ])) : null,
         recharge && this.bonusMode !== 'none' ? formItem(this.bonusMode === 'percent' ? '赠送百分比' : '赠送金额', field(this.bonusValue, this.bonusMode === 'percent' ? '如 10 或 2.5（%）' : '固定赠送金额（元）', value => this.change('bonusValue', value))) : null,
-        formItem('备注', field(this.note, recharge ? '必填，至少 2 字；记录本次充值原因' : '可选，记录本次提现原因', value => this.change('note', value), 'textarea')),
+        formItem(debit ? '扣款原因' : '备注', field(this.note, recharge ? '必填，至少 2 字；记录本次充值原因' : debit ? '必填，至少 2 字；如：纠正重复充值' : '可选，记录本次提现原因', value => this.change('note', value), 'textarea')),
         h('div', { class: 'imgo-member-finance-preview' }, recharge
           ? `本金 ${this.money(this.amountCents)} + 赠送 ${this.money(this.bonusCents)} = 立即到账 ${this.money(this.amountCents + this.bonusCents)}`
-          : `提交后冻结 ${this.money(this.amountCents)}；不会自动向银行卡转账。`)
+          : debit
+            ? `确认后直接扣减 ${this.money(this.amountCents)}；不生成提现订单，不检查银行卡。`
+            : `提交后冻结 ${this.money(this.amountCents)}；不会自动向银行卡转账。`)
       ]),
       history('最近充值订单', this.recharges, [
         h('el-table-column', { props: { label: '订单号', width: '145' }, scopedSlots: { default: scope => 'CZ-' + String(scope.row.order_id).padStart(8, '0') } }),
@@ -175,7 +186,7 @@ const ImgoMemberFinanceDialog = {
       ]),
       h('span', { slot: 'footer' }, [
         h('el-button', { props: { disabled: this.saving }, on: { click: this.close } }, '关闭'),
-        h('el-button', { props: { type: recharge ? 'primary' : 'warning', disabled: !this.account, loading: this.saving }, on: { click: this.submit } }, recharge ? '确认充值并到账' : '确认提现并冻结')
+        h('el-button', { props: { type: recharge ? 'primary' : debit ? 'danger' : 'warning', disabled: !this.account, loading: this.saving }, on: { click: this.submit } }, recharge ? '确认充值并到账' : debit ? '确认直接扣款' : '确认提现并冻结')
       ])
     ] : [])
   }

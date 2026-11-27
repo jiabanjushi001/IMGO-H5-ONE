@@ -177,8 +177,8 @@ func googleAuthURI(systemName, account, secret string) string {
 	return "otpauth://totp/" + url.PathEscape(label) + "?" + query.Encode()
 }
 
-func googleAuthQRData(uri string) (string, error) {
-	png, err := qrcode.Encode(uri, qrcode.Medium, 240)
+func qrPNGData(uri string, size int) (string, error) {
+	png, err := qrcode.Encode(uri, qrcode.Medium, size)
 	if err != nil {
 		return "", err
 	}
@@ -223,7 +223,7 @@ func (a *App) googleAuthDetail(r *request) (any, error) {
 	token := randomID()
 	a.put("google-setup:"+token, M{"user_id": userID, "secret": secret}, 10*time.Minute)
 	uri := googleAuthURI(str(a.config(r.ctx(), "sysInfo")["name"]), str(user["account"]), secret)
-	qr, err := googleAuthQRData(uri)
+	qr, err := qrPNGData(uri, 240)
 	if err != nil {
 		return nil, err
 	}

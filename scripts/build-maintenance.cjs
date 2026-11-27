@@ -110,6 +110,16 @@ const extension = `;${begin}\n${read('frontend/notice-actions.js')};\n${panel};\
 text = text.replace(anchor, anchor + extension);
 write(chunk, text);
 let app = read('public/assets/js/app.85372e4e.js');
+app = app.replace(/\/\* IMGO_ADMIN_DIRECT_UPLOAD_BEGIN \*\/[\s\S]*?\/\* IMGO_ADMIN_DIRECT_UPLOAD_END \*\//, '');
+app = app.replace('uploadAvatar:t=>imgoAdminUpload(t,"uploadAvatar",()=>Ti({url:"common/upload/uploadAvatar",method:"post",data:t,headers:{"Content-Type":"multipart/form-data"}}))', 'uploadAvatar:t=>Ti({url:"common/upload/uploadAvatar",method:"post",data:t,headers:{"Content-Type":"multipart/form-data"}})');
+app = app.replace('Rs.sendFileAPI=t=>imgoAdminUpload(t,"uploadFile",()=>Ti({url:"common/upload/uploadFile",method:"post",data:t,timeout:0,headers:{"Content-Type":"multipart/form-data"}}))', 'Rs.sendFileAPI=t=>Ti({url:"common/upload/uploadFile",method:"post",data:t,timeout:0,headers:{"Content-Type":"multipart/form-data"}})');
+const directUploadAPIAnchor = /var Ti=Si;\s*const Ni=/;
+if (!directUploadAPIAnchor.test(app)) throw Error('Admin direct upload API anchor changed');
+app = app.replace(directUploadAPIAnchor, 'var Ti=Si;'+read('frontend/admin-direct-upload.js')+'const Ni=');
+const legacyAdminAvatarUpload = 'uploadAvatar:t=>Ti({url:"common/upload/uploadAvatar",method:"post",data:t,headers:{"Content-Type":"multipart/form-data"}})';
+const directAdminAvatarUpload = 'uploadAvatar:t=>imgoAdminUpload(t,"uploadAvatar",()=>Ti({url:"common/upload/uploadAvatar",method:"post",data:t,headers:{"Content-Type":"multipart/form-data"}}))';
+if (!app.includes(legacyAdminAvatarUpload)) throw Error('Admin avatar upload API anchor changed');
+app = app.replace(legacyAdminAvatarUpload, directAdminAvatarUpload);
 const accountLoginSave = ',window.ImgoAccountVault&&window.ImgoAccountVault.save({authToken:i.authToken,sessionId:i.sessionId,userInfo:i.userInfo})';
 app = app.replaceAll(accountLoginSave, '');
 const accountLoginAnchor = 't("SET_AUTH",i),t("SET_USERINFO",i.userInfo)';
@@ -187,14 +197,40 @@ for (const [name, variable, source] of [
  }
  const anchor = name === 'CHAT' ? '_e=Ae,' : 'be=ve,';
  if (!app.includes(anchor)) throw Error('Invitation component anchor changed: ' + name);
- app = app.replace(anchor, anchor.split('=')[0] + '=(function(component){' + start + '\n' + read(source) + (name === 'CHAT' ? '\n' + read('frontend/chat-profile.js') + '\n' + read('frontend/chat-context-remark.js') + '\n' + read('frontend/group-avatar-chat.js') + '\n' + read('frontend/chat-quick-replies.js') + '\n' + read('frontend/chat-join-group.js') + '\n' + read('frontend/chat-account-switcher.js') + '\n' + read('frontend/contact-search.js') + '\n' + read('frontend/group-mute-chat.js') + '\n' + read('frontend/group-invite-permission.js') + '\n' + read('frontend/mobile-chat.js') + '\n' + read('frontend/socket-recovery.js') : '') +
+ app = app.replace(anchor, anchor.split('=')[0] + '=(function(component){' + start + '\n' + read(source) + (name === 'CHAT' ? '\n' + read('frontend/chat-profile.js') + '\n' + read('frontend/chat-context-remark.js') + '\n' + read('frontend/group-avatar-chat.js') + '\n' + read('frontend/chat-quick-replies.js') + '\n' + read('frontend/chat-prepared-video.js') + '\n' + read('frontend/chat-rtc-reliability.js') + '\n' + read('frontend/chat-video-poster.js') + '\n' + read('frontend/chat-join-group.js') + '\n' + read('frontend/chat-account-switcher.js') + '\n' + read('frontend/contact-search.js') + '\n' + read('frontend/group-member-search.js') + '\n' + read('frontend/group-mute-chat.js') + '\n' + read('frontend/group-invite-permission.js') + '\n' + read('frontend/mobile-chat.js') + '\n' + read('frontend/media-auth-recovery.js') + '\n' + read('frontend/chat-message-state.js') + '\n' + read('frontend/socket-recovery.js') : '') +
   '\nreturn component;' + end + '})(' + variable + '),');
 }
+// Add a compact search field to the chat group-member panel and render only
+// matching members. Normalize previous output first so repeated builds remain
+// deterministic when starting from an already generated bundle.
+const groupMemberSearchControl = 'e("div",{staticClass:"imgo-group-member-search"},[e("el-input",{attrs:{size:"small",clearable:"",placeholder:"搜索群成员昵称或账号","prefix-icon":"el-icon-search"},model:{value:t.imgoGroupMemberKeyword,callback:function(e){t.imgoGroupMemberKeyword=e},expression:"imgoGroupMemberKeyword"}})],1),';
+const groupMemberHeading = 'e("div",{staticClass:"group-side-title"},[e("h4",[t._v("群成员")]),e("div",[1==i.role||2==i.role&&1==i.setting.manager_invite?e("span",{staticClass:"el-icon-circle-plus-outline f-18 cur-handle",on:{click:t.openAddGroupUser}}):t._e()])]),';
+const groupMemberList = 'e("el-scrollbar",{staticStyle:{height:"100%"}},t._l(t.groupUser,(function(i,s){';
+const filteredGroupMemberList = 'e("el-scrollbar",{staticStyle:{height:"100%"}},t._l(t.imgoFilteredGroupUsers,(function(i,s){';
+const groupMemberEmptyState = 't.imgoGroupMemberKeyword&&0===t.imgoFilteredGroupUsers.length?e("div",{staticClass:"imgo-group-member-empty"},[t._v("未找到群成员")]):t._e(),';
+const groupMemberBodyHeight = 'e("div",{staticClass:"group-user-body",style:[{height:"calc("+t.curHeight+" - 230px)"';
+const searchedGroupMemberBodyHeight = 'e("div",{staticClass:"group-user-body",style:[{height:"calc("+t.curHeight+" - 274px)"';
+app = app.replaceAll(groupMemberSearchControl, '');
+app = app.replaceAll(groupMemberEmptyState, '');
+app = app.replaceAll(filteredGroupMemberList, groupMemberList);
+app = app.replaceAll(searchedGroupMemberBodyHeight, groupMemberBodyHeight);
+if (!app.includes(groupMemberHeading + 'e("hr"),')) throw Error('Chat group-member heading anchor changed');
+if (!app.includes(groupMemberList)) throw Error('Chat group-member list anchor changed');
+if (!app.includes(groupMemberBodyHeight)) throw Error('Chat group-member body-height anchor changed');
+app = app.replace(groupMemberHeading + 'e("hr"),', groupMemberHeading + groupMemberSearchControl + 'e("hr"),');
+app = app.replace(groupMemberList, groupMemberEmptyState + filteredGroupMemberList);
+app = app.replace(groupMemberBodyHeight, searchedGroupMemberBodyHeight);
 const legacyUploadLimit = 'if(i.size>1024*this.globalConfig.fileUpload.size*1024)return s.removeMessage(t.id),this.$message.error("上传的内容不等大于"+this.globalConfig.fileUpload.size+"MB！");';
 const mediaUploadLimit = 'if(i.size>1024*imgoUploadLimitMB(t,this.globalConfig.fileUpload)*1024)return s.removeMessage(t.id),this.$message.error("上传的内容不能大于"+imgoUploadLimitMB(t,this.globalConfig.fileUpload)+"MB！");';
 if (!app.includes(mediaUploadLimit)) {
  if (!app.includes(legacyUploadLimit)) throw Error('Chat upload-size guard changed');
  app = app.replace(legacyUploadLimit, mediaUploadLimit);
+}
+const videoPosterUpload = 'n.append("file",i),n.append("message",JSON.stringify(t)),i.__imgoPoster&&n.append("poster",i.__imgoPoster,"video-cover.jpg"),this.$api.imApi.sendFileAPI(n)';
+if (!app.includes(videoPosterUpload)) {
+ const uploadWithoutVideoPoster = 'n.append("file",i),n.append("message",JSON.stringify(t)),this.$api.imApi.sendFileAPI(n)';
+ if (!app.includes(uploadWithoutVideoPoster)) throw Error('Chat video-poster upload anchor changed');
+ app = app.replace(uploadWithoutVideoPoster, videoPosterUpload);
 }
 // Ordinary API calls keep the global 60-second timeout. File and video uploads
 // must not inherit it: on slower connections a valid 200 MB upload can easily
@@ -205,6 +241,17 @@ const resilientSendFileAPI = 'Rs.sendFileAPI=t=>Ti({url:"common/upload/uploadFil
 if (!app.includes(resilientSendFileAPI)) {
  if (!app.includes(legacySendFileAPI)) throw Error('Chat file-upload API anchor changed');
  app = app.replace(legacySendFileAPI, resilientSendFileAPI);
+}
+const directAdminFileUpload = 'Rs.sendFileAPI=t=>imgoAdminUpload(t,"uploadFile",()=>Ti({url:"common/upload/uploadFile",method:"post",data:t,timeout:0,headers:{"Content-Type":"multipart/form-data"}}))';
+if (!app.includes(resilientSendFileAPI)) throw Error('Admin file upload API anchor changed');
+app = app.replace(resilientSendFileAPI, directAdminFileUpload);
+// Axios previously stayed silent when an upload was rejected by Nginx, timed
+// out, or lost its network connection before a JSON response arrived.
+const silentNetworkError = '(t=>{if(t.response){const e=t.response;500==e.status?Ai("服务器返回错误，请检查！"):e.data&&e.data.msg&&Ai(e.data.msg)}return Promise.reject(t)}));';
+const visibleNetworkError = '(t=>{const e=t&&t.response,i=t&&t.config,s=!!(i&&i.data&&"undefined"!=typeof FormData&&i.data instanceof FormData),r=e&&e.data&&e.data.request_id||e&&e.headers&&e.headers["x-request-id"]||"";let o=e&&e.data&&e.data.msg||"";return o||(o=e?413===e.status?"上传失败：文件超过服务器允许的大小":"服务器请求失败（HTTP "+e.status+"）":t&&"ECONNABORTED"===t.code?"请求超时，请检查网络后重试":"网络中断或服务器无响应，请重试"),s&&o.indexOf("上传")<0&&(o="上传失败："+o),r&&-1===o.indexOf(r)&&(o+="（请求编号："+r+"）"),Ai(o,"error"),Promise.reject(t)}));';
+if (!app.includes(visibleNetworkError)) {
+ if (!app.includes(silentNetworkError)) throw Error('Axios network-error handler changed');
+ app = app.replace(silentNetworkError, visibleNetworkError);
 }
 const contactSearchInput = 'attrs:{placeholder:"\u641c\u7d22\u8054\u7cfb\u4eba","prefix-icon":"el-icon-search"}';
 const improvedContactSearchInput = 'attrs:{placeholder:"\u641c\u7d22\u8d26\u53f7\u3001\u6635\u79f0\u6216\u7fa4聊","prefix-icon":"el-icon-search",autocomplete:"one-time-code",name:"imgo-contact-search"}';
@@ -231,10 +278,26 @@ const socketAnchorIndex = app.indexOf('K=G,z=', socketComponentIndex);
 if (socketComponentIndex < 0 || socketAnchorIndex < 0) throw Error('Socket component anchor changed');
 const socketReplacement = 'K=(function(component){' + socketBegin + '\n' + read('frontend/socket-reliability.js') + '\nreturn component;' + socketEnd + '})(G),z=';
 app = app.slice(0, socketAnchorIndex) + socketReplacement + app.slice(socketAnchorIndex + 'K=G,z='.length);
+// Let recorded calls provide the caller's media stream without opening the camera.
+const preparedRtcBegin = '/* IMGO_PREPARED_RTC_BEGIN */', preparedRtcEnd = '/* IMGO_PREPARED_RTC_END */';
+const preparedRtcWrapper = '(function(component){' + preparedRtcBegin;
+if (app.includes(preparedRtcWrapper)) {
+ const from = app.indexOf(preparedRtcWrapper), to = app.indexOf(preparedRtcEnd, from);
+ if (to < 0) throw Error('Incomplete prepared-video WebRTC adapter');
+ app = app.slice(0, from) + 'ue' + app.slice(to + preparedRtcEnd.length + '})(ue)'.length);
+}
+const preparedRtcAnchor = 'he=ue,pe=';
+if (!app.includes(preparedRtcAnchor)) throw Error('WebRTC component anchor changed');
+app = app.replace(preparedRtcAnchor, 'he=(function(component){' + preparedRtcBegin + '\n' + read('frontend/webrtc-prepared-video.js') + '\nreturn component;' + preparedRtcEnd + '})(ue),pe=');
 if (!app.includes('Rs.getQuickRepliesAPI=')) {
  const imApiAnchor = 'Rs.forwardMessageAPI=';
  if (!app.includes(imApiAnchor)) throw Error('Chat API anchor changed');
  app = app.replace(imApiAnchor, 'Rs.getQuickRepliesAPI=t=>Ti({url:"enterprise/im/getQuickReplies",method:"post",data:t}),Rs.saveQuickRepliesAPI=t=>Ti({url:"enterprise/im/saveQuickReplies",method:"post",data:t}),' + imApiAnchor);
+}
+if (!app.includes('Rs.getCallVideosAPI=')) {
+ const imApiAnchor = 'Rs.getQuickRepliesAPI=';
+ if (!app.includes(imApiAnchor)) throw Error('Prepared-video API anchor changed');
+ app = app.replace(imApiAnchor, 'Rs.getCallVideosAPI=t=>Ti({url:"enterprise/callVideo/index",method:"post",data:t}),' + imApiAnchor);
 }
 if (!app.includes('Rs.joinGroupAPI=')) {
  const imApiAnchor = 'Rs.getQuickRepliesAPI=';
@@ -324,6 +387,27 @@ const editorFooterSpacer = 't.quote?e("div",{staticClass:"message-quote cur-hand
 const editorFooterQuick = 't.quote?e("div",{staticClass:"message-quote cur-handle mr-10 lz-flex lz-space-between lz-align-items-center"},[e("div",{staticClass:"text-overflow"},[t._v(t._s(t.quote.content))]),e("div",{staticClass:"el-icon-close",on:{click:function(e){return t.closeQuote()}}})]):t._e(),'+quickReplyFooter+'e("div"),e("div",[t._v(t._s(1==t.setting.sendKey?"使用 Ctrl + Enter 换行":"使用 Ctrl + Enter 发送消息"))])';
 if (!app.includes(editorFooterSpacer)) throw Error('Chat editor footer anchor changed');
 app = app.replace(editorFooterSpacer, editorFooterQuick);
+const preparedVideoDialog = 'e("imgo-prepared-video-dialog",{attrs:{visible:t.preparedVideoDialog},on:{"update:visible":function(e){t.preparedVideoDialog=e},select:t.imgoStartVideoMode}}),';
+app = app.replaceAll(preparedVideoDialog, '');
+const webRtcRender = 'e("webrtc",{key:t.componentKey,ref:"webrtc",attrs:{contact:t.currentChat,config:t.webrtcConfig,alias:t.$packageData.name,userInfo:t.user},on:{message:t.rtcMsg}})';
+const preparedWebRtcRender = 'e("webrtc",{key:t.componentKey,ref:"webrtc",attrs:{contact:t.currentChat,config:t.webrtcConfig,alias:t.$packageData.name,userInfo:t.user,"video-mode":t.preparedVideoMode,"video-url":t.preparedVideoUrl},on:{message:t.rtcMsg}})';
+if (app.includes(webRtcRender)) app = app.replace(webRtcRender, preparedVideoDialog + preparedWebRtcRender);
+else if (app.includes(preparedWebRtcRender)) app = app.replace(preparedWebRtcRender, preparedVideoDialog + preparedWebRtcRender);
+else throw Error('Chat WebRTC render anchor changed');
+const plainRtcSignal = 'callTime:t.callTime??"",sdp:t.sdp??"",iceCandidate:e}';
+const preparedRtcSignal = 'callTime:t.callTime??"",sdp:t.sdp??"",iceCandidate:e,video_mode:this.preparedVideoMode||"",video_file_id:this.preparedVideoFileId||0}';
+if (!app.includes(preparedRtcSignal)) {
+ if (!app.includes(plainRtcSignal)) throw Error('Chat WebRTC signal anchor changed');
+ app = app.replace(plainRtcSignal, preparedRtcSignal);
+}
+// Some signaling responses intentionally contain no data (for example after
+// hangup). Never dereference data.extends unless the server returned it.
+const unsafeRtcOfflineCheck = '"907"==e.data.extends.code&&this.$message.error("对方不在线")';
+const safeRtcOfflineCheck = 'e&&e.data&&e.data.extends&&"907"==e.data.extends.code&&this.$message.error("对方不在线")';
+if (!app.includes(safeRtcOfflineCheck)) {
+ if (!app.includes(unsafeRtcOfflineCheck)) throw Error('Chat WebRTC response guard changed');
+ app = app.replace(unsafeRtcOfflineCheck, safeRtcOfflineCheck);
+}
 // Group avatar settings adapter, installed before Vue normalizes the component.
 const groupAvatarStart = '/* IMGO_GROUP_AVATAR_BEGIN */', groupAvatarEnd = '/* IMGO_GROUP_AVATAR_END */';
 const groupAvatarWrapper = '(function(component){' + groupAvatarStart;
@@ -343,6 +427,27 @@ const invitationBound = 'this.websocketSend({type:"bindUid",user_id:i.user_id,to
 if (!app.includes(invitationBound)) {
  if (!app.includes(invitationBind)) throw Error('Socket bind callback changed');
  app = app.replace(invitationBind, invitationBound);
+}
+// A member-level "群添加" grant only bypasses the group-profile privacy
+// prompt so the account can add a visible group member as a friend. It does
+// not alter the separate group invitation, manager, mute or owner checks.
+const ordinaryGroupProfileMenu = '1==r.setting.profile||r.role<3||a||n.user_id==this.user.id?this.$user(n.user_id):this.$message.error("已开启隐私，无法查看资料")';
+const authorizedGroupProfileMenu = '1==r.setting.profile||r.role<3||Number((this.userInfo||{}).group_friend_add)===1||a||n.user_id==this.user.id?this.$user(n.user_id):this.$message.error("已开启隐私，无法查看资料")';
+if (!app.includes(authorizedGroupProfileMenu)) {
+ if (!app.includes(ordinaryGroupProfileMenu)) throw Error('Group profile menu privacy guard changed');
+ app = app.replace(ordinaryGroupProfileMenu, authorizedGroupProfileMenu);
+}
+const ordinaryGroupMessageProfile = 'if(1==i.is_group&&0==this.currentChat.setting.profile&&this.currentChat.role>2)return void this.$message.error("已开启隐私，无法查看资料");';
+const authorizedGroupMessageProfile = 'if(1==i.is_group&&0==this.currentChat.setting.profile&&this.currentChat.role>2&&Number((this.userInfo||{}).group_friend_add)!==1)return void this.$message.error("已开启隐私，无法查看资料");';
+if (!app.includes(authorizedGroupMessageProfile)) {
+ if (!app.includes(ordinaryGroupMessageProfile)) throw Error('Group message profile privacy guard changed');
+ app = app.replace(ordinaryGroupMessageProfile, authorizedGroupMessageProfile);
+}
+const groupFriendPermissionSocket = 'case"groupFriendAddPermission":this.$store.commit("SET_USERINFO",{...this.userInfo,group_friend_add:Number(i.group_friend_add)});break;';
+if (!app.includes(groupFriendPermissionSocket)) {
+ const updateConfigSocket = 'case"updateConfig":this.$store.commit("setGlobalConfig",i);break;';
+ if (!app.includes(updateConfigSocket)) throw Error('Group friend-add socket anchor changed');
+ app = app.replace(updateConfigSocket, groupFriendPermissionSocket + updateConfigSocket);
 }
 const privateTitle = '0==t.is_group?e("span",{staticClass:"displayName"}';
 const adminProfileTitle = '0==t.is_group&&(Number(t.userInfo.user_id)===1||Number(t.userInfo.role)>0)?e("imgo-chat-profile",{attrs:{contact:i}}):';
@@ -461,7 +566,7 @@ app = app.replace(/const ImgoIdentityApi=\{[^;]+\};/, '');
 app = app.replaceAll('identityApi:ImgoIdentityApi,', '');
 if (!app.includes('var Vs=Hs,Gs={')) throw Error('Identity API registry anchor changed');
 app = app.replace('var Vs=Hs,Gs={', identityApi + 'var Vs=Hs,Gs={identityApi:ImgoIdentityApi,');
-const walletApi = 'const ImgoWalletApi={index:t=>Ti({url:"/manage/wallet/index",method:"post",data:t}),detail:t=>Ti({url:"/manage/wallet/detail",method:"post",data:t}),account:t=>Ti({url:"/manage/wallet/account",method:"post",data:t}),credit:t=>Ti({url:"/manage/wallet/credit",method:"post",data:t}),review:t=>Ti({url:"/manage/wallet/review",method:"post",data:t}),freeze:t=>Ti({url:"/manage/wallet/freeze",method:"post",data:t}),entries:t=>Ti({url:"/manage/wallet/entries",method:"post",data:t}),recharges:t=>Ti({url:"/manage/wallet/recharges",method:"post",data:t}),recharge:t=>Ti({url:"/manage/wallet/recharge",method:"post",data:t}),withdraw:t=>Ti({url:"/manage/wallet/withdraw",method:"post",data:t})};';
+const walletApi = 'const ImgoWalletApi={index:t=>Ti({url:"/manage/wallet/index",method:"post",data:t}),detail:t=>Ti({url:"/manage/wallet/detail",method:"post",data:t}),account:t=>Ti({url:"/manage/wallet/account",method:"post",data:t}),credit:t=>Ti({url:"/manage/wallet/credit",method:"post",data:t}),debit:t=>Ti({url:"/manage/wallet/debit",method:"post",data:t}),review:t=>Ti({url:"/manage/wallet/review",method:"post",data:t}),freeze:t=>Ti({url:"/manage/wallet/freeze",method:"post",data:t}),entries:t=>Ti({url:"/manage/wallet/entries",method:"post",data:t}),recharges:t=>Ti({url:"/manage/wallet/recharges",method:"post",data:t}),recharge:t=>Ti({url:"/manage/wallet/recharge",method:"post",data:t}),withdraw:t=>Ti({url:"/manage/wallet/withdraw",method:"post",data:t})};';
 if (!app.includes('const ImgoWalletApi=')) {
  const walletApiAnchor = 'var Vs=Hs,Gs={taskApi:Ms,bankApi:ImgoBankApi,';
  if (!app.includes(walletApiAnchor)) throw Error('Wallet API registry anchor changed');
@@ -497,6 +602,16 @@ if (!app.includes('setInviteCode:t=>Ti(')) {
  if (!app.includes(userApiAnchor)) throw Error('Member API registry changed');
  app = app.replace(userApiAnchor, userApiAnchor + 'setInviteCode:t=>Ti({url:"/manage/User/setInviteCode",method:"post",data:t}),');
 }
+if (!app.includes('setGroupFriendAdd:t=>Ti(')) {
+ const userApiAnchor = 'const Os={';
+ if (!app.includes(userApiAnchor)) throw Error('Member group friend-add API registry changed');
+ app = app.replace(userApiAnchor, userApiAnchor + 'setGroupFriendAdd:t=>Ti({url:"/manage/User/setGroupFriendAdd",method:"post",data:t}),');
+}
+if (!app.includes('setWithdrawal:t=>Ti(')) {
+ const userApiAnchor = 'const Os={';
+ if (!app.includes(userApiAnchor)) throw Error('Member withdrawal API registry changed');
+ app = app.replace(userApiAnchor, userApiAnchor + 'setWithdrawal:t=>Ti({url:"/manage/User/setWithdrawal",method:"post",data:t}),');
+}
 if (!app.includes('googleAuthDetail:t=>Ti(')) {
  const userApiAnchor = 'const Os={';
  if (!app.includes(userApiAnchor)) throw Error('Member Google Auth API registry changed');
@@ -521,6 +636,16 @@ if (!app.includes('getSystemAlert:t=>Ti(')) {
  const configApiAnchor = 'const Ls={';
  if (!app.includes(configApiAnchor)) throw Error('System alert API registry changed');
  app = app.replace(configApiAnchor, configApiAnchor + 'getSystemAlert:t=>Ti({url:"/manage/Config/getSystemAlert",method:"post",data:t}),setSystemAlert:t=>Ti({url:"/manage/Config/setSystemAlert",method:"post",data:t}),testSystemAlert:t=>Ti({url:"/manage/Config/testSystemAlert",method:"post",data:t}),');
+}
+if (!app.includes('getWithdrawalSettings:t=>Ti(')) {
+ const configApiAnchor = 'const Ls={';
+ if (!app.includes(configApiAnchor)) throw Error('Withdrawal settings API registry changed');
+ app = app.replace(configApiAnchor, configApiAnchor + 'getWithdrawalSettings:t=>Ti({url:"/manage/Config/getWithdrawalSettings",method:"post",data:t}),setWithdrawalSettings:t=>Ti({url:"/manage/Config/setWithdrawalSettings",method:"post",data:t}),');
+}
+if (!app.includes('getCheckInSettings:t=>Ti(')) {
+ const configApiAnchor = 'const Ls={';
+ if (!app.includes(configApiAnchor)) throw Error('Check-in settings API registry changed');
+ app = app.replace(configApiAnchor, configApiAnchor + 'getCheckInSettings:t=>Ti({url:"/manage/Config/getCheckInSettings",method:"post",data:t}),setCheckInSettings:t=>Ti({url:"/manage/Config/setCheckInSettings",method:"post",data:t}),');
 }
 // Backend login always identifies itself explicitly. When the global switch is
 // enabled the server validates the user's independently bound TOTP secret.
@@ -706,24 +831,27 @@ const memberRoleModule = read('frontend/member-role-select.js');
 const financeModule = read('frontend/member-finance-dialog.js');
 const referralFilterModule = read('frontend/member-referral-filter.js');
 const referralFilterSource = '/* IMGO_REFERRAL_FILTER_BEGIN */\n' + referralFilterModule + '\n/* IMGO_REFERRAL_FILTER_END */\n';
-const referralFilterControl = 't("imgo-member-referral-filter",{attrs:{scope:e.params.referral_scope,"agent-mode":Number((e.$store.state.userInfo||{}).agent_mode)===1,"referrer-account":e.params.referrer_account},on:{"update:scope":function(t){e.$set(e.params,"referral_scope",t)},"update:referrer-account":function(t){e.$set(e.params,"referrer_account",t)},search:function(){return e.handleChange()}}})';
+const referralFilterControl = 't("imgo-member-referral-filter",{attrs:{scope:e.params.referral_scope,"agent-mode":Number((e.$store.state.userInfo||{}).agent_mode)===1,"referrer-account":e.params.referrer_account,"mentor-only":Number(e.params.mentor_only)===1},on:{"update:scope":function(t){e.$set(e.params,"referral_scope",t)},"update:referrer-account":function(t){e.$set(e.params,"referrer_account",t)},"update:mentor-only":function(t){e.$set(e.params,"mentor_only",t?1:0)},search:function(){return e.handleChange()}}})';
 const previousReferralFilterControl = 't("imgo-member-referral-filter",{attrs:{scope:e.params.referral_scope,"referrer-account":e.params.referrer_account},on:{"update:scope":function(t){e.$set(e.params,"referral_scope",t)},"update:referrer-account":function(t){e.$set(e.params,"referrer_account",t)},search:function(){return e.handleChange()}}})';
-const financeAction = 'Number((e.$store.state.userInfo||{}).user_id)===1?t("div",{staticClass:"imgo-member-finance-actions"},[t("el-button",{attrs:{type:"text",size:"small"},on:{click:function(){return e.$refs.memberFinance.open(s.row,"recharge")}}},[e._v("充值")]),t("el-button",{attrs:{type:"text",size:"small"},on:{click:function(){return e.$refs.memberFinance.open(s.row,"withdraw")}}},[e._v("提现")])]):e._e()';
+const previousAgentReferralFilterControl = 't("imgo-member-referral-filter",{attrs:{scope:e.params.referral_scope,"agent-mode":Number((e.$store.state.userInfo||{}).agent_mode)===1,"referrer-account":e.params.referrer_account},on:{"update:scope":function(t){e.$set(e.params,"referral_scope",t)},"update:referrer-account":function(t){e.$set(e.params,"referrer_account",t)},search:function(){return e.handleChange()}}})';
+const financeAction = '(Number((e.$store.state.userInfo||{}).user_id)===1||(Number((e.$store.state.userInfo||{}).agent_mode)===1&&Number((e.$store.state.userInfo||{}).user_id)!==Number(s.row.user_id)))?t("div",{staticClass:"imgo-member-finance-actions"},[t("el-button",{attrs:{type:"text",size:"small"},on:{click:function(){return e.$refs.memberFinance.open(s.row,"recharge")}}},[e._v("充值")]),t("el-button",{attrs:{type:"text",size:"small"},on:{click:function(){return e.$refs.memberFinance.open(s.row,"debit")}}},[e._v("扣款")]),t("el-button",{attrs:{type:"text",size:"small"},on:{click:function(){return e.$refs.memberFinance.open(s.row,"withdraw")}}},[e._v("提现")])]):e._e()';
 members = members.split(checkInModule + '\n').join('');
 members = members.split(financeModule + '\n').join('');
 members = members.replace(/\/\* IMGO_MEMBER_ROLE_BEGIN \*\/[\s\S]*?\/\* IMGO_MEMBER_ROLE_END \*\//, '');
 members = members.replace(/\/\* IMGO_REFERRAL_FILTER_BEGIN \*\/[\s\S]*?\/\* IMGO_REFERRAL_FILTER_END \*\/\n?/, '');
-members = members.replace(/\/\/ Vue 2 component embedded in the existing compiled member page\.[\s\S]*?\n(?=s\.r\(t\))/, '');
+members = members.replace(/\/\/ (?:Read-only Vue 2 dialog for the existing compiled member page\.|Vue 2 component embedded in the existing compiled member page\.)[\s\S]*?\n(?=s\.r\(t\))/, '');
 members = members.split(referralFilterControl + ',').join('');
 members = members.split(',' + referralFilterControl).join('');
 members = members.split(previousReferralFilterControl + ',').join('');
 members = members.split(',' + previousReferralFilterControl).join('');
-members = members.replace(/params:\{page:1,limit:20,keywords:"",order_field:"",order_type:1,referral_scope:(?:"(?:direct|all)?"|Number\(\(this\.\$store\.state\.userInfo\|\|\{\}\)\.agent_mode\)===1\?"all":""),referrer_account:""\}/, 'params:{page:1,limit:20,keywords:"",order_field:"",order_type:1}');
+members = members.split(previousAgentReferralFilterControl + ',').join('');
+members = members.split(',' + previousAgentReferralFilterControl).join('');
+members = members.replace(/params:\{page:1,limit:20,keywords:"",order_field:"",order_type:1,referral_scope:(?:"(?:direct|all)?"|Number\(\(this\.\$store\.state\.userInfo\|\|\{\}\)\.agent_mode\)===1\?"all":""),referrer_account:""(?:,mentor_only:0)?\}/, 'params:{page:1,limit:20,keywords:"",order_field:"",order_type:1}');
 members = members.replaceAll('dialogue:o.Z,ImgoCheckInHistory,ImgoMemberFinanceDialog,ImgoMemberReferralFilter}', 'dialogue:o.Z,ImgoCheckInHistory,ImgoMemberFinanceDialog}');
 // Remove a previously built finance component even when its source has changed.
 members = members.replace(/\n?\/\/ Vue 2 dialog attached to each row's finance buttons on the legacy member page\.[\s\S]*?\n(?=s\.r\(t\))/, '');
 members = members.split(financeAction + ',').join('');
-members = members.replace(/fixed:"right",label:"操作",width:"(?:235|164)"/, 'fixed:"right",label:"操作",width:"180"');
+members = members.replace(/fixed:"right",label:"操作",width:"(?:275|235|210|164)"/, 'fixed:"right",label:"操作",width:"180"');
 members = members.replaceAll('dialogue:o.Z,ImgoCheckInHistory,ImgoMemberFinanceDialog}', 'dialogue:o.Z,ImgoCheckInHistory}');
 members = members.replaceAll('t("imgo-member-finance-dialog",{ref:"memberFinance"}),', '');
 members = members.replaceAll('dialogue:o.Z,ImgoCheckInHistory}', 'dialogue:o.Z}');
@@ -741,9 +869,13 @@ members = members.split(legacyCheckInDetail).join('');
 // Read-only check-in summary and detailed history live in the existing member page.
 const checkInColumnAnchor = 't("el-table-column",{attrs:{prop:"create_time",label:"注册时间"';
 if (!members.includes(checkInColumnAnchor)) throw Error('Member table changed; review check-in column adapter');
-const checkInColumn = 't("el-table-column",{attrs:{label:"签到信息",width:"188"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("div",{staticClass:"imgo-checkin-summary"},[t("span",{staticClass:"imgo-checkin-days"},[e._v("累计 "+e._s(s.row.checkin_days||0)+" 天")]),t("span",{staticClass:"imgo-checkin-status",class:s.row.checkin_today?"is-signed":"is-unsigned"},[e._v(s.row.checkin_today?"今日已签到":"今日未签到")])]),t("div",{staticClass:"imgo-checkin-last"},[e._v("最近："+e._s(s.row.checkin_last_date||"—"))]),t("el-button",{staticClass:"imgo-checkin-open",attrs:{type:"text",size:"mini"},on:{click:function(){return e.$refs.checkinHistory.open(s.row)}}},[e._v("查看详情")])]}}])}),';
+const previousCheckInColumn = 't("el-table-column",{attrs:{label:"签到信息",width:"188"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("div",{staticClass:"imgo-checkin-summary"},[t("span",{staticClass:"imgo-checkin-days"},[e._v("累计 "+e._s(s.row.checkin_days||0)+" 天")]),t("span",{staticClass:"imgo-checkin-status",class:s.row.checkin_today?"is-signed":"is-unsigned"},[e._v(s.row.checkin_today?"今日已签到":"今日未签到")])]),t("div",{staticClass:"imgo-checkin-last"},[e._v("最近："+e._s(s.row.checkin_last_date||"—"))]),t("el-button",{staticClass:"imgo-checkin-open",attrs:{type:"text",size:"mini"},on:{click:function(){return e.$refs.checkinHistory.open(s.row)}}},[e._v("查看详情")])]}}])}),';
+const memberFinancialColumns = 't("el-table-column",{attrs:{label:"余额",width:"108"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("span",{staticClass:"imgo-member-money is-balance"},[e._v("¥"+e._s((Number(s.row.balance_cents||0)/100).toFixed(2)))])]}}])}),t("el-table-column",{attrs:{label:"今日签到奖励",width:"118"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("span",{staticClass:"imgo-member-money",class:s.row.checkin_today?"is-today":"is-unsigned"},[e._v(s.row.checkin_today?"¥"+e._s((Number(s.row.checkin_today_reward_cents||0)/100).toFixed(2)):"未签到")])]}}])}),t("el-table-column",{attrs:{label:"累计签到奖励",width:"118"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("span",{staticClass:"imgo-member-money is-total"},[e._v("¥"+e._s((Number(s.row.checkin_total_reward_cents||0)/100).toFixed(2)))])]}}])}),';
+const checkInColumn = 't("el-table-column",{attrs:{label:"签到信息",width:"188"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("div",{staticClass:"imgo-checkin-summary"},[t("span",{staticClass:"imgo-checkin-days"},[e._v("累计 "+e._s(s.row.checkin_days||0)+" 天")]),t("span",{staticClass:"imgo-checkin-status",class:s.row.checkin_today?"is-signed":"is-unsigned"},[e._v(s.row.checkin_today?"今日已签到":"今日未签到")])]),t("div",{staticClass:"imgo-checkin-last"},[e._v("最近："+e._s(s.row.checkin_last_date||"—"))]),t("el-button",{staticClass:"imgo-checkin-open",attrs:{type:"text",size:"mini"},on:{click:function(){return e.$refs.checkinHistory.open(s.row)}}},[e._v("每日奖励详情")])]}}])}),';
+members = members.split(previousCheckInColumn).join('');
 members = members.split(checkInColumn).join('');
-members = members.replace(checkInColumnAnchor, checkInColumn + checkInColumnAnchor);
+members = members.split(memberFinancialColumns).join('');
+members = members.replace(checkInColumnAnchor, memberFinancialColumns + checkInColumn + checkInColumnAnchor);
 members = members.replace('prop:"invite_code",label:"邀请码",width:"82"', 'prop:"invite_code",label:"邀请码",width:"108"');
 const referralColumns = 't("el-table-column",{attrs:{prop:"invite_code",label:"邀请码",width:"108"}}),t("el-table-column",{attrs:{prop:"direct_invite_count",label:"直属下级人数",width:"126"}}),t("el-table-column",{attrs:{prop:"team_count",label:"团队人数",width:"112"}}),';
 const referralColumnsWithCopy = 't("el-table-column",{attrs:{label:"邀请码",width:"118"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("imgo-invite-code-copy",{attrs:{code:s.row.invite_code}})]}}])}),t("el-table-column",{attrs:{prop:"direct_invite_count",label:"直属下级人数",width:"126"}}),t("el-table-column",{attrs:{prop:"team_count",label:"团队人数",width:"112"}}),';
@@ -759,7 +891,8 @@ const addMethodPattern = /(?:async )?addUser\(\)\{[\s\S]*?\},editUser\(e\)/;
 if (!addMethodPattern.test(members)) throw Error('Member add method changed');
 members = members.replace(addMethodPattern, read('frontend/member-add-method.js').trim() + ',editUser(e)');
 if (!members.includes(checkInDetailAnchor)) throw Error('Member form changed; review check-in detail adapter');
-const checkInDetail = '"edit"==e.formType?t("el-form-item",{attrs:{label:"签到信息"}},[t("div",{staticClass:"imgo-checkin-detail"},[e._v("累计 "+e._s(e.detail.checkin_days||0)+" 天 · "+(e.detail.checkin_today?"今日已签到":"今日未签到"))]),t("div",{staticClass:"imgo-checkin-last"},[e._v("最近签到："+e._s(e.detail.checkin_last_date||"—"))])]):e._e(),';
+const checkInDetail = '"edit"==e.formType?t("el-form-item",{attrs:{label:"签到信息"}},[t("div",{staticClass:"imgo-checkin-detail"},[e._v("累计 "+e._s(e.detail.checkin_days||0)+" 天 · "+(e.detail.checkin_today?"今日已签到":"今日未签到")+" · 今日奖励 ¥"+e._s((Number(e.detail.checkin_today_reward_cents||0)/100).toFixed(2))+" · 累计奖励 ¥"+e._s((Number(e.detail.checkin_total_reward_cents||0)/100).toFixed(2)))]),t("div",{staticClass:"imgo-checkin-last"},[e._v("最近签到："+e._s(e.detail.checkin_last_date||"—"))])]):e._e(),';
+members = members.split(checkInDetail).join('');
 members = members.replace(checkInDetailAnchor, checkInDetail + checkInDetailAnchor);
 const referralDetail = '"edit"==e.formType?t("el-form-item",{attrs:{label:"邀请关系"}},[t("div",{staticClass:"imgo-referral-detail"},[e._v("邀请码："+e._s(e.detail.invite_code||"—")+" · 直属下级："+e._s(e.detail.direct_invite_count||0)+" 人 · 团队："+e._s(e.detail.team_count||0)+" 人")])]):e._e(),';
 members = members.split(referralDetail).join('');
@@ -775,7 +908,7 @@ if (!members.includes(memberDialogAnchor)) throw Error('Member dialogs changed; 
 members = members.replace(memberDialogAnchor, 't("imgo-check-in-history",{ref:"checkinHistory"}),' + memberDialogAnchor);
 const financeColumnAnchor = 't("el-table-column",{attrs:{fixed:"right",label:"操作",width:"180"},scopedSlots:e._u([{key:"default",fn:function(s){return[';
 if (!members.includes(financeColumnAnchor)) throw Error('Member operation column changed; review finance adapter');
-members = members.replace(financeColumnAnchor, financeColumnAnchor.replace('width:"180"', 'width:"235"') + financeAction + ',');
+members = members.replace(financeColumnAnchor, financeColumnAnchor.replace('width:"180"', 'width:"275"') + financeAction + ',');
 members = members.replace('dialogue:o.Z,ImgoCheckInHistory}', 'dialogue:o.Z,ImgoCheckInHistory,ImgoMemberFinanceDialog}');
 members = members.replace('t("imgo-check-in-history",{ref:"checkinHistory"}),', 't("imgo-check-in-history",{ref:"checkinHistory"}),t("imgo-member-finance-dialog",{ref:"memberFinance"}),');
 members = members.replace('4368:function(e,t,s){' + checkInModule + '\n', '4368:function(e,t,s){' + checkInModule + '\n' + financeModule + '\n');
@@ -786,7 +919,7 @@ if (!members.includes(memberAddButton)) throw Error('Member toolbar changed; rev
 members = members.replace(memberAddButton, memberBroadcastButton + ',' + memberBatchButton + ',' + memberAddButton + ',' + referralFilterControl);
 const memberParams = 'params:{page:1,limit:20,keywords:"",order_field:"",order_type:1}';
 if (!members.includes(memberParams)) throw Error('Member filter state changed; review referral filter adapter');
-members = members.replace(memberParams, 'params:{page:1,limit:20,keywords:"",order_field:"",order_type:1,referral_scope:Number((this.$store.state.userInfo||{}).agent_mode)===1?"all":"",referrer_account:""}');
+members = members.replace(memberParams, 'params:{page:1,limit:20,keywords:"",order_field:"",order_type:1,referral_scope:Number((this.$store.state.userInfo||{}).agent_mode)===1?"all":"",referrer_account:"",mentor_only:0}');
 members = members.replace('dialogue:o.Z,ImgoCheckInHistory,ImgoMemberFinanceDialog}', 'dialogue:o.Z,ImgoCheckInHistory,ImgoMemberFinanceDialog,ImgoMemberReferralFilter}');
 members = members.replace('4368:function(e,t,s){' + checkInModule + '\n' + financeModule + '\n', '4368:function(e,t,s){' + checkInModule + '\n' + financeModule + '\n' + referralFilterSource);
 const memberBroadcastDialog = 't("imgo-member-broadcast-dialog",{ref:"memberBroadcast"}),';
@@ -854,6 +987,12 @@ if (!members.includes(memberRoleColumn)) {
  if (roleStart < 0 || roleEnd < 0) throw Error('Member role column changed');
  members = members.slice(0, roleStart) + memberRoleColumn + members.slice(roleEnd);
 }
+const memberMentorColumn = 't("el-table-column",{attrs:{label:"导师",width:"170"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("div",{staticClass:"imgo-member-mentor"},[s.row.mentor_account?t("span",[e._v(e._s(s.row.mentor_account)+(s.row.mentor_name?" ("+e._s(s.row.mentor_name)+")":""))]):t("span",{staticClass:"is-unassigned"},[e._v("未分配")])])]}}])}),';
+const memberParentColumn = 't("el-table-column",{attrs:{label:"直属上级",width:"170"},scopedSlots:e._u([{key:"default",fn:function(s){return[t("div",{staticClass:"imgo-member-parent"},[s.row.parent_account?t("span",[e._v(e._s(s.row.parent_account)+(s.row.parent_name?" ("+e._s(s.row.parent_name)+")":""))]):t("span",{staticClass:"is-unassigned"},[e._v("无上级")])])]}}])}),';
+members = members.split(memberMentorColumn).join('');
+members = members.split(memberParentColumn).join('');
+if (!members.includes(memberRoleColumn)) throw Error('Member mentor column role anchor changed');
+members = members.replace(memberRoleColumn, memberRoleColumn + memberMentorColumn + memberParentColumn);
 write('public/assets/js/687.70d7eca3.js',members);
 const membersHash=crypto.createHash('sha256').update(members).digest('hex').slice(0,12);
 write(`public/assets/js/687.imgo${membersHash}.js`,members);
@@ -879,6 +1018,34 @@ settings = settings.replace(noticeDefaultAnchor, 'multipleLogin:"0",noticePopup:
 const groupCreateDefaultAnchor = 'chatInfo:{simpleChat:!0,groupChat:!0,';
 if (!settings.includes(groupCreateDefaultAnchor)) throw Error('Chat settings defaults changed');
 settings = settings.replace(groupCreateDefaultAnchor, 'chatInfo:{simpleChat:!0,groupChat:!0,groupCreateRole:"mentor",');
+const fileUploadDefaultAnchor = 'fileUpload:{disk:"local",aliyun:';
+if (!settings.includes(fileUploadDefaultAnchor)) throw Error('File upload settings defaults changed');
+settings = settings.replace(fileUploadDefaultAnchor, 'fileUpload:{disk:"local",directUpload:"0",aliyun:');
+const aliyunDefaults = 'aliyun:{accessId:"",accessSecret:"",endpoint:"",bucket:"",url:""}';
+if (!settings.includes(aliyunDefaults)) throw Error('Aliyun settings defaults changed');
+settings = settings.replace(aliyunDefaults, 'aliyun:{accessId:"",accessSecret:"",endpoint:"",bucket:"",url:"",domain:""}');
+const fileUploadConfigMerge = 'case"fileUpload":t.value&&(this.fileUpload=Object.assign(this.fileUpload,t.value));break;';
+if (!settings.includes(fileUploadConfigMerge)) throw Error('File upload config merge changed');
+settings = settings.replace(fileUploadConfigMerge, 'case"fileUpload":t.value&&(this.fileUpload=Object.assign(this.fileUpload,t.value),Object.prototype.hasOwnProperty.call(t.value,"directUpload")||(this.fileUpload.directUpload="aliyun"==this.fileUpload.disk?"1":"0"));break;');
+const fileUploadDiskField = 'e("el-form-item",{attrs:{label:"储存位置",prop:"disk"}},[e("el-radio-group",{model:{value:t.fileUpload.disk,callback:function(e){t.$set(t.fileUpload,"disk",e)},expression:"fileUpload.disk"}},[e("el-radio",{attrs:{label:"local",border:""}},[t._v("本地")]),e("el-radio",{attrs:{label:"aliyun",border:""}},[t._v("阿里云")]),e("el-radio",{attrs:{label:"qiniu",border:""}},[t._v("七牛云")]),e("el-radio",{attrs:{label:"qcloud",border:""}},[t._v("腾讯云")])],1)],1),';
+if (!settings.includes(fileUploadDiskField)) throw Error('File upload disk field changed');
+const directUploadSwitch = 'e("el-form-item",{attrs:{label:"客户端直传 OSS",prop:"directUpload"}},[e("el-switch",{attrs:{"active-value":"1","inactive-value":"0",disabled:"aliyun"!=t.fileUpload.disk},model:{value:t.fileUpload.directUpload,callback:function(e){t.$set(t.fileUpload,"directUpload",e)},expression:"fileUpload.directUpload"}}),e("div",{staticClass:"c-999 f-12"},[t._v("开启后，新版 H5 和后台直接上传 ESA，旧版客户端的服务端上传也统一走 ESA；需先绑定 OSS 并配置允许站点域名 POST 的跨域规则。")])],1),';
+settings = settings.replace(fileUploadDiskField, fileUploadDiskField + directUploadSwitch);
+const aliyunURLField = 'e("div",[e("span",{staticClass:"mr-10 c-999 f-12"},[t._v("url")]),t._v(" "),e("el-input",{attrs:{placeholder:"请输入阿里云OSS平台的域名"},model:{value:t.fileUpload.aliyun.url,callback:function(e){t.$set(t.fileUpload.aliyun,"url",e)},expression:"fileUpload.aliyun.url"}})],1)';
+if (!settings.includes(aliyunURLField)) throw Error('Aliyun URL field changed');
+const aliyunESAField = 'e("div",[e("span",{staticClass:"mr-10 c-999 f-12"},[t._v("ESA/CNAME")]),t._v(" "),e("el-input",{attrs:{placeholder:"https://oss.example.com"},model:{value:t.fileUpload.aliyun.domain,callback:function(e){t.$set(t.fileUpload.aliyun,"domain",e)},expression:"fileUpload.aliyun.domain"}}),e("div",{staticClass:"c-999 f-12"},[t._v("已绑定当前 OSS Bucket 的 ESA HTTPS 自定义域名；直传开启时必填")])],1)';
+settings = settings.replace(aliyunURLField, aliyunURLField + ',' + aliyunESAField);
+const settingsLogoUpload = 'attrs:{headers:t.getToken,action:t.getUrl,"show-file-list":!1,"on-success":t.uploadSuccess,"on-change":t.change,"before-upload":t.beforeAvatarUpload}';
+const settingsLogoDirectUpload = 'attrs:{headers:t.getToken,action:t.getUrl,"http-request":t.imgoUploadImageRequest,"show-file-list":!1,"on-success":t.uploadSuccess,"on-change":t.change,"before-upload":t.beforeAvatarUpload}';
+if (!settings.includes(settingsLogoUpload)) throw Error('System logo upload anchor changed');
+settings = settings.replace(settingsLogoUpload, settingsLogoDirectUpload);
+const settingsIconUpload = 'attrs:{headers:t.getToken,action:t.getUrl,"show-file-list":!1,"on-success":t.iconUploadSuccess.bind(null,n)}';
+const settingsIconDirectUpload = 'attrs:{headers:t.getToken,action:t.getUrl,"http-request":t.imgoUploadImageRequest,"show-file-list":!1,"on-success":t.iconUploadSuccess.bind(null,n)}';
+if (!settings.includes(settingsIconUpload)) throw Error('System navigation icon upload anchor changed');
+settings = settings.replace(settingsIconUpload, settingsIconDirectUpload);
+const settingsMethodsAnchor = 'methods:{initConfig(){';
+if (!settings.includes(settingsMethodsAnchor)) throw Error('System settings methods anchor changed');
+settings = settings.replace(settingsMethodsAnchor, 'methods:{imgoUploadImageRequest(t){if(!window.imgoAdminElementUpload){const e=new Error("上传组件未初始化");return t.onError&&t.onError(e),Promise.reject(e)}return window.imgoAdminElementUpload(t,"uploadImage")},initConfig(){');
 const groupChatField = 'e("el-form-item",{attrs:{label:"允许用户建群",prop:"groupChat"}},[e("el-switch",{attrs:{"active-value":"1","inactive-value":"0"},model:{value:t.chatInfo.groupChat,callback:function(e){t.$set(t.chatInfo,"groupChat",e)},expression:"chatInfo.groupChat"}}),e("span",{staticClass:"ml-10 c-999 f-12"},[t._v("关闭后，用户将无法创建群聊")])],1),';
 if (!settings.includes(groupChatField)) throw Error('Group chat setting field changed');
 const groupCreateRoleField = 'e("el-form-item",{attrs:{label:"建群权限",prop:"groupCreateRole"}},[e("el-radio-group",{model:{value:t.chatInfo.groupCreateRole,callback:function(e){t.$set(t.chatInfo,"groupCreateRole",e)},expression:"chatInfo.groupCreateRole"}},[e("el-radio",{attrs:{label:"mentor",border:""}},[t._v("仅超管和导师")]),e("el-radio",{attrs:{label:"all",border:""}},[t._v("所有用户")])],1),e("div",{staticClass:"c-999 f-12"},[t._v("普通用户尝试创建群聊时会提示权限不足")])],1),';
@@ -894,17 +1061,41 @@ settings = settings.replace(noticeFormAnchor, clientDownloadField + noticeSwitch
 const autoGroupLimitInput = 'e("el-input-number",{attrs:{min:5,max:1e3},model:{value:t.chatInfo.autoAddGroup.userMax';
 if (!settings.includes(autoGroupLimitInput)) throw Error('Automatic group size input changed');
 settings = settings.replace(autoGroupLimitInput, autoGroupLimitInput.replace('min:5,max:1e3', 'min:5,max:1e4'));
+const autoGroupDefaults = 'autoAddGroup:{status:0,userMax:"",owner_uid:"",owner_info:[],name:""}';
+if (!settings.includes(autoGroupDefaults)) throw Error('Automatic group defaults changed');
+settings = settings.replace(autoGroupDefaults, 'autoAddGroup:{status:0,mode:"create",group_id:0,userMax:"",owner_uid:"",owner_info:[],name:""}');
+const autoGroupDetails = 'e("div",{directives:[{name:"show",rawName:"v-show",value:"1"==t.chatInfo.autoAddGroup.status,expression:"chatInfo.autoAddGroup.status==\'1\'"}]},[';
+if (!settings.includes(autoGroupDetails)) throw Error('Automatic group details changed');
+settings = settings.replace(autoGroupDetails, autoGroupDetails + 'e("imgo-auto-group-picker",{attrs:{value:t.chatInfo.autoAddGroup},on:{input:function(e){t.$set(t.chatInfo,"autoAddGroup",e)}}}),');
+const autoGroupNameRow = 'e("div",{staticClass:"mt-10"},[e("span",{staticClass:"c-999 f-12"},[t._v("群聊名称")])';
+if (!settings.includes(autoGroupNameRow)) throw Error('Automatic group name row changed');
+settings = settings.replace(autoGroupNameRow, 'e("div",{directives:[{name:"show",rawName:"v-show",value:"existing"!=t.chatInfo.autoAddGroup.mode,expression:"chatInfo.autoAddGroup.mode!==\'existing\'"}],staticClass:"mt-10"},[e("span",{staticClass:"c-999 f-12"},[t._v("群聊名称")])');
+const autoGroupOwnerRow = 'e("div",{staticClass:"lz-flex mt-10"},[e("span",{staticClass:"c-999 f-12"},[t._v("默认群主：")])';
+if (!settings.includes(autoGroupOwnerRow)) throw Error('Automatic group owner row changed');
+settings = settings.replace(autoGroupOwnerRow, 'e("div",{directives:[{name:"show",rawName:"v-show",value:"existing"!=t.chatInfo.autoAddGroup.mode,expression:"chatInfo.autoAddGroup.mode!==\'existing\'"}],staticClass:"lz-flex mt-10"},[e("span",{staticClass:"c-999 f-12"},[t._v("默认群主：")])');
+const autoGroupLimitHint = 'e("span",{staticClass:"ml-10 c-999 f-12"},[t._v("达到上限后自动创建新的群聊")])';
+if (!settings.includes(autoGroupLimitHint)) throw Error('Automatic group limit hint changed');
+settings = settings.replace(autoGroupLimitHint, 'e("span",{staticClass:"ml-10 c-999 f-12"},[t._v(t._s("existing"==t.chatInfo.autoAddGroup.mode?"达到上限后停止自动加入，并返回明确提示":"达到上限后自动创建新的群聊"))])');
 const settingsModuleAnchor = '3585:function(t,e,r){"use strict";';
 if (!settings.includes(settingsModuleAnchor)) throw Error('System settings module anchor changed');
-settings = settings.replace(settingsModuleAnchor, settingsModuleAnchor + '/* IMGO_SECURITY_SETTINGS_BEGIN */'+read('frontend/security-settings.js')+'/* IMGO_SECURITY_SETTINGS_END *//* IMGO_SYSTEM_ALERT_BEGIN */'+read('frontend/system-alert-settings.js')+'/* IMGO_SYSTEM_ALERT_END */');
+settings = settings.replace(settingsModuleAnchor, settingsModuleAnchor + '/* IMGO_AUTO_GROUP_EXISTING_BEGIN */'+read('frontend/auto-group-existing.js')+'/* IMGO_AUTO_GROUP_EXISTING_END *//* IMGO_SECURITY_SETTINGS_BEGIN */'+read('frontend/security-settings.js')+'/* IMGO_SECURITY_SETTINGS_END *//* IMGO_SYSTEM_ALERT_BEGIN */'+read('frontend/system-alert-settings.js')+'/* IMGO_SYSTEM_ALERT_END *//* IMGO_CHECKIN_SETTINGS_BEGIN */'+read('frontend/check-in-settings.js')+'/* IMGO_CHECKIN_SETTINGS_END *//* IMGO_WITHDRAWAL_SETTINGS_BEGIN */'+read('frontend/withdrawal-settings.js')+'/* IMGO_WITHDRAWAL_SETTINGS_END */');
 const settingsComponentsAnchor = 'components:{VueQr:l(),userSelect:c.Z}';
 if (!settings.includes(settingsComponentsAnchor)) throw Error('System settings components changed');
-settings = settings.replace(settingsComponentsAnchor, 'components:{VueQr:l(),userSelect:c.Z,ImgoSecurityPanel,ImgoSystemAlertPanel}');
+settings = settings.replace(settingsComponentsAnchor, 'components:{VueQr:l(),userSelect:c.Z,ImgoAutoGroupPicker,ImgoSecurityPanel,ImgoSystemAlertPanel,ImgoCheckInSettingsPanel,ImgoWithdrawalSettingsPanel}');
 const settingsTabsEnd = '],2)],1)],1)],1)},o=[]';
 if (!settings.includes(settingsTabsEnd)) throw Error('System settings tabs boundary changed');
 const securityTab = 'Number((t.$store.state.userInfo||{}).user_id)===1?e("el-tab-pane",[e("span",{attrs:{slot:"label"},slot:"label"},[e("i",{staticClass:"el-icon-lock"}),t._v(" 安全设置")]),e("imgo-security-panel")],1):t._e()';
 const systemAlertTab = 'Number((t.$store.state.userInfo||{}).user_id)===1?e("el-tab-pane",[e("span",{attrs:{slot:"label"},slot:"label"},[e("i",{staticClass:"el-icon-bell"}),t._v(" 系统报警")]),e("imgo-system-alert-panel")],1):t._e()';
-settings = settings.replace(settingsTabsEnd, '],2)],1),'+securityTab+','+systemAlertTab+'],1)],1)},o=[]');
+const checkInSettingsTab = 'e("el-tab-pane",[e("span",{attrs:{slot:"label"},slot:"label"},[e("i",{staticClass:"el-icon-date"}),t._v(" 签到设置")]),e("imgo-check-in-settings-panel")],1)';
+const withdrawalSettingsTab = 'Number((t.$store.state.userInfo||{}).user_id)===1?e("el-tab-pane",[e("span",{attrs:{slot:"label"},slot:"label"},[e("i",{staticClass:"el-icon-wallet"}),t._v(" 提现设置")]),e("imgo-withdrawal-settings-panel")],1):t._e()';
+settings = settings.replace(settingsTabsEnd, '],2)],1),'+checkInSettingsTab+','+withdrawalSettingsTab+','+securityTab+','+systemAlertTab+'],1)],1)},o=[]');
+const settingsRenderStart = 'var n=function(){var t=this,e=t._self._c;return ';
+const mentorSettingsRender = 'var n=function(){var t=this,e=t._self._c;if(Number((t.$store.state.userInfo||{}).agent_mode)===1)return e("div",{staticClass:"m-20"},[e("el-tabs",{attrs:{type:"border-card"}},['+checkInSettingsTab+'],1)],1);return ';
+if (!settings.includes(settingsRenderStart)) throw Error('System settings render entry changed');
+settings = settings.replace(settingsRenderStart, mentorSettingsRender);
+const settingsMounted = 'mounted(){this.initConfig(),this.resetInviteUrl()}';
+if (!settings.includes(settingsMounted)) throw Error('System settings mount hook changed');
+settings = settings.replace(settingsMounted, 'mounted(){Number((this.$store.state.userInfo||{}).agent_mode)!==1&&(this.initConfig(),this.resetInviteUrl())}');
 const settingsHash = crypto.createHash('sha256').update(settings).digest('hex').slice(0,12);
 write(`public/assets/js/789.imgo${settingsHash}.js`, settings);
 if (!/789:"(?:34f6ec0f|imgo[a-f0-9]+)"/.test(app)) throw Error('System settings chunk hash map changed');
@@ -916,7 +1107,12 @@ app = app.replace('e("span",{staticClass:"message",on:{click:function(e){return 
 const configBegin = '/* IMGO_CONFIG_BEGIN */', configEnd = '/* IMGO_CONFIG_END */';
 if (app.includes(configBegin)) app = app.slice(0, app.indexOf(configBegin)) + app.slice(app.indexOf(configEnd) + configEnd.length);
 if (!app.includes('const Li=')) throw Error('Config store anchor changed');
-app = app.replace('const Li=', configBegin + '\n' + read('frontend/config-state.js') + '\n' + read('frontend/rbac-menu.js') + '\n' + configEnd + 'const Li=');
+app = app.replace('const Li=', configBegin + '\n' + read('frontend/config-state.js') + '\n' + read('frontend/rbac-menu.js') + '\n' + read('frontend/withdrawal-notifier.js') + '\n' + configEnd + 'const Li=');
+const installedWithdrawalNotifier = 'var Di=new v.ZP.Store({state:Li,mutations:Ui,actions:Oi});imgoInstallWithdrawalNotifier(Di);var Pi=';
+const plainVuexStore = 'var Di=new v.ZP.Store({state:Li,mutations:Ui,actions:Oi}),Pi=';
+app = app.replace(installedWithdrawalNotifier, plainVuexStore);
+if (!app.includes(plainVuexStore)) throw Error('Vuex store notification anchor changed');
+app = app.replace(plainVuexStore, installedWithdrawalNotifier);
 const configPatches = [
  ['globalConfig:[],wsStatus:', 'globalConfig:imgoNormalizeConfig(null),wsStatus:'],
  ['setGlobalConfig(t,e){t.globalConfig=e}', 'setGlobalConfig(t,e){t.globalConfig=imgoNormalizeConfig(e,t.globalConfig);o().set("globalConfig",t.globalConfig)}'],
@@ -936,9 +1132,9 @@ if (!hashPattern.test(app)) throw Error('Management chunk hash map changed');
 app = app.replace(hashPattern, `585:"imgo${chunkHash}"`);
 write(`public/assets/js/585.imgo${chunkHash}.js`, text);
 write('public/assets/js/app.85372e4e.js', app);
-write('public/assets/css/imgo-maintenance.css', read('frontend/maintenance.css') + '\n' + read('frontend/admin-theme.css') + '\n' + read('frontend/message-panel.css') + '\n' + read('frontend/bank-panel.css') + '\n' + read('frontend/identity-panel.css') + '\n' + read('frontend/finance-orders.css') + '\n' + read('frontend/member-finance.css') + '\n' + read('frontend/member-agent-setting.css') + '\n' + read('frontend/member-batch-create.css') + '\n' + read('frontend/chat-design.css') + '\n' + read('frontend/chat-account-switcher.css') + '\n' + read('frontend/login-mobile.css') + '\n' + read('frontend/role-panel.css') + '\n' + read('frontend/audit-panel.css') + '\n' + read('frontend/google-auth.css') + '\n' + read('frontend/system-alert.css') + '\n' + read('frontend/mobile-compat.css') + '\n' + read('frontend/chat-message-comfort.css'));
+write('public/assets/css/imgo-maintenance.css', read('frontend/maintenance.css') + '\n' + read('frontend/admin-theme.css') + '\n' + read('frontend/message-panel.css') + '\n' + read('frontend/bank-panel.css') + '\n' + read('frontend/identity-panel.css') + '\n' + read('frontend/finance-orders.css') + '\n' + read('frontend/member-finance.css') + '\n' + read('frontend/member-agent-setting.css') + '\n' + read('frontend/member-batch-create.css') + '\n' + read('frontend/chat-design.css') + '\n' + read('frontend/chat-account-switcher.css') + '\n' + read('frontend/login-mobile.css') + '\n' + read('frontend/role-panel.css') + '\n' + read('frontend/audit-panel.css') + '\n' + read('frontend/google-auth.css') + '\n' + read('frontend/system-alert.css') + '\n' + read('frontend/check-in-settings.css') + '\n' + read('frontend/withdrawal-settings.css') + '\n' + read('frontend/mobile-compat.css') + '\n' + read('frontend/chat-message-comfort.css'));
 let index = read('public/index.html');
-const version = crypto.createHash('sha256').update(app+text+members+managementGroups+read('frontend/maintenance.css')+read('frontend/admin-theme.css') + '\n' + read('frontend/message-panel.css') + '\n' + read('frontend/bank-panel.css') + '\n' + read('frontend/identity-panel.css') + '\n' + read('frontend/finance-orders.css') + '\n' + read('frontend/member-finance.css') + '\n' + read('frontend/member-agent-setting.css') + '\n' + read('frontend/member-batch-create.css') + '\n' + read('frontend/chat-design.css') + '\n' + read('frontend/chat-account-switcher.css') + '\n' + read('frontend/login-mobile.css') + '\n' + read('frontend/role-panel.css') + '\n' + read('frontend/audit-panel.css') + '\n' + read('frontend/google-auth.css') + '\n' + read('frontend/system-alert.css') + '\n' + read('frontend/mobile-compat.css') + '\n' + read('frontend/chat-message-comfort.css')).digest('hex').slice(0,12);
+const version = crypto.createHash('sha256').update(app+text+members+managementGroups+read('frontend/maintenance.css')+read('frontend/admin-theme.css') + '\n' + read('frontend/message-panel.css') + '\n' + read('frontend/bank-panel.css') + '\n' + read('frontend/identity-panel.css') + '\n' + read('frontend/finance-orders.css') + '\n' + read('frontend/member-finance.css') + '\n' + read('frontend/member-agent-setting.css') + '\n' + read('frontend/member-batch-create.css') + '\n' + read('frontend/chat-design.css') + '\n' + read('frontend/chat-account-switcher.css') + '\n' + read('frontend/login-mobile.css') + '\n' + read('frontend/role-panel.css') + '\n' + read('frontend/audit-panel.css') + '\n' + read('frontend/google-auth.css') + '\n' + read('frontend/system-alert.css') + '\n' + read('frontend/check-in-settings.css') + '\n' + read('frontend/withdrawal-settings.css') + '\n' + read('frontend/mobile-compat.css') + '\n' + read('frontend/chat-message-comfort.css')).digest('hex').slice(0,12);
 index = index.replace(/assets\/js\/app\.85372e4e\.js(?:\?v=[a-z0-9]+)?/g, `assets/js/app.85372e4e.js?v=${version}`);
 index = index.replace(/<link[^>]*href="assets\/css\/imgo-maintenance.css[^>]*>/g, '');
 index = index.replace('</head>', `<link href="assets/css/imgo-maintenance.css?v=${version}" rel="stylesheet"></head>`);
