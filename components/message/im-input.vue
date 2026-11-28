@@ -5,7 +5,7 @@
 			<view class="im-menus f-24" v-show="isFocus && contact.is_group==1" style="margin-bottom: 13rpx;"  @tap="modelName='userModel'">@</view>
 			<view class="im-flex1 im-msgarea">
 				<editor id="editor" class="solid-bottom bg-white im-input c-333" :adjust-position="false" maxlength="300" cursor-spacing="10"
-				 @focus="InputFocus" @blur="InputBlur" @input="changeMsgText" @ready="onEditorReady" :read-only="readOnly" v-show="recShow==false"> </editor>
+				 @tap="activateEditor" @focus="InputFocus" @blur="InputBlur" @input="changeMsgText" @ready="onEditorReady" :read-only="readOnly" v-if="recShow==false"> </editor>
 				 <view class="toolBox" v-show="recShow==true">
 					<view class="recorder" :class="{active:isUseRecorder}" @touchstart.prevent="startRecorder"
 						@touchend.prevent="endRecorder" @touchmove.prevent="moveRecorder" @touchcancel="cancelRecorder">
@@ -156,6 +156,8 @@ const userStore = useloginStore(pinia);
 			globalConfig:userStore.globalConfig,
 			userInfo:userStore.userInfo,
 			readOnly:false,
+				editorRestoreTimer:null,
+				shouldFocusEditor:false,
 			edit: null,
 			modelName:false,
 			isAt:false,
@@ -247,7 +249,11 @@ const userStore = useloginStore(pinia);
 		// #endif
 		
 	},
-	methods:{
+		beforeUnmount(){
+			clearTimeout(this.editorRestoreTimer);
+			this.editorRestoreTimer=null;
+		},
+		methods:{
 		msgItem(){
 			return {
 				id:this.$util.getUuid(),
@@ -295,9 +301,36 @@ const userStore = useloginStore(pinia);
 		},
 		// 编辑器获得焦点
 		getFocus(){
-			this.editorCtx.format('fontFamily', 'inherit');
+				this.activateEditor();
+				if(this.editorCtx && typeof this.editorCtx.format === 'function'){
+					this.editorCtx.format('fontFamily', 'inherit');
+				}
 			this.isFocus=true;
 		},
+			releaseEditorLock(){
+				clearTimeout(this.editorRestoreTimer);
+				this.editorRestoreTimer=null;
+				this.readOnly=false;
+			},
+			focusEditorDom(){
+				this.releaseEditorLock();
+				this.$nextTick(()=>{
+					if(this.editorCtx && typeof this.editorCtx.focus === 'function'){
+						try { this.editorCtx.focus(); } catch (error) {}
+					}
+					// #ifdef H5
+					const editor=this.$el && this.$el.querySelector ? this.$el.querySelector('.ql-editor') : null;
+					if(editor){
+						editor.setAttribute('contenteditable','true');
+						try { editor.focus({preventScroll:true}); } catch (error) { editor.focus(); }
+					}
+					// #endif
+				});
+			},
+			activateEditor(){
+				if(this.recShow){return;}
+				this.focusEditorDom();
+			},
 		chooseDiyEmoji(item){
 			let message={
 				type:'emoji',
@@ -326,9 +359,18 @@ const userStore = useloginStore(pinia);
 				});
 			// #endif
 			// #ifndef H5
-				this.readOnly= true
+					this.readOnly=true;
+					const releaseReadOnly=()=>this.releaseEditorLock();
+					clearTimeout(this.editorRestoreTimer);
+					// 某些 Android WebView 不触发 insertImage.complete，必须超时解除只读。
+					this.editorRestoreTimer=setTimeout(releaseReadOnly,1200);
 				setTimeout(()=>{
-					this.editorCtx.insertImage({
+						if(!this.editorCtx || typeof this.editorCtx.insertImage !== 'function'){
+							releaseReadOnly();
+							return;
+						}
+						try {
+						this.editorCtx.insertImage({
 						src: item.src,
 						alt: item.title,
 						width: 18,
@@ -337,10 +379,13 @@ const userStore = useloginStore(pinia);
 						extClass:'emoji-image',
 						success: function() {
 						},
-						complete: ()=> {
-							this.readOnly= false
-						},
+							fail: releaseReadOnly,
+							complete: releaseReadOnly,
 					});
+						} catch (error) {
+							releaseReadOnly();
+							console.warn('插入表情失败，已恢复输入框',error);
+						}
 				},10);
 			// #endif
 		},
@@ -364,7 +409,19 @@ const userStore = useloginStore(pinia);
 		showRec : function(){
 			this.InputBottom=0;
 			this.appBox=0;
-			this.recShow  == true ? this.recShow  = false : this.recShow  = true
+				if(this.recShow){
+					// 原生 editor 经 display:none 后可能无法再次获得焦点，重新挂载并恢复草稿。
+					this.releaseEditorLock();
+					this.shouldFocusEditor=true;
+					this.recShow=false;
+					return;
+				}
+				this.shouldFocusEditor=false;
+				this.releaseEditorLock();
+				this.recShow=true;
+				this.isFocus=false;
+				this.editorCtx=null;
+				this.edit=null;
 		},
 		// 发送录音
 		sendVoiceMsg: function(){
@@ -666,12 +723,40 @@ const userStore = useloginStore(pinia);
 			// #ifdef APP-PLUS || MP-WEIXIN || H5
 			const query = uni.createSelectorQuery().in(this);
 			query.select('#editor').context((res) => {
-				this.edit = new Edit({context: res.context,maxCount: 300});
-				this.editorCtx = res.context
+					if(!res || !res.context){
+						this.releaseEditorLock();
+						return;
+					}
+					this.edit = new Edit({context: res.context,maxCount: 300});
+					this.editorCtx = res.context;
+					this.releaseEditorLock();
+					const finishReady=()=>{
+						if(this.shouldFocusEditor){
+							this.shouldFocusEditor=false;
+							setTimeout(()=>this.focusEditorDom(),30);
+						}
+					};
+					if(this.inputMsg && typeof this.editorCtx.setContents === 'function'){
+						let finished=false;
+						const finishOnce=()=>{
+							if(finished){return;}
+							finished=true;
+							finishReady();
+						};
+						try {
+							this.editorCtx.setContents({html:this.inputMsg,success:finishOnce,fail:finishOnce,complete:finishOnce});
+							setTimeout(finishOnce,300);
+						} catch (error) {
+							finishOnce();
+						}
+					}else{
+						finishReady();
+					}
 			}).exec(() => this.$emit('layout-change'))
 			// #endif
 		},
 		InputFocus(e) {
+				this.releaseEditorLock();
 			this.isFocus=true;
 			if(this.appBox>0){
 				// 关闭表情盒子和更多盒子
